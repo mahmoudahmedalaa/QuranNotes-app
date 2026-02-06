@@ -43,13 +43,13 @@ export default function OnboardingPremium() {
         // TODO: Integrate with RevenueCat
         console.log('Subscribing to:', isAnnual ? 'annual' : 'monthly');
         await completeOnboarding();
-        router.replace('/(tabs)');
+        router.replace('/(auth)/login');
     };
 
     const handleStartFree = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await completeOnboarding();
-        router.replace('/(tabs)');
+        router.replace('/(auth)/login');
     };
 
     const price = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;

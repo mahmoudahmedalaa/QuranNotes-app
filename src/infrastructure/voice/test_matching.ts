@@ -1,21 +1,22 @@
 
-import { MatchingService, Verse } from './MatchingService';
+import { MatchingService } from './MatchingService';
+import { Verse } from '../../domain/entities/Quran';
 
 const runTests = () => {
     console.log('--- Starting Matching Logic Tests ---');
 
     // Mocks
-    const verse1: Verse = { id: 1, number: 1, text: "بسم الله الرحمن الرحيم" }; // Bismillah...
-    const verse2: Verse = { id: 2, number: 2, text: "الحمد لله رب العالمين" }; // Alhamdu lillahi...
-    const verse3: Verse = { id: 3, number: 3, text: "الرحمن الرحيم" }; // Ar-Rahman Ar-Rahim
-    const verse4: Verse = { id: 4, number: 4, text: "مالك يوم الدين" }; // Maliki Yawm...
+    const verse1: Verse = { number: 1, text: "بسم الله الرحمن الرحيم", surahNumber: 1, juz: 1, page: 1, translation: "In the name of Allah..." }; // Bismillah...
+    const verse2: Verse = { number: 2, text: "الحمد لله رب العالمين", surahNumber: 1, juz: 1, page: 1, translation: "Praise be to Allah..." }; // Alhamdu lillahi...
+    const verse3: Verse = { number: 3, text: "الرحمن الرحيم", surahNumber: 1, juz: 1, page: 1, translation: "The Entirely Merciful..." }; // Ar-Rahman Ar-Rahim
+    const verse4: Verse = { number: 4, text: "مالك يوم الدين", surahNumber: 1, juz: 1, page: 1, translation: "Sovereign of the Day..." }; // Maliki Yawm...
 
     const candidates = [verse1, verse2, verse3, verse4];
 
     // Scenario 1: Perfect Match Verse 1
     const t1 = "بسم الله الرحمن الرحيم";
     const m1 = MatchingService.findBestMatch(t1, candidates);
-    console.log(`Test 1 (Perfect V1): ${m1?.verse.id === 1 ? 'PASS' : 'FAIL'} (Score: ${m1?.confidence})`);
+    console.log(`Test 1 (Perfect V1): ${m1?.verse.number === 1 ? 'PASS' : 'FAIL'} (Score: ${m1?.confidence})`);
 
     // Scenario 2: Continuous Speech (V1 + V2)
     const t2 = "بسم الله الرحمن الرحيم الحمد لله رب العالمين";
@@ -25,12 +26,12 @@ const runTests = () => {
     // If scores are equal, which one? The one encountered later?
     // Let's test finding V2 specifically.
     const m2 = MatchingService.findBestMatch(t2, [verse2, verse3]); // Look for V2 specifically
-    console.log(`Test 2 (Continuous V1+V2 -> Check V2): ${m2?.verse.id === 2 ? 'PASS' : 'FAIL'} (Score: ${m2?.confidence})`);
+    console.log(`Test 2 (Continuous V1+V2 -> Check V2): ${m2?.verse.number === 2 ? 'PASS' : 'FAIL'} (Score: ${m2?.confidence})`);
 
     // Scenario 3: Noise + Partial V2
     const t3 = "hmm الحمد لله umm رب العالمين";
     const m3 = MatchingService.findBestMatch(t3, candidates);
-    console.log(`Test 3 (Noise V2): ${m3?.verse.id === 2 ? 'PASS' : 'FAIL'} (Score: ${m3?.confidence})`);
+    console.log(`Test 3 (Noise V2): ${m3?.verse.number === 2 ? 'PASS' : 'FAIL'} (Score: ${m3?.confidence})`);
 
     // Scenario 4: False Positive Check (Common Word)
     const t4 = "الله"; // "Allah" appears in V1 and V2.
@@ -38,14 +39,14 @@ const runTests = () => {
     // V2 words: 4. Match 1/4 = 0.25. Threshold 0.4.
     // Should return NULL.
     const m4 = MatchingService.findBestMatch(t4, candidates);
-    console.log(`Test 4 (Common Word 'Allah'): ${m4 === null ? 'PASS' : 'FAIL'} (Match: ${m4?.verse.id}, Score: ${m4?.confidence})`);
+    console.log(`Test 4 (Common Word 'Allah'): ${m4 === null ? 'PASS' : 'FAIL'} (Match: ${m4?.verse.number}, Score: ${m4?.confidence})`);
 
     // Scenario 5: End of Verse (Partial)
     const t5 = "رب العالمين"; // Last part of V2
     // V2 words: 4. Matches "Rabb" "Al-Alamin" (2). Score 0.5.
     // Threshold 0.4. Should match V2.
     const m5 = MatchingService.findBestMatch(t5, candidates);
-    console.log(`Test 5 (Partial End V2): ${m5?.verse.id === 2 ? 'PASS' : 'FAIL'} (Score: ${m5?.confidence})`);
+    console.log(`Test 5 (Partial End V2): ${m5?.verse.number === 2 ? 'PASS' : 'FAIL'} (Score: ${m5?.confidence})`);
 
     // Scenario 6: Wrong Order
     const t6 = "الرحيم الرحمن"; // Reversed V3

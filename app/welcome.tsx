@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { Spacing, BorderRadius, Gradients } from '../src/presentation/theme/DesignSystem';
 import { useOnboarding } from '../src/infrastructure/onboarding/OnboardingContext';
+import { useAuth } from '../src/infrastructure/auth/AuthContext';
 import { NoorMascot } from '../src/presentation/components/mascot/NoorMascot';
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,6 +28,8 @@ export default function WelcomeScreen() {
     const { shouldShowOnboarding } = useOnboarding();
     const [hadithIndex, setHadithIndex] = useState(0);
 
+    const { user } = useAuth(); // Add user from useAuth
+
     // Cycle Hadith
     useEffect(() => {
         const interval = setInterval(() => {
@@ -40,12 +43,19 @@ export default function WelcomeScreen() {
         await AsyncStorage.setItem('hasSeenWelcome', 'true');
 
         // If onboarding not completed, go to onboarding
-        // If onboarding completed, go directly to main app
         if (shouldShowOnboarding) {
             router.replace('/onboarding');
-        } else {
-            router.replace('/(tabs)');
+            return;
         }
+
+        // If not signed in, go to functionality
+        if (!user) {
+            router.replace('/(auth)/login');
+            return;
+        }
+
+        // Otherwise go to main app
+        router.replace('/(tabs)');
     };
 
     return (

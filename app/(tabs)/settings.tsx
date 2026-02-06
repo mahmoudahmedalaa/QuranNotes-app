@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettings } from '../../src/infrastructure/settings/SettingsContext';
-import { useOnboarding } from '../../src/infrastructure/onboarding/OnboardingContext';
 import { ReciterPicker } from '../../src/presentation/components/common/ReciterPicker';
 import { getReciterById } from '../../src/domain/entities/Reciter';
 import {
@@ -23,7 +22,7 @@ export default function SettingsScreen() {
     const theme = useTheme();
     const router = require('expo-router').useRouter();
     const { settings, updateSettings, resetSettings } = useSettings();
-    const { resetOnboarding } = useOnboarding();
+
     const { toggleDebugPro, isPro } = usePro();
     const { user, loading, logout } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
@@ -53,52 +52,7 @@ export default function SettingsScreen() {
         updateSettings({ reciterId });
     };
 
-    const handleReset = async () => {
-        Alert.alert('Reset Data', 'This will clear all data and reset settings. Are you sure?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Reset',
-                style: 'destructive',
-                onPress: async () => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    // Reset Context State
-                    await resetSettings();
 
-                    // Clear other repositories if needed (manually using async storage for now as repo context doesn't expose reset yet)
-                    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-                    await AsyncStorage.clear();
-
-                    Alert.alert('Done', 'App data has been reset.');
-                },
-            },
-        ]);
-    };
-
-    const handleResetOnboarding = async () => {
-        await resetOnboarding();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Onboarding Reset', 'Navigating to onboarding...', [
-            {
-                text: 'OK',
-                onPress: () => router.replace('/onboarding'),
-            },
-        ]);
-    };
-
-    const handleResetWelcome = async () => {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        await AsyncStorage.removeItem('hasSeenWelcome');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        Alert.alert('Success', 'App will restart to welcome screen.', [
-            {
-                text: 'OK',
-                onPress: () => {
-                    router.replace('/welcome');
-                },
-            },
-        ]);
-    };
 
     return (
         <LinearGradient
@@ -383,145 +337,7 @@ export default function SettingsScreen() {
                     </View>
 
                     {/* Debug Section */}
-                    <View style={styles.section}>
-                        <Text
-                            style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
-                            DEVELOPER TOOLS
-                        </Text>
 
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.card,
-                                { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
-                                Shadows.sm,
-                                pressed && styles.cardPressed,
-                            ]}
-                            onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                toggleDebugPro();
-                                Alert.alert('Debug Tool', `Pro Status is now: ${!isPro ? 'ACTIVE' : 'INACTIVE'}`);
-                            }}>
-                            <View
-                                style={[
-                                    styles.iconContainer,
-                                    { backgroundColor: isPro ? (Colors.secondary || '#FFD700') : theme.colors.elevation.level4 },
-                                ]}>
-                                <Ionicons
-                                    name="star"
-                                    size={18}
-                                    color={isPro ? 'white' : theme.colors.onSurfaceVariant}
-                                />
-                            </View>
-                            <View style={styles.cardContent}>
-                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                    Toggle Pro Status
-                                </Text>
-                                <Text
-                                    style={[
-                                        styles.cardSubtitle,
-                                        { color: theme.colors.onSurfaceVariant },
-                                    ]}>
-                                    Current: {isPro ? 'PRO' : 'FREE'}
-                                </Text>
-                            </View>
-                        </Pressable>
-
-                        {/* Reset Onboarding Button */}
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.card,
-                                { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
-                                Shadows.sm,
-                                pressed && styles.cardPressed,
-                            ]}
-                            onPress={handleResetOnboarding}>
-                            <View
-                                style={[
-                                    styles.iconContainer,
-                                    { backgroundColor: theme.colors.primaryContainer },
-                                ]}>
-                                <Ionicons
-                                    name="play-circle"
-                                    size={18}
-                                    color={theme.colors.primary}
-                                />
-                            </View>
-                            <View style={styles.cardContent}>
-                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                    Reset Onboarding
-                                </Text>
-                                <Text
-                                    style={[
-                                        styles.cardSubtitle,
-                                        { color: theme.colors.onSurfaceVariant },
-                                    ]}>
-                                    Replay the 5-step tour
-                                </Text>
-                            </View>
-                        </Pressable>
-
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.card,
-                                { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
-                                Shadows.sm,
-                                pressed && styles.cardPressed,
-                            ]}
-                            onPress={handleResetWelcome}>
-                            <View
-                                style={[
-                                    styles.iconContainer,
-                                    { backgroundColor: theme.colors.secondaryContainer },
-                                ]}>
-                                <Ionicons
-                                    name="refresh-circle"
-                                    size={18}
-                                    color={theme.colors.secondary}
-                                />
-                            </View>
-                            <View style={styles.cardContent}>
-                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                    Reset Welcome Screen
-                                </Text>
-                                <Text
-                                    style={[
-                                        styles.cardSubtitle,
-                                        { color: theme.colors.onSurfaceVariant },
-                                    ]}>
-                                    See initial welcome again
-                                </Text>
-                            </View>
-                        </Pressable>
-
-                        <Pressable
-                            style={({ pressed }) => [
-                                styles.card,
-                                { backgroundColor: theme.colors.surface },
-                                Shadows.sm,
-                                pressed && styles.cardPressed,
-                            ]}
-                            onPress={handleReset}>
-                            <View
-                                style={[
-                                    styles.iconContainer,
-                                    { backgroundColor: theme.colors.errorContainer || '#FFEBEE' },
-                                ]}>
-                                <Ionicons name="trash" size={18} color={theme.colors.error} />
-                            </View>
-                            <View style={styles.cardContent}>
-                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                    Reset All Data
-                                </Text>
-                                <Text
-                                    style={[
-                                        styles.cardSubtitle,
-                                        { color: theme.colors.onSurfaceVariant },
-                                    ]}>
-                                    Clear everything
-                                </Text>
-                            </View>
-                        </Pressable>
-                    </View>
                 </ScrollView>
 
                 <ReciterPicker
