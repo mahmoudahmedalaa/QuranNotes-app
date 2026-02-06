@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { Text, TextInput, Button, useTheme, HelperText } from 'react-native-paper';
 import { useRouter, Link, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,11 +31,28 @@ export default function SignUpScreen() {
             return;
         }
 
+        if (password.length < 6) {
+            setError('Password must be at least 6 characters');
+            return;
+        }
+
         setLoading(true);
         setError('');
         try {
             await registerWithEmail(email, password);
-            router.replace('/');
+            // Show modern toast notification
+            const Toast = require('react-native-toast-message').default;
+            Toast.show({
+                type: 'success',
+                text1: '✅ Account Created!',
+                text2: 'Verification email sent. Check your inbox or junk/spam folder.',
+                visibilityTime: 5000,
+                position: 'top',
+            });
+            // Navigate to login after short delay
+            setTimeout(() => {
+                router.replace('/(auth)/login');
+            }, 1500);
         } catch (e: any) {
             setError(e.message || 'Registration failed');
         } finally {

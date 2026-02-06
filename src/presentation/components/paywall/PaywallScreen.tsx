@@ -88,17 +88,35 @@ export default function PaywallScreen() {
         }
     };
 
-    const handlePurchase = async (pack?: PurchasesPackage) => {
+    const handlePurchase = async () => {
+        if (!offering) {
+            Alert.alert('Error', 'Could not load products. Please try again.');
+            return;
+        }
+
+        const packageToBuy = isAnnual ? offering.annual : offering.monthly;
+        if (!packageToBuy) {
+            Alert.alert('Error', 'Product not available.');
+            return;
+        }
+
         setPurchasing(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // TODO: Real purchase when in EAS build
-        const success = pack ? await revenueCatService.purchasePackage(pack) : true;
-        setPurchasing(false);
-        if (success) {
-            checkStatus();
-            Alert.alert('Success', 'You are now a Pro member!', [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        try {
+            const success = await revenueCatService.purchasePackage(packageToBuy);
+            if (success) {
+                checkStatus();
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('Success', 'You are now a Pro member!', [
+                    { text: 'OK', onPress: () => router.back() }
+                ]);
+            }
+        } catch (error) {
+            console.error('Purchase failed:', error);
+            // RevenueCatService handles alert already usually, but we can add one if needed
+        } finally {
+            setPurchasing(false);
         }
     };
 
@@ -230,7 +248,7 @@ export default function PaywallScreen() {
                         textColor="#5B7FFF"
                         loading={purchasing}
                         disabled={purchasing}>
-                        Start 7-Day Free Trial
+                        Unlock Full Access
                     </Button>
                     <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
                         <Text style={styles.secondaryText}>Maybe Later</Text>

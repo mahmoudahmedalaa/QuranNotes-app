@@ -17,6 +17,7 @@ import {
 } from '../../src/presentation/theme/DesignSystem';
 import * as Haptics from 'expo-haptics';
 import { usePro } from '../../src/infrastructure/auth/ProContext';
+import { useAuth } from '../../src/infrastructure/auth/AuthContext';
 
 export default function SettingsScreen() {
     const theme = useTheme();
@@ -24,7 +25,23 @@ export default function SettingsScreen() {
     const { settings, updateSettings, resetSettings } = useSettings();
     const { resetOnboarding } = useOnboarding();
     const { toggleDebugPro, isPro } = usePro();
+    const { user, loading, logout } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
+
+    const handleSignOut = async () => {
+        Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Sign Out',
+                style: 'destructive',
+                onPress: async () => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                    await logout();
+                    Alert.alert('Signed Out', 'You have been signed out.');
+                },
+            },
+        ]);
+    };
 
     const toggleDarkMode = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -99,6 +116,154 @@ export default function SettingsScreen() {
                     style={[styles.content, { backgroundColor: theme.colors.background }]}
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}>
+
+                    {/* Account Section */}
+                    <View style={styles.section}>
+                        <Text
+                            style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                            ACCOUNT
+                        </Text>
+                        {user ? (
+                            // Logged in state
+                            <View>
+                                <View
+                                    style={[
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
+                                        Shadows.sm,
+                                    ]}>
+                                    <View
+                                        style={[
+                                            styles.iconContainer,
+                                            { backgroundColor: theme.colors.primaryContainer },
+                                        ]}>
+                                        <Ionicons
+                                            name="person"
+                                            size={18}
+                                            color={theme.colors.primary}
+                                        />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                            {user.email || user.displayName || 'Signed In'}
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.cardSubtitle,
+                                                { color: theme.colors.onSurfaceVariant },
+                                            ]}>
+                                            {user.isAnonymous ? 'Anonymous User' : 'Verified Account'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Upgrade Button (Visible if not Pro) */}
+                                {!isPro && (
+                                    <Pressable
+                                        style={({ pressed }) => [
+                                            styles.card,
+                                            { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
+                                            Shadows.sm,
+                                            pressed && styles.cardPressed,
+                                        ]}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                            router.push('/paywall');
+                                        }}>
+                                        <View
+                                            style={[
+                                                styles.iconContainer,
+                                                { backgroundColor: Colors.secondary || '#FFD700' },
+                                            ]}>
+                                            <Ionicons name="star" size={18} color="white" />
+                                        </View>
+                                        <View style={styles.cardContent}>
+                                            <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                                Upgrade to Pro
+                                            </Text>
+                                            <Text
+                                                style={[
+                                                    styles.cardSubtitle,
+                                                    { color: theme.colors.onSurfaceVariant },
+                                                ]}>
+                                                Unlock AI insights & more
+                                            </Text>
+                                        </View>
+                                        <Ionicons
+                                            name="chevron-forward"
+                                            size={20}
+                                            color={theme.colors.onSurfaceVariant}
+                                        />
+                                    </Pressable>
+                                )}
+
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface },
+                                        Shadows.sm,
+                                        pressed && styles.cardPressed,
+                                    ]}
+                                    onPress={handleSignOut}>
+                                    <View
+                                        style={[
+                                            styles.iconContainer,
+                                            { backgroundColor: theme.colors.errorContainer || '#FFEBEE' },
+                                        ]}>
+                                        <Ionicons name="log-out" size={18} color={theme.colors.error} />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.error }]}>
+                                            Sign Out
+                                        </Text>
+                                    </View>
+                                </Pressable>
+                            </View>
+                        ) : (
+                            // Logged out state
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface },
+                                    Shadows.sm,
+                                    pressed && styles.cardPressed,
+                                ]}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    router.push('/(auth)/login');
+                                }}>
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: theme.colors.primaryContainer },
+                                    ]}>
+                                    <Ionicons
+                                        name="log-in"
+                                        size={18}
+                                        color={theme.colors.primary}
+                                    />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                        Sign In / Create Account
+                                    </Text>
+                                    <Text
+                                        style={[
+                                            styles.cardSubtitle,
+                                            { color: theme.colors.onSurfaceVariant },
+                                        ]}>
+                                        Sync your notes across devices
+                                    </Text>
+                                </View>
+                                <Ionicons
+                                    name="chevron-forward"
+                                    size={20}
+                                    color={theme.colors.onSurfaceVariant}
+                                />
+                            </Pressable>
+                        )}
+                    </View>
+
                     {/* Audio Section */}
                     <View style={styles.section}>
                         <Text

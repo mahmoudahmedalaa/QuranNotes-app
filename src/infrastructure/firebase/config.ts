@@ -1,9 +1,10 @@
-// @ts-ignore
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { Auth, getAuth as firebaseGetAuth } from 'firebase/auth';
+// Firebase configuration using compat layer for React Native compatibility
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Validating environment variables
+// Firebase configuration from environment
 const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -13,29 +14,32 @@ const firebaseConfig = {
     appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Singleton App Initialization
-let app: FirebaseApp;
-if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-} else {
-    app = getApp();
+// Initialize Firebase (singleton)
+if (!firebase.apps.length) {
+    const app = firebase.initializeApp(firebaseConfig);
+
+    // Explicitly initialize Auth with AsyncStorage persistence to fix "removeItem" error
+    // We use require() to avoid TypeScript issues with the modular SDK inside compat setup
+    try {
+        const authModule = require('firebase/auth');
+        if (authModule && authModule.getReactNativePersistence && authModule.initializeAuth) {
+            authModule.initializeAuth(app, {
+                persistence: authModule.getReactNativePersistence(AsyncStorage)
+            });
+            console.log('[Firebase Config] Initialized with AsyncStorage persistence');
+        }
+    } catch (e: any) {
+        // Ignore "Auth already initialized" error which can happen with hot reload
+        if (e.code !== 'auth/already-initialized') {
+            console.error('Firebase Auth initialization error:', e);
+        }
+    }
 }
 
-// Firebase Auth - ENABLED for production
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+// Export auth and firestore instances
+export const auth = firebase.auth();
+export const db = firebase.firestore();
 
-let authInstance: Auth | null = null;
-export const getAuth = (): Auth => {
-    if (!authInstance) {
-        authInstance = initializeAuth(app, {
-            persistence: getReactNativePersistence(AsyncStorage)
-        });
-    }
-    return authInstance;
-};
-
-// Initialize Firestore
-const db = getFirestore(app);
-
-export { app, db };
+// For backwards compatibility with code that calls getAuth()
+export const getAuth = () => auth;
+export const app = firebase.app();

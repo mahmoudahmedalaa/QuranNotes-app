@@ -48,22 +48,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             const authUser = await authRepo.signInAnonymously();
             setUser(authUser);
-        } catch (error) {
-            console.error('Anonymous login error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] loginAnonymously error:', e);
+            throw e;
         } finally {
             setLoading(false);
         }
     };
 
-    const loginWithEmail = async (email: string, password: string) => {
+    const loginWithEmail = async (email: string, pass: string) => {
         setLoading(true);
         try {
-            const authUser = await authRepo.signInWithEmail(email, password);
+            const authUser = await authRepo.signInWithEmail(email, pass);
             setUser(authUser);
-        } catch (error) {
-            console.error('Email login error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] loginWithEmail error:', e);
+            throw e;
         } finally {
             setLoading(false);
         }
@@ -72,11 +72,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loginWithGoogle = async () => {
         setLoading(true);
         try {
+            // Force sign out first to ensure clean state
+            await authRepo.signOut();
             const authUser = await authRepo.signInWithGoogle();
             setUser(authUser);
-        } catch (error) {
-            console.error('Google login error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] loginWithGoogle error:', e);
+            throw e;
         } finally {
             setLoading(false);
         }
@@ -85,24 +87,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loginWithApple = async () => {
         setLoading(true);
         try {
+            // Force sign out first to ensure clean state
+            await authRepo.signOut();
             const authUser = await authRepo.signInWithApple();
             setUser(authUser);
-        } catch (error) {
-            console.error('Apple login error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] loginWithApple error:', e);
+            throw e;
         } finally {
             setLoading(false);
         }
     };
 
-    const registerWithEmail = async (email: string, password: string) => {
+    const registerWithEmail = async (email: string, pass: string) => {
         setLoading(true);
         try {
-            const authUser = await authRepo.signUpWithEmail(email, password);
+            const authUser = await authRepo.signUpWithEmail(email, pass);
             setUser(authUser);
-        } catch (error) {
-            console.error('Register error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] registerWithEmail error:', e);
+            throw e;
         } finally {
             setLoading(false);
         }
@@ -111,9 +115,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const resetPassword = async (email: string) => {
         try {
             await authRepo.sendPasswordReset(email);
-        } catch (error) {
-            console.error('Password reset error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] resetPassword error:', e);
+            throw e;
         }
     };
 
@@ -122,27 +126,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             await authRepo.signOut();
             setUser(null);
-        } catch (error) {
-            console.error('Logout error:', error);
-            throw error;
+        } catch (e) {
+            console.error('[AuthContext] logout error:', e);
+            throw e;
         } finally {
             setLoading(false);
         }
     };
 
+    const value: AuthContextType = {
+        user,
+        loading,
+        loginAnonymously,
+        loginWithEmail,
+        loginWithGoogle,
+        loginWithApple,
+        registerWithEmail,
+        resetPassword,
+        logout,
+    };
+
     return (
-        <AuthContext.Provider
-            value={{
-                user,
-                loading,
-                loginAnonymously,
-                loginWithEmail,
-                loginWithGoogle,
-                loginWithApple,
-                registerWithEmail,
-                resetPassword,
-                logout,
-            }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

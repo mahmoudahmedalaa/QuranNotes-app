@@ -11,13 +11,20 @@ export default function LoginScreen() {
     const theme = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { loginWithEmail, loginAnonymously, loginWithGoogle, loginWithApple } = useAuth();
+    const { user, loginWithEmail, loginAnonymously, loginWithGoogle, loginWithApple } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [secureTextEntry, setSecureTextEntry] = useState(true);
+
+    // Redirect to home if already logged in (persistence check)
+    React.useEffect(() => {
+        if (user) {
+            router.replace('/');
+        }
+    }, [user]);
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -29,7 +36,27 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithEmail(email, password);
-            // Verify this route exists or update to /
+
+            // Check if email is verified using Firebase compat API
+            const firebase = require('firebase/compat/app').default;
+            const currentUser = firebase.auth().currentUser;
+
+            if (currentUser && !currentUser.emailVerified) {
+                // Sign out unverified user
+                await firebase.auth().signOut();
+
+                // Show toast notification
+                const Toast = require('react-native-toast-message').default;
+                Toast.show({
+                    type: 'info',
+                    text1: '📧 Email Not Verified',
+                    text2: 'Please verify your email before signing in. Check spam/junk folder.',
+                    visibilityTime: 5000,
+                    position: 'top',
+                });
+                return;
+            }
+
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Login failed');
@@ -133,6 +160,18 @@ export default function LoginScreen() {
                         Sign In
                     </Button>
 
+                    <Button
+                        mode="text"
+                        onPress={() => {
+                            const router = require('expo-router').useRouter;
+                            require('expo-router').router.push('/(auth)/forgot-password');
+                        }}
+                        style={{ marginTop: Spacing.sm }}
+                        textColor={theme.colors.primary}
+                    >
+                        Forgot Password?
+                    </Button>
+
                     <View style={styles.dividerContainer}>
                         <View style={styles.divider} />
                         <Text style={{ marginHorizontal: Spacing.md, color: theme.colors.outline }}>OR</Text>
@@ -152,30 +191,30 @@ export default function LoginScreen() {
 
                     <Button
                         mode="outlined"
-                    onPress={handleAppleLogin}
-                    style={styles.socialButton}
+                        onPress={handleAppleLogin}
+                        style={styles.socialButton}
                         icon="apple"
-                    textColor={theme.colors.onSurface}
-                    contentStyle={{ height: 50 }}
+                        textColor={theme.colors.onSurface}
+                        contentStyle={{ height: 50 }}
                     >
-                    Continue with Apple
-                </Button>
-            </MotiView>
+                        Continue with Apple
+                    </Button>
+                </MotiView>
 
-            <MotiView
-                from={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 500 }}
-                style={styles.footer}
-            >
-                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                    Don't have an account?{' '}
-                </Text>
-                <Link href="/(auth)/sign-up" asChild>
-                    <Button mode="text" compact>Sign Up</Button>
-                </Link>
-            </MotiView>
-        </ScrollView>
+                <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 500 }}
+                    style={styles.footer}
+                >
+                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                        Don't have an account?{' '}
+                    </Text>
+                    <Link href="/(auth)/sign-up" asChild>
+                        <Button mode="text" compact>Sign Up</Button>
+                    </Link>
+                </MotiView>
+            </ScrollView>
         </KeyboardAvoidingView >
     );
 }

@@ -4,6 +4,7 @@ import Purchases, {
     CustomerInfo,
     LOG_LEVEL
 } from 'react-native-purchases';
+export { PurchasesOffering, PurchasesPackage, CustomerInfo };
 import { Platform } from 'react-native';
 
 const API_KEYS = {
@@ -42,11 +43,21 @@ class RevenueCatService {
     }
 
     async getOfferings(): Promise<PurchasesOffering | null> {
+        if (!this.isInitialized) {
+            console.warn('[RevenueCat] Not initialized, attempting to initialize...');
+            await this.initialize();
+        }
+
         try {
+            console.log('[RevenueCat] Fetching offerings...');
             const offerings = await Purchases.getOfferings();
+            console.log('[RevenueCat] Offerings fetched:', JSON.stringify(offerings));
+            if (!offerings.current) {
+                console.warn('[RevenueCat] No current offering found. Check RevenueCat dashboard.');
+            }
             return offerings.current;
-        } catch (e) {
-            console.error('Error fetching offerings:', e);
+        } catch (e: any) {
+            console.error('[RevenueCat] Error fetching offerings:', e.message, e.code, e.userInfo);
             return null;
         }
     }
