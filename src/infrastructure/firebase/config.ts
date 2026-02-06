@@ -22,10 +22,15 @@ if (getApps().length === 0) {
 }
 
 // Firebase Auth - ENABLED for production
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+
 let authInstance: Auth | null = null;
 export const getAuth = (): Auth => {
     if (!authInstance) {
-        authInstance = firebaseGetAuth(app);
+        authInstance = initializeAuth(app, {
+            persistence: getReactNativePersistence(AsyncStorage)
+        });
     }
     return authInstance;
 };
