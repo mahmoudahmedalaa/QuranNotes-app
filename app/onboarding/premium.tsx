@@ -155,7 +155,7 @@ export default function OnboardingPremium() {
                         labelStyle={styles.ctaLabel}
                         buttonColor="#FFFFFF"
                         textColor="#5B7FFF">
-                        Start 7-Day Free Trial
+                        Unlock Full Access
                     </Button>
                     <Pressable onPress={handleStartFree} style={styles.secondaryButton}>
                         <Text style={styles.secondaryText}>Start Free</Text>
