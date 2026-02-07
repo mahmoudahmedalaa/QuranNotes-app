@@ -24,6 +24,13 @@ export default function Index() {
         }
     };
 
+    // Check if there is an initial URL (Deep Link) that needs handling
+    // We only enforce our logic if the user is hitting the root ('/')
+    // If they are deep linking (e.g. /verify-email), we should let router handle it?
+    // Actually, Expo Router handles deep links by matching the path. 
+    // If the path matches 'index', this component renders.
+    // So we effectively guard the root.
+
     // Loading state
     if (hasSeenWelcome === null || onboardingLoading || authLoading) {
         return (
