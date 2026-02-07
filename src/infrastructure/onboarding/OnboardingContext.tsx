@@ -45,7 +45,7 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     // Determines the storage key based on current user
     const getStorageKey = () => {
         if (!user) return null;
-        return `${ONBOARDING_KEY_PREFIX}${user.uid}`;
+        return `${ONBOARDING_KEY_PREFIX}${user.id}`;
     };
 
     useEffect(() => {
