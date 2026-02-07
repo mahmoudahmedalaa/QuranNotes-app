@@ -33,14 +33,14 @@ export default function Index() {
         );
     }
 
-    // 1. New User -> Welcome Screen
-    if (!hasSeenWelcome) {
-        return <Redirect href="/welcome" />;
-    }
-
-    // 2. Not Completed Onboarding -> Onboarding Flow
+    // 1. Not Completed Onboarding -> Onboarding Flow
     if (shouldShowOnboarding) {
         return <Redirect href="/onboarding" />;
+    }
+
+    // 2. New User -> Welcome Screen
+    if (!hasSeenWelcome) {
+        return <Redirect href="/welcome" />;
     }
 
     // 3. Not Signed In -> Auth Flow (Login/Signup)

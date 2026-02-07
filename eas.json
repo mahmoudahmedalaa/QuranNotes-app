@@ -10,9 +10,17 @@
         "preview": {
             "distribution": "internal"
         },
-        "production": {}
+        "production": {
+            "distribution": "store"
+        }
     },
     "submit": {
-        "production": {}
+        "production": {
+            "ios": {
+                "appleId": "mahmoud.alaaeldin@gmail.com",
+                "ascAppId": "6739506691",
+                "appleTeamId": "82K287768H"
+            }
+        }
     }
 }

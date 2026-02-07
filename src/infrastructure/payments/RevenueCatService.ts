@@ -62,15 +62,42 @@ class RevenueCatService {
         }
     }
 
-    async purchasePackage(pack: PurchasesPackage): Promise<boolean> {
+    async purchasePackage(pack: PurchasesPackage): Promise<{ success: boolean; userCancelled?: boolean; error?: string }> {
         try {
+            console.log('[RevenueCat] Purchasing package:', pack.identifier);
             const { customerInfo } = await Purchases.purchasePackage(pack);
-            return this.isPro(customerInfo);
+            const isPro = this.isPro(customerInfo);
+            return { success: isPro };
         } catch (e: any) {
-            if (!e.userCancelled) {
-                console.error('Purchase error:', e);
+            // Log full error for debugging
+            console.log('[RevenueCat] Purchase Error Object:', e);
+
+            // Robust Cancellation Detection
+            // Code 1 = UserCancelled
+            const isCancelled = e.userCancelled === true || e.code === '1' || e.code === 1 || (e.message && e.message.includes('cancelled'));
+
+            if (isCancelled) {
+                console.log('[RevenueCat] User cancelled purchase - suppressing error.');
+                return { success: false, userCancelled: true };
             }
-            return false;
+
+            // Sanitize Error Message
+            let cleanMessage = 'Could not complete purchase.';
+            if (e.message) {
+                // Remove RevenueCat prefixes like "[RevenueCat] 🍎‼️"
+                cleanMessage = e.message.replace(/\[RevenueCat\]|🍎|‼️/g, '').trim();
+                // Fix capitalization
+                cleanMessage = cleanMessage.charAt(0).toUpperCase() + cleanMessage.slice(1);
+            }
+
+            // Map common error codes to friendly messages
+            if (e.code === 2) cleanMessage = 'Store problem. Please try again later.'; // StoreProblemError
+            if (e.code === 3) cleanMessage = 'Purchase not allowed on this device.'; // PurchaseNotAllowedError
+            if (e.code === 4) cleanMessage = 'Invalid purchase configuration.'; // InvalidPurchaseError
+            if (e.code === 10) cleanMessage = 'Network error. Please check your connection.'; // NetworkError
+
+            console.error('[RevenueCat] Return user-friendly error:', cleanMessage);
+            return { success: false, userCancelled: false, error: cleanMessage };
         }
     }
 

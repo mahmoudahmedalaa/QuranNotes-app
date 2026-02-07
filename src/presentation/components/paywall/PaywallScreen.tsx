@@ -104,17 +104,24 @@ export default function PaywallScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
-            const success = await revenueCatService.purchasePackage(packageToBuy);
+            const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
+
             if (success) {
                 checkStatus();
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 Alert.alert('Success', 'You are now a Pro member!', [
                     { text: 'OK', onPress: () => router.back() }
                 ]);
+            } else if (userCancelled) {
+                // User cancelled, do nothing (no scary error message)
+                console.log('User cancelled purchase');
+            } else {
+                // Show friendly error message
+                Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
             }
         } catch (error) {
             console.error('Purchase failed:', error);
-            // RevenueCatService handles alert already usually, but we can add one if needed
+            Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
             setPurchasing(false);
         }
