@@ -47,14 +47,15 @@ export default function SignUpScreen() {
             Toast.show({
                 type: 'success',
                 text1: '✅ Account Created!',
-                text2: 'Verification email sent. Check your inbox or junk/spam folder.',
-                visibilityTime: 5000,
+                text2: 'Please check your email to verify your account before signing in.',
+                visibilityTime: 6000,
                 position: 'top',
             });
-            // Navigate to root (Index) which will check onboarding status
+            // User is signed out after registration (must verify email first).
+            // Send them to login screen where they can sign in after verification.
             setTimeout(() => {
-                router.replace('/');
-            }, 1500);
+                router.replace('/(auth)/login');
+            }, 2000);
         } catch (e: any) {
             setError(e.message || 'Registration failed');
         } finally {

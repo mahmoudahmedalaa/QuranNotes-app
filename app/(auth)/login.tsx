@@ -22,22 +22,14 @@ export default function LoginScreen() {
     const [error, setError] = useState('');
     const [secureTextEntry, setSecureTextEntry] = useState(true);
 
-    // Redirect to home if already logged in (persistence check)
+    // If user is already authenticated on mount (persisted session), go straight to home.
+    // completeOnboarding is NOT called here — if they already completed it, shouldShowOnboarding is false.
+    // If they somehow have an incomplete onboarding (edge case), index.tsx will handle it.
     React.useEffect(() => {
         if (user) {
-            checkOnboardingAndRedirect();
+            router.replace('/');
         }
     }, [user]);
-
-    const checkOnboardingAndRedirect = async () => {
-        // For Login flow, we assume the user either:
-        // 1. Has already onboarded (if returning)
-        // 2. Or is an existing user logging in on new device (wants to skip)
-        // 3. Or user explicity chose "Login" instead of "Signup" -> Skip onboarding
-
-        await completeOnboarding();
-        router.replace('/');
-    };
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -70,6 +62,8 @@ export default function LoginScreen() {
                 return;
             }
 
+            // Existing user logging in — mark onboarding complete so they skip it
+            await completeOnboarding();
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Login failed');
@@ -83,6 +77,8 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithGoogle();
+            // Social login — mark onboarding complete (skip for social users)
+            await completeOnboarding();
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Google Sign-In failed');
@@ -96,6 +92,8 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithApple();
+            // Social login — mark onboarding complete (skip for social users)
+            await completeOnboarding();
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Apple Sign-In failed');

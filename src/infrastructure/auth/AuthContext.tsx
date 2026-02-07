@@ -103,8 +103,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const registerWithEmail = async (email: string, pass: string) => {
         setLoading(true);
         try {
-            const authUser = await authRepo.signUpWithEmail(email, pass);
-            setUser(authUser);
+            // signUpWithEmail creates account, sends verification email, and signs out.
+            // We do NOT set user here — the user must verify email and then log in.
+            await authRepo.signUpWithEmail(email, pass);
         } catch (e) {
             console.error('[AuthContext] registerWithEmail error:', e);
             throw e;
