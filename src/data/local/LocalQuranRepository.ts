@@ -6,14 +6,16 @@ export class LocalQuranRepository {
     private readonly LIST_KEY = 'quran_list_cache';
 
     async getSurah(surahNumber: number): Promise<Surah> {
+        let data: string | null = null;
         try {
-            const data = await AsyncStorage.getItem(`${this.STORAGE_KEY}${surahNumber}`);
-            if (!data) throw new Error(`Surah ${surahNumber} not found`);
-            return JSON.parse(data);
+            data = await AsyncStorage.getItem(`${this.STORAGE_KEY}${surahNumber}`);
         } catch (e) {
             console.error('Error reading local surah', e);
             throw e;
         }
+
+        if (!data) throw new Error(`Surah ${surahNumber} not found`);
+        return JSON.parse(data);
     }
 
     async saveSurah(surah: Surah): Promise<void> {
