@@ -24,14 +24,7 @@ export default function Index() {
         }
     };
 
-    // Check if there is an initial URL (Deep Link) that needs handling
-    // We only enforce our logic if the user is hitting the root ('/')
-    // If they are deep linking (e.g. /verify-email), we should let router handle it?
-    // Actually, Expo Router handles deep links by matching the path. 
-    // If the path matches 'index', this component renders.
-    // So we effectively guard the root.
-
-    // Loading state
+    // Loading state — wait for all data to be ready
     if (hasSeenWelcome === null || onboardingLoading || authLoading) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -40,21 +33,21 @@ export default function Index() {
         );
     }
 
-    // 1. New User -> Welcome Screen (Mascot)
+    // 1. First-time device install -> Welcome Screen (Mascot)
     if (!hasSeenWelcome) {
         return <Redirect href="/welcome" />;
     }
 
-    // 2. Not Signed In -> Auth Flow (Login/Signup)
+    // 2. Not signed in -> Auth (Login/Signup)
     if (!user) {
         return <Redirect href="/(auth)/login" />;
     }
 
-    // 3. Not Completed Onboarding -> Onboarding Flow (Wait, we will handle this via login.tsx logic too, but keep it here for new users)
+    // 3. New user who hasn't completed onboarding -> Onboarding Flow
     if (shouldShowOnboarding) {
         return <Redirect href="/onboarding" />;
     }
 
-    // 4. Everything Done -> Home (Tabs)
+    // 4. Fully authenticated + onboarded -> Home
     return <Redirect href="/(tabs)" />;
 }
