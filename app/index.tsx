@@ -38,14 +38,14 @@ export default function Index() {
         return <Redirect href="/welcome" />;
     }
 
-    // 2. Not Completed Onboarding -> Onboarding Flow
-    if (shouldShowOnboarding) {
-        return <Redirect href="/onboarding" />;
-    }
-
-    // 3. Not Signed In -> Auth Flow (Login/Signup)
+    // 2. Not Signed In -> Auth Flow (Login/Signup)
     if (!user) {
         return <Redirect href="/(auth)/login" />;
+    }
+
+    // 3. Not Completed Onboarding -> Onboarding Flow (Wait, we will handle this via login.tsx logic too, but keep it here for new users)
+    if (shouldShowOnboarding) {
+        return <Redirect href="/onboarding" />;
     }
 
     // 4. Everything Done -> Home (Tabs)

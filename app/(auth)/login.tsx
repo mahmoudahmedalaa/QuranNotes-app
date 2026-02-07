@@ -6,12 +6,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Spacing, BorderRadius, Colors } from '../../src/presentation/theme/DesignSystem';
 import { useAuth } from '../../src/infrastructure/auth/AuthContext';
 import { MotiView } from 'moti';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useOnboarding } from '../../src/infrastructure/onboarding/OnboardingContext';
 
 export default function LoginScreen() {
     const theme = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { user, loginWithEmail, loginAnonymously, loginWithGoogle, loginWithApple } = useAuth();
+    const { completeOnboarding } = useOnboarding();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -22,9 +25,24 @@ export default function LoginScreen() {
     // Redirect to home if already logged in (persistence check)
     React.useEffect(() => {
         if (user) {
-            router.replace('/');
+            checkOnboardingAndRedirect();
         }
     }, [user]);
+
+    const checkOnboardingAndRedirect = async () => {
+        // Check if this is a new signup
+        const isNewUser = await AsyncStorage.getItem('is_new_user');
+
+        if (isNewUser === 'true') {
+            // New user: Remove flag and let them see onboarding
+            await AsyncStorage.removeItem('is_new_user');
+            router.replace('/');
+        } else {
+            // Existing user: Skip onboarding
+            await completeOnboarding();
+            router.replace('/');
+        }
+    };
 
     const handleLogin = async () => {
         if (!email || !password) {

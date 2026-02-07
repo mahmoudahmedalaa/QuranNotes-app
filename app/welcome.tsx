@@ -42,20 +42,8 @@ export default function WelcomeScreen() {
         // Mark that user has seen welcome screen
         await AsyncStorage.setItem('hasSeenWelcome', 'true');
 
-        // If onboarding not completed, go to onboarding
-        if (shouldShowOnboarding) {
-            router.replace('/onboarding');
-            return;
-        }
-
-        // If not signed in, go to functionality
-        if (!user) {
-            router.replace('/(auth)/login');
-            return;
-        }
-
-        // Otherwise go to main app
-        router.replace('/(tabs)');
+        // Let index.tsx handle the routing logic
+        router.replace('/');
     };
 
     return (
