@@ -128,8 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await authRepo.signOut();
             setUser(null);
 
-            // Clear onboarding and welcome state for next user
-            await AsyncStorage.removeItem('@quran_notes:onboarding');
+            // Clear welcome state for next user (Device Global)
             await AsyncStorage.removeItem('hasSeenWelcome');
 
         } catch (e) {

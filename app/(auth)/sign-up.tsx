@@ -42,9 +42,6 @@ export default function SignUpScreen() {
         try {
             await registerWithEmail(email, password);
 
-            // Mark as new signup so login knows to show onboarding
-            await AsyncStorage.setItem('is_new_user', 'true');
-
             // Show modern toast notification
             const Toast = require('react-native-toast-message').default;
             Toast.show({

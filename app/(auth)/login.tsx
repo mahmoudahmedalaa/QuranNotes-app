@@ -30,18 +30,13 @@ export default function LoginScreen() {
     }, [user]);
 
     const checkOnboardingAndRedirect = async () => {
-        // Check if this is a new signup
-        const isNewUser = await AsyncStorage.getItem('is_new_user');
+        // For Login flow, we assume the user either:
+        // 1. Has already onboarded (if returning)
+        // 2. Or is an existing user logging in on new device (wants to skip)
+        // 3. Or user explicity chose "Login" instead of "Signup" -> Skip onboarding
 
-        if (isNewUser === 'true') {
-            // New user: Remove flag and let them see onboarding
-            await AsyncStorage.removeItem('is_new_user');
-            router.replace('/');
-        } else {
-            // Existing user: Skip onboarding
-            await completeOnboarding();
-            router.replace('/');
-        }
+        await completeOnboarding();
+        router.replace('/');
     };
 
     const handleLogin = async () => {

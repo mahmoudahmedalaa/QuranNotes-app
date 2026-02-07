@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../auth/AuthContext';
 
-const ONBOARDING_KEY = '@quran_notes:onboarding';
+const ONBOARDING_KEY_PREFIX = '@quran_notes:onboarding:';
 
 export interface OnboardingState {
     completed: boolean;
@@ -37,18 +38,39 @@ export const useOnboarding = () => {
 };
 
 export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
+    const { user } = useAuth();
     const [state, setState] = useState<OnboardingState>(INITIAL_STATE);
     const [loading, setLoading] = useState(true);
 
+    // Determines the storage key based on current user
+    const getStorageKey = () => {
+        if (!user) return null;
+        return `${ONBOARDING_KEY_PREFIX}${user.uid}`;
+    };
+
     useEffect(() => {
         loadOnboardingState();
-    }, []);
+    }, [user]);
 
     const loadOnboardingState = async () => {
+        setLoading(true);
+        const key = getStorageKey();
+
+        if (!key) {
+            // No user -> Reset to initial (not completed) or maybe completed if guest?
+            // For now, reset to initial.
+            setState(INITIAL_STATE);
+            setLoading(false);
+            return;
+        }
+
         try {
-            const data = await AsyncStorage.getItem(ONBOARDING_KEY);
+            const data = await AsyncStorage.getItem(key);
             if (data) {
                 setState(JSON.parse(data));
+            } else {
+                // New user (no data yet) -> Start fresh
+                setState(INITIAL_STATE);
             }
         } catch (error) {
             console.error('Failed to load onboarding state:', error);
@@ -58,8 +80,11 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const saveState = async (newState: OnboardingState) => {
+        const key = getStorageKey();
+        if (!key) return; // Don't save if no user (or save to guest key?)
+
         try {
-            await AsyncStorage.setItem(ONBOARDING_KEY, JSON.stringify(newState));
+            await AsyncStorage.setItem(key, JSON.stringify(newState));
             setState(newState);
         } catch (error) {
             console.error('Failed to save onboarding state:', error);
