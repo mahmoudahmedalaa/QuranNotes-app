@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../../domain/entities/User';
 import { RemoteAuthRepository } from '../../data/remote/RemoteAuthRepository';
 
@@ -126,6 +127,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             await authRepo.signOut();
             setUser(null);
+
+            // Clear onboarding and welcome state for next user
+            await AsyncStorage.removeItem('@quran_notes:onboarding');
+            await AsyncStorage.removeItem('hasSeenWelcome');
+
         } catch (e) {
             console.error('[AuthContext] logout error:', e);
             throw e;
