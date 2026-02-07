@@ -35,7 +35,7 @@ export default function SurahDetail() {
     const scrollY = useRef(new Animated.Value(0)).current;
 
     const { surah, loading, error, loadSurah } = useQuran();
-    const { playingVerse, isPlaying, playFromVerse, pause, resume, stop } = useAudioPlayer();
+    const { playingVerse, isPlaying, positionMillis, durationMillis, playFromVerse, pause, resume, stop } = useAudioPlayer();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder();
     const { notes } = useNotes();
     const followAlong = useVoiceFollowAlong(surah?.verses || [], surah?.number, surah?.englishName, surah?.name);
@@ -442,6 +442,8 @@ export default function SurahDetail() {
                         onResume={resume}
                         onStop={stop}
                         verseText={surah.verses.find(v => v.number === playingVerse?.verse)?.text}
+                        positionMillis={positionMillis}
+                        durationMillis={durationMillis}
                     />
                 )}
                 {isRecording && (

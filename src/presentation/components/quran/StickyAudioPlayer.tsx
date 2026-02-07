@@ -13,6 +13,8 @@ interface Props {
     onResume: () => void;
     onStop: () => void;
     verseText?: string;
+    positionMillis?: number;
+    durationMillis?: number;
 }
 
 export const StickyAudioPlayer = ({
@@ -22,6 +24,8 @@ export const StickyAudioPlayer = ({
     onResume,
     onStop,
     verseText,
+    positionMillis = 0,
+    durationMillis = 0,
 }: Props) => {
     const { settings, updateSettings } = useSettings();
     const theme = useTheme();
@@ -39,6 +43,7 @@ export const StickyAudioPlayer = ({
             from={{ translateY: 100, opacity: 0 }}
             animate={{ translateY: 0, opacity: 1 }}
             transition={{ type: 'spring', damping: 15 }}
+            animateInitialState={false}
             style={[
                 styles.container,
                 {
@@ -144,7 +149,11 @@ export const StickyAudioPlayer = ({
                     />
                 </View>
             </View>
-            <ProgressBar indeterminate color={theme.colors.primary} style={{ height: 3 }} />
+            <ProgressBar
+                progress={durationMillis > 0 ? positionMillis / durationMillis : 0}
+                color={theme.colors.primary}
+                style={{ height: 3 }}
+            />
         </MotiView>
     );
 };

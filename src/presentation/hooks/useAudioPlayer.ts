@@ -11,6 +11,8 @@ export const useAudioPlayer = () => {
     const { settings } = useSettings();
     const [playingVerse, setPlayingVerse] = useState<{ surah: number; verse: number } | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [positionMillis, setPositionMillis] = useState(0);
+    const [durationMillis, setDurationMillis] = useState(0);
 
     // Playlist State
     const [playlist, setPlaylist] = useState<Verse[]>([]);
@@ -56,6 +58,8 @@ export const useAudioPlayer = () => {
     useEffect(() => {
         const unsubscribe = player.addListener((status: PlaybackStatus) => {
             setIsPlaying(status.isPlaying);
+            setPositionMillis(status.positionMillis);
+            setDurationMillis(status.durationMillis);
 
             if (status.didJustFinish) {
                 // Use setTimeout to ensure state updates complete before advancing
@@ -151,6 +155,8 @@ export const useAudioPlayer = () => {
     return {
         playingVerse,
         isPlaying,
+        positionMillis,
+        durationMillis,
         playVerse,
         playSurah,
         playFromVerse,

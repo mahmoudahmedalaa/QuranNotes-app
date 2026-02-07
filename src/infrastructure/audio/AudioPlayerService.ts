@@ -11,6 +11,8 @@ export type PlaybackStatus = {
 export class AudioPlayerService {
     private sound: Audio.Sound | null = null;
     private listeners: ((status: PlaybackStatus) => void)[] = [];
+    private lastUpdateTime: number = 0;
+    private readonly UPDATE_INTERVAL_MS = 1000; // Update UI once per second instead of every frame
 
     constructor() {
         Audio.setAudioModeAsync({
@@ -65,13 +67,21 @@ export class AudioPlayerService {
                     { shouldPlay: true },
                     status => {
                         if (status.isLoaded) {
-                            this.notifyListeners({
-                                isPlaying: status.isPlaying,
-                                isBuffering: status.isBuffering,
-                                positionMillis: status.positionMillis,
-                                durationMillis: status.durationMillis || 0,
-                                didJustFinish: status.didJustFinish,
-                            });
+                            const now = Date.now();
+                            const shouldUpdate =
+                                status.didJustFinish ||
+                                (now - this.lastUpdateTime >= this.UPDATE_INTERVAL_MS);
+
+                            if (shouldUpdate) {
+                                this.lastUpdateTime = now;
+                                this.notifyListeners({
+                                    isPlaying: status.isPlaying,
+                                    isBuffering: status.isBuffering,
+                                    positionMillis: status.positionMillis,
+                                    durationMillis: status.durationMillis || 0,
+                                    didJustFinish: status.didJustFinish,
+                                });
+                            }
 
                             if (status.didJustFinish) {
                                 this.sound?.unloadAsync();
@@ -90,13 +100,21 @@ export class AudioPlayerService {
                     { shouldPlay: true },
                     status => {
                         if (status.isLoaded) {
-                            this.notifyListeners({
-                                isPlaying: status.isPlaying,
-                                isBuffering: status.isBuffering,
-                                positionMillis: status.positionMillis,
-                                durationMillis: status.durationMillis || 0,
-                                didJustFinish: status.didJustFinish,
-                            });
+                            const now = Date.now();
+                            const shouldUpdate =
+                                status.didJustFinish ||
+                                (now - this.lastUpdateTime >= this.UPDATE_INTERVAL_MS);
+
+                            if (shouldUpdate) {
+                                this.lastUpdateTime = now;
+                                this.notifyListeners({
+                                    isPlaying: status.isPlaying,
+                                    isBuffering: status.isBuffering,
+                                    positionMillis: status.positionMillis,
+                                    durationMillis: status.durationMillis || 0,
+                                    didJustFinish: status.didJustFinish,
+                                });
+                            }
 
                             if (status.didJustFinish) {
                                 this.sound?.unloadAsync();
