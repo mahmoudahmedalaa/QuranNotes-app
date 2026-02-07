@@ -68,9 +68,13 @@ export class AudioPlayerService {
                     status => {
                         if (status.isLoaded) {
                             const now = Date.now();
+                            const timeSinceLastUpdate = now - this.lastUpdateTime;
+
+                            // Always update on: finish, state change, or time interval
                             const shouldUpdate =
                                 status.didJustFinish ||
-                                (now - this.lastUpdateTime >= this.UPDATE_INTERVAL_MS);
+                                this.lastUpdateTime === 0 || // First update
+                                timeSinceLastUpdate >= this.UPDATE_INTERVAL_MS;
 
                             if (shouldUpdate) {
                                 this.lastUpdateTime = now;
@@ -101,9 +105,13 @@ export class AudioPlayerService {
                     status => {
                         if (status.isLoaded) {
                             const now = Date.now();
+                            const timeSinceLastUpdate = now - this.lastUpdateTime;
+
+                            // Always update on: finish, state change, or time interval
                             const shouldUpdate =
                                 status.didJustFinish ||
-                                (now - this.lastUpdateTime >= this.UPDATE_INTERVAL_MS);
+                                this.lastUpdateTime === 0 || // First update
+                                timeSinceLastUpdate >= this.UPDATE_INTERVAL_MS;
 
                             if (shouldUpdate) {
                                 this.lastUpdateTime = now;
@@ -161,6 +169,7 @@ export class AudioPlayerService {
             }
             this.sound = null;
         }
+        this.lastUpdateTime = 0; // Reset for next playback
         this.notifyListeners({
             isPlaying: false,
             isBuffering: false,
