@@ -26,52 +26,51 @@
         "NSPhotoLibraryUsageDescription": "Allow QuranNotes to access your photo library to select a profile picture",
         "ITSAppUsesNonExemptEncryption": false
       }
-    }
-  },
-  "android": {
-    "adaptiveIcon": {
-      "foregroundImage": "./assets/adaptive-icon.png",
-      "backgroundColor": "#ffffff"
     },
-    "package": "com.mahmoudahmedalaa.qurannotes",
-    "permissions": [
-      "android.permission.RECORD_AUDIO"
-    ]
-  },
-  "web": {
-    "favicon": "./assets/favicon.png"
-  },
-  "plugins": [
-    "expo-router",
-    [
-      "expo-notifications",
-      {
-        "icon": "./assets/icon.png",
-        "color": "#ffffff"
-      }
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.mahmoudahmedalaa.qurannotes",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#ffffff"
+        }
+      ],
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "Allow QuranNotes to use the microphone for speech recognition",
+          "speechRecognitionPermission": "Allow QuranNotes to use speech recognition for voice follow-along"
+        }
+      ],
+      "expo-web-browser",
+      "@react-native-google-signin/google-signin"
     ],
-    [
-      "@jamsch/expo-speech-recognition",
-      {
-        "microphonePermission": "Allow QuranNotes to use the microphone for speech recognition",
-        "speechRecognitionPermission": "Allow QuranNotes to use speech recognition for voice follow-along"
-      }
+    "scheme": [
+      "qurannotes",
+      "com.googleusercontent.apps.825913576002-cj4sli54hrmo1om3g34vo54mvc03oavk"
     ],
-    "expo-web-browser",
-    "@react-native-google-signin/google-signin"
-  ],
-  "scheme": [
-    "qurannotes",
-    "com.googleusercontent.apps.825913576002-cj4sli54hrmo1om3g34vo54mvc03oavk"
-  ],
-  "experiments": {
-    "typedRoutes": true
-  },
-  "extra": {
-    "router": {},
-    "eas": {
-      "projectId": "2763d9a0-0946-44c2-9f8c-2671fafba27a"
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2763d9a0-0946-44c2-9f8c-2671fafba27a"
+      }
     }
   }
-}
 }
