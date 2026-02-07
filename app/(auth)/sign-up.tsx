@@ -51,9 +51,9 @@ export default function SignUpScreen() {
                 visibilityTime: 5000,
                 position: 'top',
             });
-            // Navigate to login after short delay
+            // Navigate to root (Index) which will check onboarding status
             setTimeout(() => {
-                // No change needed here yet
+                router.replace('/');
             }, 1500);
         } catch (e: any) {
             setError(e.message || 'Registration failed');
