@@ -115,10 +115,10 @@ export default function LoginScreen() {
                         animate={{ opacity: 1, translateY: 0 }}
                         transition={{ type: 'timing', duration: 1000 }}>
                         <Text variant="displaySmall" style={{ fontWeight: '700', color: theme.colors.primary }}>
-                            Welcome Back
+                            Sign In
                         </Text>
                         <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant, marginTop: Spacing.xs }}>
-                            Sign in to continue your journey
+                            Continue your Quran journey
                         </Text>
                     </MotiView>
                 </View>

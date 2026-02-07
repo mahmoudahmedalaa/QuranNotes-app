@@ -109,7 +109,7 @@ export default function OnboardingReciter() {
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/(tabs)');
+        router.replace('/welcome');
     };
 
     const renderReciter = ({ item, index }: { item: (typeof RECITERS)[0]; index: number }) => {

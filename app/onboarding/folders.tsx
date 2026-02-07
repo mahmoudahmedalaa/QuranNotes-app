@@ -41,7 +41,7 @@ export default function OnboardingFolders() {
     const handleSkip = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/(tabs)');
+        router.replace('/welcome');
     };
 
     return (

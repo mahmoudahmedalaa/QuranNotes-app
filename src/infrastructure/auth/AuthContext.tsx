@@ -33,10 +33,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const authRepo = new RemoteAuthRepository();
+    // Flag to suppress onAuthStateChanged during registration
+    // (Firebase briefly sets user before signOut completes)
+    const isRegistering = React.useRef(false);
 
     useEffect(() => {
         // Listen to auth state changes
         const unsubscribe = authRepo.onAuthStateChanged((authUser) => {
+            if (isRegistering.current) {
+                // During registration, ignore auth state changes
+                return;
+            }
             setUser(authUser);
             setLoading(false);
         });
@@ -102,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const registerWithEmail = async (email: string, pass: string) => {
         setLoading(true);
+        isRegistering.current = true;
         try {
             // signUpWithEmail creates account, sends verification email, and signs out.
             // We do NOT set user here — the user must verify email and then log in.
@@ -110,6 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('[AuthContext] registerWithEmail error:', e);
             throw e;
         } finally {
+            isRegistering.current = false;
             setLoading(false);
         }
     };
