@@ -4,7 +4,7 @@ import { Text, useTheme, Button } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useOnboarding } from '../../src/infrastructure/onboarding/OnboardingContext';
 import {
@@ -82,7 +82,7 @@ export default function OnboardingFollowAlong() {
                     from={{ opacity: 0, scale: 0.5 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ type: 'spring' }}>
-                    <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                    <Icon source="check-circle" size={20} color={theme.colors.primary} />
                 </MotiView>
             )}
         </MotiView>
@@ -112,8 +112,8 @@ export default function OnboardingFollowAlong() {
                     <LinearGradient
                         colors={[theme.colors.tertiaryContainer, theme.colors.tertiary + '40']}
                         style={styles.iconGradient}>
-                        <MaterialCommunityIcons
-                            name="access-point"
+                        <Icon
+                            source="access-point"
                             size={48}
                             color={theme.colors.tertiary}
                         />
@@ -151,19 +151,19 @@ export default function OnboardingFollowAlong() {
                     transition={{ delay: 700 }}
                     style={styles.featuresContainer}>
                     <View style={styles.featureRow}>
-                        <Ionicons name="mic" size={18} color={theme.colors.primary} />
+                        <Icon source="microphone" size={18} color={theme.colors.primary} />
                         <Text style={{ color: theme.colors.onSurfaceVariant, marginLeft: 8 }}>
                             Voice recognition follows your recitation
                         </Text>
                     </View>
                     <View style={styles.featureRow}>
-                        <Ionicons name="sparkles" size={18} color={theme.colors.tertiary} />
+                        <Icon source="sparkles" size={18} color={theme.colors.tertiary} />
                         <Text style={{ color: theme.colors.onSurfaceVariant, marginLeft: 8 }}>
                             Verses glow as you recite them correctly
                         </Text>
                     </View>
                     <View style={styles.featureRow}>
-                        <Ionicons name="bar-chart" size={18} color={theme.colors.secondary} />
+                        <Icon source="chart-bar" size={18} color={theme.colors.secondary} />
                         <Text style={{ color: theme.colors.onSurfaceVariant, marginLeft: 8 }}>
                             Track your accuracy and progress
                         </Text>

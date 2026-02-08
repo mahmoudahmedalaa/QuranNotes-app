@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconButton, useTheme, FAB } from 'react-native-paper';
+import { IconButton, useTheme, FAB, Icon } from 'react-native-paper';
 import { MotiView, AnimatePresence } from 'moti';
-import { Ionicons } from '@expo/vector-icons';
 import { useQuran } from '../../src/presentation/hooks/useQuran';
 import { useAudioPlayer } from '../../src/presentation/hooks/useAudioPlayer';
 import { useAudioRecorder } from '../../src/presentation/hooks/useAudioRecorder';
@@ -317,7 +316,7 @@ export default function SurahDetail() {
                                                 transform: [{ scale: 0.98 }],
                                             },
                                         ]}>
-                                        <Ionicons name="play" size={20} color="#FFF" />
+                                        <Icon source="play" size={20} color="#FFF" />
                                         <Text style={styles.playButtonText}>Play</Text>
                                     </Pressable>
 
@@ -378,7 +377,7 @@ export default function SurahDetail() {
                     },
                 ]}>
                 <Pressable onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="chevron-back" size={24} color={theme.colors.onSurface} />
+                    <Icon source="chevron-left" size={24} color={theme.colors.onSurface} />
                 </Pressable>
 
                 <View style={styles.stickyTitleContainer}>

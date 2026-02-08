@@ -21,6 +21,9 @@
       "buildNumber": "5",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSMicrophoneUsageDescription": "Allow QuranNotes to use the microphone for speech recognition",
         "NSSpeechRecognitionUsageDescription": "Allow QuranNotes to use speech recognition for voice follow-along",
         "NSPhotoLibraryUsageDescription": "Allow QuranNotes to access your photo library to select a profile picture",

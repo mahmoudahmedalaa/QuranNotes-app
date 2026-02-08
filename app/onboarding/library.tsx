@@ -4,7 +4,7 @@ import { Text, useTheme, Button, ProgressBar } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useOnboarding } from '../../src/infrastructure/onboarding/OnboardingContext';
 import {
@@ -74,7 +74,7 @@ export default function OnboardingLibrary() {
                                 styles.playButton,
                                 { backgroundColor: theme.colors.primaryContainer },
                             ]}>
-                            <Ionicons name="play" size={24} color={theme.colors.primary} />
+                            <Icon source="play" size={24} color={theme.colors.primary} />
                         </View>
                         <View style={styles.recordingInfo}>
                             <Text
@@ -138,14 +138,14 @@ export default function OnboardingLibrary() {
                                         styles.lockBadge,
                                         { backgroundColor: theme.colors.secondaryContainer },
                                     ]}>
-                                    <Ionicons
-                                        name="lock-closed"
+                                    <Icon
+                                        source="lock"
                                         size={10}
                                         color={theme.colors.secondary}
                                     />
                                 </View>
-                                <MaterialCommunityIcons
-                                    name={feature.icon as any}
+                                <Icon
+                                    source={feature.icon as any}
                                     size={28}
                                     color={theme.colors.primary}
                                 />

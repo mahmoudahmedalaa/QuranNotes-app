@@ -4,7 +4,7 @@ import { Text, useTheme, Button } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useOnboarding } from '../../src/infrastructure/onboarding/OnboardingContext';
 import {
@@ -89,8 +89,8 @@ export default function OnboardingPremium() {
                                 highlightIndex === index && styles.featureHighlighted,
                             ]}>
                             <View style={styles.featureIcon}>
-                                <MaterialCommunityIcons
-                                    name={feature.icon as any}
+                                <Icon
+                                    source={feature.icon as any}
                                     size={20}
                                     color="rgba(255,255,255,0.9)"
                                 />
@@ -99,7 +99,7 @@ export default function OnboardingPremium() {
                                 <Text style={styles.featureTitle}>{feature.title}</Text>
                                 <Text style={styles.featureDescription}>{feature.description}</Text>
                             </View>
-                            <Ionicons name="checkmark-circle" size={22} color="#4ADE80" />
+                            <Icon source="check-circle" size={22} color="#4ADE80" />
                         </MotiView>
                     ))}
                 </MotiView>
