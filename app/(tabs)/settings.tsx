@@ -148,60 +148,46 @@ export default function SettingsScreen() {
     };
 
     const openCustomTimePicker = async () => {
-        if (Platform.OS === 'ios') {
-            // iOS uses DatePickerIOS — show in a modal or action sheet
-            // For simplicity, use a prompt-based approach
-            Alert.prompt(
-                'Custom Time',
-                'Enter hour (0-23)',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Next',
-                        onPress: (hourStr?: string) => {
-                            const hour = parseInt(hourStr || '0', 10);
-                            if (hour >= 0 && hour <= 23) {
-                                Alert.prompt(
-                                    'Custom Time',
-                                    'Enter minute (0-59)',
-                                    [
-                                        { text: 'Cancel', style: 'cancel' },
-                                        {
-                                            text: 'Set',
-                                            onPress: (minuteStr?: string) => {
-                                                const minute = parseInt(minuteStr || '0', 10);
-                                                if (minute >= 0 && minute <= 59) {
-                                                    saveReminderTime(hour, minute);
-                                                }
-                                            },
+        // Use Alert.prompt for both iOS and Android (no external dependencies)
+        Alert.prompt(
+            'Custom Time',
+            'Enter hour (0-23)',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Next',
+                    onPress: (hourStr?: string) => {
+                        const hour = parseInt(hourStr || '0', 10);
+                        if (hour >= 0 && hour <= 23) {
+                            Alert.prompt(
+                                'Custom Time',
+                                'Enter minute (0-59)',
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                        text: 'Set',
+                                        onPress: (minuteStr?: string) => {
+                                            const minute = parseInt(minuteStr || '0', 10);
+                                            if (minute >= 0 && minute <= 59) {
+                                                saveReminderTime(hour, minute);
+                                            } else {
+                                                Alert.alert('Invalid minute', 'Please enter a number between 0 and 59');
+                                            }
                                         },
-                                    ],
-                                    'plain-text',
-                                    '0'
-                                );
-                            }
-                        },
+                                    },
+                                ],
+                                'plain-text',
+                                '0'
+                            );
+                        } else {
+                            Alert.alert('Invalid hour', 'Please enter a number between 0 and 23');
+                        }
                     },
-                ],
-                'plain-text',
-                settings.dailyReminderHour.toString()
-            );
-        } else {
-            // Android uses TimePickerAndroid
-            const { TimePickerAndroid } = require('@react-native-community/datetimepicker');
-            try {
-                const { action, hour, minute } = await TimePickerAndroid.open({
-                    hour: settings.dailyReminderHour,
-                    minute: settings.dailyReminderMinute,
-                    is24Hour: true,
-                });
-                if (action !== TimePickerAndroid.dismissedAction) {
-                    saveReminderTime(hour, minute);
-                }
-            } catch (error) {
-                console.warn('Time picker error:', error);
-            }
-        }
+                },
+            ],
+            'plain-text',
+            settings.dailyReminderHour.toString()
+        );
     };
 
     const saveReminderTime = async (hour: number, minute: number) => {
