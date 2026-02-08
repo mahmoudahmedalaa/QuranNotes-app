@@ -1,23 +1,23 @@
 /**
- * AyahShareCard — Beautiful shareable ayah card
+ * AyahShareCard — Beautiful shareable ayah card with image sharing
  *
  * Displays an ayah with Arabic text, translation, and surah reference
- * in a premium design. Uses React Native's built-in Share API for
- * zero-dependency text sharing, plus a visually stunning modal
- * that users can screenshot for image sharing.
+ * in a premium design. Captures the card as an image using
+ * react-native-view-shot and shares via native Share API.
  *
- * Cost: $0 (no cloud services, no extra packages)
- * Battery: Minimal (static UI, no background processing)
+ * Falls back to text sharing if image capture fails.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Share, Modal, Pressable, Dimensions } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, Share, Modal, Pressable, Dimensions, ActivityIndicator } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Shadows, Gradients } from '../../theme/DesignSystem';
 import * as Haptics from 'expo-haptics';
+import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -43,9 +43,42 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
     surahNumber,
 }) => {
     const theme = useTheme();
+    const cardRef = useRef<any>(null);
+    const [isCapturing, setIsCapturing] = useState(false);
 
-    const shareText = async () => {
+    const shareAsImage = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setIsCapturing(true);
+
+        try {
+            // Capture the card as a high-quality PNG
+            const uri = await captureRef(cardRef, {
+                format: 'png',
+                quality: 1,
+                result: 'tmpfile',
+            });
+
+            // Check if native sharing is available
+            const isAvailable = await Sharing.isAvailableAsync();
+            if (isAvailable) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'image/png',
+                    dialogTitle: 'Share this Ayah',
+                    UTI: 'public.png',
+                });
+            } else {
+                // Fallback to text sharing
+                await shareAsText();
+            }
+        } catch (error) {
+            console.warn('[AyahShareCard] Image capture failed, falling back to text:', error);
+            await shareAsText();
+        } finally {
+            setIsCapturing(false);
+        }
+    };
+
+    const shareAsText = async () => {
         try {
             await Share.share({
                 message: `${arabicText}\n\n"${translation}"\n\n— ${surahName} (${surahNameArabic}), Verse ${verseNumber}\n\nShared via QuranNotes 📖`,
@@ -72,68 +105,70 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ type: 'spring', damping: 20, stiffness: 200 }}
                     >
-                        {/* The Card */}
-                        <LinearGradient
-                            colors={theme.dark
-                                ? ['#1A1F36', '#0D1117', '#1A1F36']
-                                : ['#F8F6FF', '#FFFFFF', '#F0EDFF']
-                            }
-                            style={styles.card}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                        >
-                            {/* Decorative top border */}
+                        {/* The Card — captured as image */}
+                        <ViewShot ref={cardRef} options={{ format: 'png', quality: 1 }}>
                             <LinearGradient
-                                colors={Gradients.primary}
-                                style={styles.topBorder}
+                                colors={theme.dark
+                                    ? ['#1A1F36', '#0D1117', '#1A1F36']
+                                    : ['#F8F6FF', '#FFFFFF', '#F0EDFF']
+                                }
+                                style={styles.card}
                                 start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                            />
+                                end={{ x: 1, y: 1 }}
+                            >
+                                {/* Decorative top border */}
+                                <LinearGradient
+                                    colors={Gradients.primary}
+                                    style={styles.topBorder}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                />
 
-                            {/* Bismillah ornament */}
-                            <Text style={[styles.ornament, { color: theme.colors.primary }]}>
-                                ﷽
-                            </Text>
-
-                            {/* Arabic Text */}
-                            <Text style={[styles.arabicText, {
-                                color: theme.dark ? '#E8E4FF' : '#1A1A2E',
-                            }]}>
-                                {arabicText}
-                            </Text>
-
-                            {/* Divider */}
-                            <View style={[styles.divider, {
-                                backgroundColor: theme.colors.primary,
-                            }]}>
-                                <View style={[styles.dividerDiamond, {
-                                    backgroundColor: theme.colors.primary,
-                                }]} />
-                            </View>
-
-                            {/* Translation */}
-                            <Text style={[styles.translationText, {
-                                color: theme.dark ? 'rgba(255,255,255,0.8)' : '#3D3D5C',
-                            }]}>
-                                "{translation}"
-                            </Text>
-
-                            {/* Reference */}
-                            <View style={styles.referenceRow}>
-                                <Text style={[styles.referenceText, {
-                                    color: theme.colors.primary,
-                                }]}>
-                                    — {surahName} ({surahNameArabic}), Verse {verseNumber}
+                                {/* Bismillah ornament */}
+                                <Text style={[styles.ornament, { color: theme.colors.primary }]}>
+                                    ﷽
                                 </Text>
-                            </View>
 
-                            {/* Watermark */}
-                            <Text style={[styles.watermark, {
-                                color: theme.dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
-                            }]}>
-                                QuranNotes
-                            </Text>
-                        </LinearGradient>
+                                {/* Arabic Text */}
+                                <Text style={[styles.arabicText, {
+                                    color: theme.dark ? '#E8E4FF' : '#1A1A2E',
+                                }]}>
+                                    {arabicText}
+                                </Text>
+
+                                {/* Divider */}
+                                <View style={[styles.divider, {
+                                    backgroundColor: theme.colors.primary,
+                                }]}>
+                                    <View style={[styles.dividerDiamond, {
+                                        backgroundColor: theme.colors.primary,
+                                    }]} />
+                                </View>
+
+                                {/* Translation */}
+                                <Text style={[styles.translationText, {
+                                    color: theme.dark ? 'rgba(255,255,255,0.8)' : '#3D3D5C',
+                                }]}>
+                                    "{translation}"
+                                </Text>
+
+                                {/* Reference */}
+                                <View style={styles.referenceRow}>
+                                    <Text style={[styles.referenceText, {
+                                        color: theme.colors.primary,
+                                    }]}>
+                                        — {surahName} ({surahNameArabic}), Verse {verseNumber}
+                                    </Text>
+                                </View>
+
+                                {/* Watermark */}
+                                <Text style={[styles.watermark, {
+                                    color: theme.dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+                                }]}>
+                                    QuranNotes
+                                </Text>
+                            </LinearGradient>
+                        </ViewShot>
 
                         {/* Action Buttons */}
                         <View style={styles.actions}>
@@ -142,11 +177,19 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                                     styles.actionButton,
                                     { backgroundColor: theme.colors.primary },
                                     pressed && { opacity: 0.9 },
+                                    isCapturing && { opacity: 0.6 },
                                 ]}
-                                onPress={shareText}
+                                onPress={shareAsImage}
+                                disabled={isCapturing}
                             >
-                                <Ionicons name="share-outline" size={20} color="#FFF" />
-                                <Text style={styles.actionText}>Share</Text>
+                                {isCapturing ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <Ionicons name="image-outline" size={20} color="#FFF" />
+                                )}
+                                <Text style={styles.actionText}>
+                                    {isCapturing ? 'Preparing...' : 'Share Image'}
+                                </Text>
                             </Pressable>
 
                             <Pressable
@@ -155,12 +198,25 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                                     { backgroundColor: theme.colors.surfaceVariant },
                                     pressed && { opacity: 0.9 },
                                 ]}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    shareAsText();
+                                }}
+                            >
+                                <Ionicons name="text-outline" size={20} color={theme.colors.onSurfaceVariant} />
+                                <Text style={[styles.actionText, { color: theme.colors.onSurfaceVariant }]}>
+                                    Text
+                                </Text>
+                            </Pressable>
+
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.closeButton,
+                                    pressed && { opacity: 0.7 },
+                                ]}
                                 onPress={onDismiss}
                             >
-                                <Ionicons name="close" size={20} color={theme.colors.onSurfaceVariant} />
-                                <Text style={[styles.actionText, { color: theme.colors.onSurfaceVariant }]}>
-                                    Close
-                                </Text>
+                                <Ionicons name="close-circle" size={32} color={theme.dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.3)'} />
                             </Pressable>
                         </View>
                     </MotiView>
@@ -178,7 +234,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: Spacing.lg,
         zIndex: 9999,
-        elevation: 10, // Android shadow/z-index
+        elevation: 10,
     },
     card: {
         width: SCREEN_WIDTH - 48,
@@ -243,9 +299,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
     },
-    referenceDot: {
-        fontSize: 8,
-    },
     watermark: {
         fontSize: 10,
         textAlign: 'center',
@@ -255,6 +308,7 @@ const styles = StyleSheet.create({
     },
     actions: {
         flexDirection: 'row',
+        alignItems: 'center',
         gap: Spacing.sm,
         marginTop: Spacing.md,
     },
@@ -269,8 +323,11 @@ const styles = StyleSheet.create({
         ...Shadows.sm,
     },
     actionText: {
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '600',
         color: '#FFF',
+    },
+    closeButton: {
+        padding: 4,
     },
 });

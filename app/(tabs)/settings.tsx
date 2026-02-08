@@ -1,4 +1,5 @@
 import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, Switch } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Text, useTheme } from 'react-native-paper';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,6 +28,12 @@ export default function SettingsScreen() {
     const { toggleDebugPro, isPro } = usePro();
     const { user, loading, logout, deleteAccount } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
+    const [pickerDate, setPickerDate] = useState(() => {
+        const d = new Date();
+        d.setHours(settings.dailyReminderHour, settings.dailyReminderMinute, 0, 0);
+        return d;
+    });
 
     const handleSignOut = async () => {
         Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -141,9 +148,35 @@ export default function SettingsScreen() {
                 { text: 'Afternoon (14:00)', onPress: () => saveReminderTime(14, 0) },
                 { text: 'Evening (20:00)', onPress: () => saveReminderTime(20, 0) },
                 { text: 'Night (22:00)', onPress: () => saveReminderTime(22, 0) },
+                {
+                    text: 'Custom Time',
+                    onPress: () => {
+                        const d = new Date();
+                        d.setHours(settings.dailyReminderHour, settings.dailyReminderMinute, 0, 0);
+                        setPickerDate(d);
+                        setShowTimePicker(true);
+                    },
+                },
                 { text: 'Cancel', style: 'cancel' },
             ]
         );
+    };
+
+    const handleTimePickerChange = async (_event: any, selectedDate?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowTimePicker(false);
+        }
+        if (selectedDate) {
+            setPickerDate(selectedDate);
+            if (Platform.OS === 'android') {
+                await saveReminderTime(selectedDate.getHours(), selectedDate.getMinutes());
+            }
+        }
+    };
+
+    const handleTimePickerConfirm = async () => {
+        setShowTimePicker(false);
+        await saveReminderTime(pickerDate.getHours(), pickerDate.getMinutes());
     };
 
     const saveReminderTime = async (hour: number, minute: number) => {
@@ -505,37 +538,54 @@ export default function SettingsScreen() {
                                         color={theme.colors.onSurfaceVariant}
                                     />
                                 </Pressable>
-                                <Pressable
-                                    style={({ pressed }) => [
+
+                                {/* Native Time Picker */}
+                                {showTimePicker && (
+                                    <View style={[
                                         styles.card,
-                                        { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                        { backgroundColor: theme.colors.surface, marginTop: Spacing.sm, flexDirection: 'column' },
                                         Shadows.sm,
-                                        pressed && styles.cardPressed,
-                                    ]}
-                                    onPress={async () => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        await NotificationService.sendTestNotification();
-                                    }}>
-                                    <View
-                                        style={[
-                                            styles.iconContainer,
-                                            { backgroundColor: '#E3F2FD' },
-                                        ]}>
-                                        <Ionicons name="paper-plane" size={18} color="#1976D2" />
+                                    ]}>
+                                        <DateTimePicker
+                                            value={pickerDate}
+                                            mode="time"
+                                            display="spinner"
+                                            onChange={handleTimePickerChange}
+                                            textColor={theme.colors.onSurface}
+                                            style={{ width: '100%', height: 180 }}
+                                        />
+                                        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm }}>
+                                            <Pressable
+                                                onPress={() => setShowTimePicker(false)}
+                                                style={({ pressed }) => [
+                                                    {
+                                                        flex: 1,
+                                                        paddingVertical: 10,
+                                                        borderRadius: BorderRadius.md,
+                                                        alignItems: 'center',
+                                                        backgroundColor: theme.colors.surfaceVariant,
+                                                    },
+                                                    pressed && { opacity: 0.8 },
+                                                ]}>
+                                                <Text style={{ color: theme.colors.onSurfaceVariant, fontWeight: '600' }}>Cancel</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                onPress={handleTimePickerConfirm}
+                                                style={({ pressed }) => [
+                                                    {
+                                                        flex: 1,
+                                                        paddingVertical: 10,
+                                                        borderRadius: BorderRadius.md,
+                                                        alignItems: 'center',
+                                                        backgroundColor: theme.colors.primary,
+                                                    },
+                                                    pressed && { opacity: 0.8 },
+                                                ]}>
+                                                <Text style={{ color: '#FFF', fontWeight: '600' }}>Set Time</Text>
+                                            </Pressable>
+                                        </View>
                                     </View>
-                                    <View style={styles.cardContent}>
-                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                            Preview Notification
-                                        </Text>
-                                        <Text
-                                            style={[
-                                                styles.cardSubtitle,
-                                                { color: theme.colors.onSurfaceVariant },
-                                            ]}>
-                                            See what it looks like (arrives in 3s)
-                                        </Text>
-                                    </View>
-                                </Pressable>
+                                )}
                             </>
                         )}
                     </View>

@@ -73,7 +73,7 @@ export const VerseItem = ({
                     ],
                     pressed && { opacity: 0.95 },
                 ]}>
-                {/* Header: Verse Number & Controls */}
+                {/* Verse Number Badge */}
                 <View style={styles.header}>
                     <View
                         style={[
@@ -84,61 +84,6 @@ export const VerseItem = ({
                         <Text style={[styles.numberText, { color: theme.colors.primary }]}>
                             {verse.number}
                         </Text>
-                    </View>
-                    <View style={styles.controlsRow}>
-                        {onPlay && (
-                            <IconButton
-                                icon={isPlaying ? 'pause-circle' : 'play-circle-outline'}
-                                iconColor={theme.colors.primary}
-                                size={22}
-                                onPress={handlePlay}
-                                style={styles.controlButton}
-                            />
-                        )}
-                        {onNote && (
-                            <View>
-                                <IconButton
-                                    icon={hasNote ? 'pencil' : 'pencil-outline'}
-                                    iconColor={
-                                        hasNote
-                                            ? theme.colors.primary
-                                            : theme.colors.onSurfaceVariant
-                                    }
-                                    size={22}
-                                    onPress={onNote}
-                                    style={styles.controlButton}
-                                />
-                                {hasNote && (
-                                    <View
-                                        style={[
-                                            styles.noteDot,
-                                            { backgroundColor: theme.colors.primary },
-                                        ]}
-                                    />
-                                )}
-                            </View>
-                        )}
-                        {onRecord && (
-                            <IconButton
-                                icon="microphone-outline"
-                                iconColor={theme.colors.onSurfaceVariant}
-                                size={22}
-                                onPress={onRecord}
-                                style={styles.controlButton}
-                            />
-                        )}
-                        {onShare && (
-                            <IconButton
-                                icon="share-variant-outline"
-                                iconColor={theme.colors.onSurfaceVariant}
-                                size={22}
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    onShare();
-                                }}
-                                style={styles.controlButton}
-                            />
-                        )}
                     </View>
                 </View>
 
@@ -165,6 +110,66 @@ export const VerseItem = ({
                         {verse.translation}
                     </Text>
                 )}
+
+                {/* Action Buttons — Dedicated row below verse content */}
+                <View style={[
+                    styles.actionsRow,
+                    { borderTopColor: theme.colors.outlineVariant || 'rgba(0,0,0,0.06)' },
+                ]}>
+                    {onPlay && (
+                        <IconButton
+                            icon={isPlaying ? 'pause-circle' : 'play-circle-outline'}
+                            iconColor={theme.colors.primary}
+                            size={20}
+                            onPress={handlePlay}
+                            style={styles.actionIcon}
+                        />
+                    )}
+                    {onNote && (
+                        <View>
+                            <IconButton
+                                icon={hasNote ? 'pencil' : 'pencil-outline'}
+                                iconColor={
+                                    hasNote
+                                        ? theme.colors.primary
+                                        : theme.colors.onSurfaceVariant
+                                }
+                                size={20}
+                                onPress={onNote}
+                                style={styles.actionIcon}
+                            />
+                            {hasNote && (
+                                <View
+                                    style={[
+                                        styles.noteDot,
+                                        { backgroundColor: theme.colors.primary },
+                                    ]}
+                                />
+                            )}
+                        </View>
+                    )}
+                    {onRecord && (
+                        <IconButton
+                            icon="microphone-outline"
+                            iconColor={theme.colors.onSurfaceVariant}
+                            size={20}
+                            onPress={onRecord}
+                            style={styles.actionIcon}
+                        />
+                    )}
+                    {onShare && (
+                        <IconButton
+                            icon="share-variant-outline"
+                            iconColor={theme.colors.onSurfaceVariant}
+                            size={20}
+                            onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                onShare();
+                            }}
+                            style={styles.actionIcon}
+                        />
+                    )}
+                </View>
 
                 <View style={[styles.divider, { backgroundColor: theme.colors.outline }]} />
             </Pressable>
@@ -193,15 +198,17 @@ const styles = StyleSheet.create({
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: Spacing.sm,
     },
-    controlsRow: {
+    actionsRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginTop: Spacing.md,
+        paddingTop: Spacing.sm,
+        borderTopWidth: StyleSheet.hairlineWidth,
     },
-    controlButton: {
+    actionIcon: {
         margin: 0,
     },
     numberBadge: {
