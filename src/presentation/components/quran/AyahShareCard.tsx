@@ -61,6 +61,7 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
         <Modal
             visible={visible}
             transparent
+            statusBarTranslucent
             animationType="fade"
             onRequestClose={onDismiss}
         >
@@ -122,15 +123,7 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                                 <Text style={[styles.referenceText, {
                                     color: theme.colors.primary,
                                 }]}>
-                                    {surahNameArabic}
-                                </Text>
-                                <Text style={[styles.referenceDot, { color: theme.colors.primary }]}>
-                                    •
-                                </Text>
-                                <Text style={[styles.referenceText, {
-                                    color: theme.colors.primary,
-                                }]}>
-                                    {surahName} {verseNumber}:{surahNumber}
+                                    — {surahName} ({surahNameArabic}), Verse {verseNumber}
                                 </Text>
                             </View>
 
@@ -184,6 +177,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: Spacing.lg,
+        zIndex: 9999,
+        elevation: 10, // Android shadow/z-index
     },
     card: {
         width: SCREEN_WIDTH - 48,

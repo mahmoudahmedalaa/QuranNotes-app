@@ -133,11 +133,6 @@ export default function SettingsScreen() {
     };
 
     const handlePickReminderTime = () => {
-        // Build time options for a simple picker
-        const hours = Array.from({ length: 24 }, (_, i) => i);
-        const options = hours.map(h => `${h.toString().padStart(2, '0')}:00`);
-        options.push('Cancel');
-
         Alert.alert(
             'Set Reminder Time',
             `Current: ${settings.dailyReminderHour.toString().padStart(2, '0')}:${settings.dailyReminderMinute.toString().padStart(2, '0')}`,
@@ -146,9 +141,67 @@ export default function SettingsScreen() {
                 { text: 'Afternoon (14:00)', onPress: () => saveReminderTime(14, 0) },
                 { text: 'Evening (20:00)', onPress: () => saveReminderTime(20, 0) },
                 { text: 'Night (22:00)', onPress: () => saveReminderTime(22, 0) },
+                { text: 'Custom...', onPress: openCustomTimePicker },
                 { text: 'Cancel', style: 'cancel' },
             ]
         );
+    };
+
+    const openCustomTimePicker = async () => {
+        if (Platform.OS === 'ios') {
+            // iOS uses DatePickerIOS — show in a modal or action sheet
+            // For simplicity, use a prompt-based approach
+            Alert.prompt(
+                'Custom Time',
+                'Enter hour (0-23)',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Next',
+                        onPress: (hourStr?: string) => {
+                            const hour = parseInt(hourStr || '0', 10);
+                            if (hour >= 0 && hour <= 23) {
+                                Alert.prompt(
+                                    'Custom Time',
+                                    'Enter minute (0-59)',
+                                    [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Set',
+                                            onPress: (minuteStr?: string) => {
+                                                const minute = parseInt(minuteStr || '0', 10);
+                                                if (minute >= 0 && minute <= 59) {
+                                                    saveReminderTime(hour, minute);
+                                                }
+                                            },
+                                        },
+                                    ],
+                                    'plain-text',
+                                    '0'
+                                );
+                            }
+                        },
+                    },
+                ],
+                'plain-text',
+                settings.dailyReminderHour.toString()
+            );
+        } else {
+            // Android uses TimePickerAndroid
+            const { TimePickerAndroid } = require('@react-native-community/datetimepicker');
+            try {
+                const { action, hour, minute } = await TimePickerAndroid.open({
+                    hour: settings.dailyReminderHour,
+                    minute: settings.dailyReminderMinute,
+                    is24Hour: true,
+                });
+                if (action !== TimePickerAndroid.dismissedAction) {
+                    saveReminderTime(hour, minute);
+                }
+            } catch (error) {
+                console.warn('Time picker error:', error);
+            }
+        }
     };
 
     const saveReminderTime = async (hour: number, minute: number) => {
@@ -429,7 +482,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.theme === 'dark'}
                                 onValueChange={toggleDarkMode}
-                                trackColor={{ false: '#D0D0D0', true: theme.colors.primary }}
+                                trackColor={{ false: '#B8B8B8', true: theme.colors.primary }}
                                 thumbColor={settings.theme === 'dark' ? '#FFF' : '#F4F4F4'}
                             />
                         </View>
@@ -471,7 +524,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.dailyReminderEnabled}
                                 onValueChange={handleToggleReminder}
-                                trackColor={{ false: '#D0D0D0', true: theme.colors.primary }}
+                                trackColor={{ false: '#B8B8B8', true: theme.colors.primary }}
                                 thumbColor={settings.dailyReminderEnabled ? '#FFF' : '#F4F4F4'}
                             />
                         </View>

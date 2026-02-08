@@ -157,7 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await authRepo.deleteAccount();
             setUser(null);
         } catch (e) {
-            console.error('[AuthContext] deleteAccount error:', e);
+            // Error is handled gracefully in Settings UI with user-friendly alert
             throw e;
         } finally {
             setLoading(false);
