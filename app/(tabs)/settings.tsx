@@ -424,7 +424,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.theme === 'dark'}
                                 onValueChange={toggleDarkMode}
-                                trackColor={{ false: '#909090', true: theme.colors.primary }}
+                                trackColor={{ false: '#707070', true: theme.colors.primary }}
                                 thumbColor={settings.theme === 'dark' ? '#FFF' : '#F4F4F4'}
                             />
                         </View>
@@ -466,7 +466,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.dailyReminderEnabled}
                                 onValueChange={handleToggleReminder}
-                                trackColor={{ false: '#909090', true: theme.colors.primary }}
+                                trackColor={{ false: '#707070', true: theme.colors.primary }}
                                 thumbColor={settings.dailyReminderEnabled ? '#FFF' : '#F4F4F4'}
                             />
                         </View>
