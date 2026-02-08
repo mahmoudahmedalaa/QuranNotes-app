@@ -11,6 +11,9 @@ interface AppSettings {
     theme: 'light' | 'dark';
     lastReadSurah?: number;
     reciterId: string;
+    dailyReminderEnabled: boolean;
+    dailyReminderHour: number;
+    dailyReminderMinute: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -18,6 +21,9 @@ const DEFAULT_SETTINGS: AppSettings = {
     isDarkMode: false,
     theme: 'light',
     reciterId: DEFAULT_RECITER.id,
+    dailyReminderEnabled: false,
+    dailyReminderHour: 20,
+    dailyReminderMinute: 0,
 };
 
 const STORAGE_KEY = 'app_settings';
@@ -107,6 +113,9 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
                     theme: parsed.theme || DEFAULT_SETTINGS.theme,
                     lastReadSurah: parsed.lastReadSurah,
                     reciterId: parsed.reciterId || DEFAULT_SETTINGS.reciterId,
+                    dailyReminderEnabled: parsed.dailyReminderEnabled ?? DEFAULT_SETTINGS.dailyReminderEnabled,
+                    dailyReminderHour: parsed.dailyReminderHour ?? DEFAULT_SETTINGS.dailyReminderHour,
+                    dailyReminderMinute: parsed.dailyReminderMinute ?? DEFAULT_SETTINGS.dailyReminderMinute,
                 };
 
                 setSettings({ ...DEFAULT_SETTINGS, ...loaded });

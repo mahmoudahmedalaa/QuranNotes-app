@@ -3,6 +3,7 @@ import { IAuthRepository } from '../../domain/repositories/IAuthRepository';
 import { User } from '../../domain/entities/User';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class RemoteAuthRepository implements IAuthRepository {
 
@@ -148,6 +149,28 @@ export class RemoteAuthRepository implements IAuthRepository {
 
     async signOut(): Promise<void> {
         await auth.signOut();
+    }
+
+    async deleteAccount(): Promise<void> {
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            throw new Error('No user is currently signed in');
+        }
+
+        try {
+            // Clear all local data first
+            await AsyncStorage.clear();
+
+            // Delete the Firebase Auth account
+            await currentUser.delete();
+        } catch (error: any) {
+            if (error.code === 'auth/requires-recent-login') {
+                throw new Error(
+                    'For security, please sign out and sign back in, then try deleting your account again.'
+                );
+            }
+            throw error;
+        }
     }
 
     onAuthStateChanged(callback: (user: User | null) => void): () => void {

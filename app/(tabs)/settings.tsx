@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { Text, useTheme, Switch } from 'react-native-paper';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { usePro } from '../../src/infrastructure/auth/ProContext';
 import { useAuth } from '../../src/infrastructure/auth/AuthContext';
+import { NotificationService } from '../../src/infrastructure/notifications/NotificationService';
 
 export default function SettingsScreen() {
     const theme = useTheme();
@@ -24,7 +25,7 @@ export default function SettingsScreen() {
     const { settings, updateSettings, resetSettings } = useSettings();
 
     const { toggleDebugPro, isPro } = usePro();
-    const { user, loading, logout } = useAuth();
+    const { user, loading, logout, deleteAccount } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
 
     const handleSignOut = async () => {
@@ -42,6 +43,43 @@ export default function SettingsScreen() {
         ]);
     };
 
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            'Delete Account',
+            'This will permanently delete your account and all your data. This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => {
+                        // Double confirmation for destructive action
+                        Alert.alert(
+                            'Are you absolutely sure?',
+                            'All your notes, recordings, and settings will be permanently lost.',
+                            [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                    text: 'Yes, Delete My Account',
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                        try {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                            await deleteAccount();
+                                            router.replace('/(auth)/login');
+                                        } catch (e: any) {
+                                            Alert.alert('Error', e.message || 'Failed to delete account. Please try again.');
+                                        }
+                                    },
+                                },
+                            ]
+                        );
+                    },
+                },
+            ]
+        );
+    };
+
     const toggleDarkMode = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         updateSettings({ theme: settings.theme === 'light' ? 'dark' : 'light' });
@@ -50,6 +88,51 @@ export default function SettingsScreen() {
     const handleReciterSelect = (reciterId: string) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         updateSettings({ reciterId });
+    };
+
+    const handleToggleReminder = async (enabled: boolean) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (enabled) {
+            const granted = await NotificationService.requestPermissions();
+            if (!granted) {
+                Alert.alert(
+                    'Notifications Disabled',
+                    'Please enable notifications in your device Settings to receive daily reminders.',
+                );
+                return;
+            }
+            await NotificationService.scheduleDailyReminder(settings.dailyReminderHour, settings.dailyReminderMinute);
+        } else {
+            await NotificationService.cancelDailyReminder();
+        }
+        await updateSettings({ dailyReminderEnabled: enabled });
+    };
+
+    const handlePickReminderTime = () => {
+        // Build time options for a simple picker
+        const hours = Array.from({ length: 24 }, (_, i) => i);
+        const options = hours.map(h => `${h.toString().padStart(2, '0')}:00`);
+        options.push('Cancel');
+
+        Alert.alert(
+            'Set Reminder Time',
+            `Current: ${settings.dailyReminderHour.toString().padStart(2, '0')}:${settings.dailyReminderMinute.toString().padStart(2, '0')}`,
+            [
+                { text: 'Morning (06:00)', onPress: () => saveReminderTime(6, 0) },
+                { text: 'Afternoon (14:00)', onPress: () => saveReminderTime(14, 0) },
+                { text: 'Evening (20:00)', onPress: () => saveReminderTime(20, 0) },
+                { text: 'Night (22:00)', onPress: () => saveReminderTime(22, 0) },
+                { text: 'Cancel', style: 'cancel' },
+            ]
+        );
+    };
+
+    const saveReminderTime = async (hour: number, minute: number) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await updateSettings({ dailyReminderHour: hour, dailyReminderMinute: minute });
+        if (settings.dailyReminderEnabled) {
+            await NotificationService.scheduleDailyReminder(hour, minute);
+        }
     };
 
 
@@ -169,6 +252,35 @@ export default function SettingsScreen() {
                                     <View style={styles.cardContent}>
                                         <Text style={[styles.cardTitle, { color: theme.colors.error }]}>
                                             Sign Out
+                                        </Text>
+                                    </View>
+                                </Pressable>
+
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                        Shadows.sm,
+                                        pressed && styles.cardPressed,
+                                    ]}
+                                    onPress={handleDeleteAccount}>
+                                    <View
+                                        style={[
+                                            styles.iconContainer,
+                                            { backgroundColor: theme.colors.errorContainer || '#FFEBEE' },
+                                        ]}>
+                                        <Ionicons name="trash" size={18} color={theme.colors.error} />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.error }]}>
+                                            Delete Account
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.cardSubtitle,
+                                                { color: theme.colors.onSurfaceVariant },
+                                            ]}>
+                                            Permanently remove your account and data
                                         </Text>
                                     </View>
                                 </Pressable>
@@ -296,6 +408,82 @@ export default function SettingsScreen() {
                                 color={theme.colors.primary}
                             />
                         </View>
+                    </View>
+
+                    {/* Notifications Section */}
+                    <View style={styles.section}>
+                        <Text
+                            style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                            NOTIFICATIONS
+                        </Text>
+                        <View
+                            style={[
+                                styles.card,
+                                { backgroundColor: theme.colors.surface },
+                                Shadows.sm,
+                            ]}>
+                            <View
+                                style={[
+                                    styles.iconContainer,
+                                    { backgroundColor: theme.colors.tertiaryContainer || '#E8DEF8' },
+                                ]}>
+                                <Ionicons name="notifications" size={18} color={theme.colors.tertiary || '#7C4DFF'} />
+                            </View>
+                            <View style={styles.cardContent}>
+                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                    Daily Reminder
+                                </Text>
+                                <Text
+                                    style={[
+                                        styles.cardSubtitle,
+                                        { color: theme.colors.onSurfaceVariant },
+                                    ]}>
+                                    {settings.dailyReminderEnabled
+                                        ? `${settings.dailyReminderHour.toString().padStart(2, '0')}:${settings.dailyReminderMinute.toString().padStart(2, '0')}`
+                                        : 'Off'}
+                                </Text>
+                            </View>
+                            <Switch
+                                value={settings.dailyReminderEnabled}
+                                onValueChange={handleToggleReminder}
+                                color={theme.colors.primary}
+                            />
+                        </View>
+                        {settings.dailyReminderEnabled && (
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                    Shadows.sm,
+                                    pressed && styles.cardPressed,
+                                ]}
+                                onPress={handlePickReminderTime}>
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: theme.colors.primaryContainer },
+                                    ]}>
+                                    <Ionicons name="time" size={18} color={theme.colors.primary} />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                        Reminder Time
+                                    </Text>
+                                    <Text
+                                        style={[
+                                            styles.cardSubtitle,
+                                            { color: theme.colors.onSurfaceVariant },
+                                        ]}>
+                                        {settings.dailyReminderHour.toString().padStart(2, '0')}:{settings.dailyReminderMinute.toString().padStart(2, '0')}
+                                    </Text>
+                                </View>
+                                <Ionicons
+                                    name="chevron-forward"
+                                    size={20}
+                                    color={theme.colors.onSurfaceVariant}
+                                />
+                            </Pressable>
+                        )}
                     </View>
 
                     {/* About Section */}

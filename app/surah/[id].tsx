@@ -17,6 +17,7 @@ import { RecordingIndicatorBar } from '../../src/presentation/components/recordi
 import { RecordingSaveModal } from '../../src/presentation/components/recording/RecordingSaveModal';
 import { VoiceFollowAlongOverlay } from '../../src/presentation/components/voice/VoiceFollowAlongOverlay';
 import { FollowAlongSaveModal } from '../../src/presentation/components/voice/FollowAlongSaveModal';
+import { AyahShareCard } from '../../src/presentation/components/quran/AyahShareCard';
 import { FollowAlongSession } from '../../src/domain/entities/FollowAlongSession';
 import {
     Spacing,
@@ -25,6 +26,7 @@ import {
     BorderRadius,
 } from '../../src/presentation/theme/DesignSystem';
 import * as Haptics from 'expo-haptics';
+import { computeSurahMetadata, formatJuzDisplay, formatDuration } from '../../src/domain/entities/SurahMetadata';
 
 export default function SurahDetail() {
     const { id } = useLocalSearchParams();
@@ -46,6 +48,7 @@ export default function SurahDetail() {
     const [isStudyMode, setIsStudyMode] = useState(false);
     const [followAlongModalVisible, setFollowAlongModalVisible] = useState(false);
     const [completedFollowAlongSession, setCompletedFollowAlongSession] = useState<FollowAlongSession | null>(null);
+    const [shareVerse, setShareVerse] = useState<{ arabicText: string; translation: string; verseNumber: number } | null>(null);
     const flatListRef = useRef<any>(null);
 
     useEffect(() => {
@@ -188,6 +191,11 @@ export default function SurahDetail() {
                             })
                         }
                         onRecord={() => handleRecordVerse(item.number)}
+                        onShare={() => setShareVerse({
+                            arabicText: item.text,
+                            translation: item.translation,
+                            verseNumber: item.number,
+                        })}
                         isStudyMode={isStudyMode}
                         isHighlighted={followAlong.matchedVerseId === item.number}
                     />
@@ -303,6 +311,57 @@ export default function SurahDetail() {
                                         </Text>
                                     </View>
                                 </View>
+                                {/* Metadata Row — Pages, Juz, Duration */}
+                                {(() => {
+                                    const meta = computeSurahMetadata(surah);
+                                    return (
+                                        <View style={styles.metaRow}>
+                                            <View
+                                                style={[
+                                                    styles.metaBadge,
+                                                    { backgroundColor: theme.colors.surfaceVariant },
+                                                ]}>
+                                                <Text
+                                                    style={[
+                                                        styles.metaText,
+                                                        { color: theme.colors.onSurfaceVariant },
+                                                    ]}>
+                                                    📄 Pages {meta.pageRange}
+                                                </Text>
+                                            </View>
+                                            {meta.juzList.length > 0 && (
+                                                <View
+                                                    style={[
+                                                        styles.metaBadge,
+                                                        { backgroundColor: theme.colors.surfaceVariant },
+                                                    ]}>
+                                                    <Text
+                                                        style={[
+                                                            styles.metaText,
+                                                            { color: theme.colors.onSurfaceVariant },
+                                                        ]}>
+                                                        📖 {formatJuzDisplay(meta.juzList)}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            {meta.estimatedMinutes > 0 && (
+                                                <View
+                                                    style={[
+                                                        styles.metaBadge,
+                                                        { backgroundColor: theme.colors.tertiaryContainer || '#E8DEF8' },
+                                                    ]}>
+                                                    <Text
+                                                        style={[
+                                                            styles.metaText,
+                                                            { color: theme.colors.tertiary || '#7C4DFF' },
+                                                        ]}>
+                                                        ⏱ {formatDuration(meta.estimatedMinutes)}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    );
+                                })()}
 
                                 <View style={styles.actionRow}>
                                     <Pressable
@@ -486,6 +545,18 @@ export default function SurahDetail() {
                     setFollowAlongModalVisible(false);
                     setCompletedFollowAlongSession(null);
                 }}
+            />
+
+            {/* Ayah Share Card */}
+            <AyahShareCard
+                visible={!!shareVerse}
+                onDismiss={() => setShareVerse(null)}
+                arabicText={shareVerse?.arabicText || ''}
+                translation={shareVerse?.translation || ''}
+                surahName={surah.englishName}
+                surahNameArabic={surah.name}
+                verseNumber={shareVerse?.verseNumber || 0}
+                surahNumber={surah.number}
             />
 
             {/* Follow Along is now accessible via the header icon buttons */}
