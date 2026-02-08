@@ -3,7 +3,9 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 
 export class NotificationService {
-    // 20 curated messages: emotionally warm, concise (≤2 lines), relevant to app usage
+    // 30 curated messages: emotionally warm, concise (≤2 lines), relevant to app usage
+    // Kept: "The Prophet said..." ones, relevant short ayahs/hadith
+    // Removed: aggressive, negative, irrelevant (jugular vein, proof against you, perhaps you hate)
     private static REMINDERS: { title: string; body: string }[] = [
         // === Daily gentle nudges ===
         { title: 'Time for Quran 📖', body: 'A few verses today can bring peace to your whole evening.' },
@@ -13,25 +15,34 @@ export class NotificationService {
         { title: 'Feed your soul 💚', body: 'Your body ate today — don\'t forget to nourish your heart too.' },
         { title: 'Just 5 minutes 🤲', body: 'That\'s all it takes to reconnect. Open where you left off.' },
         { title: 'Make time for peace ☀️', body: 'The Quran is not just read — it\'s lived. Start with today\'s verse.' },
+        { title: 'Your Quran awaits 📖', body: 'Whoever reads a letter from the Book of Allah earns a reward multiplied by ten.' },
 
-        // === Hadith & Quran-based (concise, no verse numbers) ===
+        // === Hadith & Quran-based (The Prophet said... + relevant ayahs) ===
         { title: 'The Prophet ﷺ said…', body: 'The best among you is the one who learns the Quran and teaches it.' },
+        { title: 'The Prophet ﷺ said…', body: 'Read the Quran, for it will come as an intercessor for its reciters on the Day of Resurrection.' },
+        { title: 'A promise from Allah', body: 'Verily, this Quran guides to that which is most suitable.' },
         { title: 'Hearts find rest 💚', body: 'Indeed, in the remembrance of Allah do hearts find rest.' },
-        { title: 'An intercessor for you', body: 'The Quran will come as an intercessor for its reciters on the Day of Resurrection.' },
         { title: 'Made easy for you', body: 'Allah made the Quran easy for remembrance — will you remember?' },
+        { title: 'A blessed Book', body: 'This is a blessed Book revealed to you, that you might reflect upon its verses.' },
+        { title: 'Reflect deeply 🤔', body: 'Do they not then reflect on the Quran? Or are there locks upon their hearts?' },
         { title: 'Light upon light 🌟', body: 'Allah guides to His light whom He wills.' },
+        { title: 'Healing words 🩹', body: 'The Quran is a healing for what is in the hearts.' },
+        { title: 'Find your gratitude 🙏', body: 'If you are grateful, I will surely increase you in favor.' },
+        { title: 'Strength from within 💪', body: 'Allah does not burden a soul beyond that it can bear.' },
 
         // === Emotional reconnection ===
         { title: 'We missed you 💛', body: 'Your Quran journey is still here, right where you left it.' },
         { title: 'It\'s been a while 🌿', body: 'No guilt, just grace. Open to any page — Allah is always ready.' },
         { title: 'Come back gently 🤲', body: 'The door is always open. Even one verse today makes a difference.' },
         { title: 'Start fresh today 🌅', body: 'Every day is a new chance to connect with the Quran.' },
+        { title: 'You\'re still on track ✅', body: 'Progress isn\'t perfection. One ayah today keeps your heart close.' },
 
         // === Reflective / deeper ===
         { title: 'Pause and breathe 🌬️', body: 'Before the world gets loud, let the Quran speak to you first.' },
         { title: 'A conversation with Allah', body: 'When you read the Quran, Allah is speaking to you.' },
-        { title: 'Find your gratitude 🙏', body: 'If you are grateful, I will surely increase you in favor.' },
-        { title: 'You\'re never alone', body: 'Allah is closer to you than your jugular vein.' },
+        { title: 'Seek His guidance 🌟', body: 'This is the Book about which there is no doubt, a guidance for the righteous.' },
+        { title: 'The best reminder', body: 'The Quran is a reminder. And whoever wills will remember it.' },
+        { title: 'Your companion', body: 'The Quran is a companion that never leaves you, a light that never dims.' },
     ];
 
     static async scheduleDailyReminder(hour: number, minute: number): Promise<void> {

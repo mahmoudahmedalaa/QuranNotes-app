@@ -165,8 +165,10 @@ export class RemoteAuthRepository implements IAuthRepository {
             await currentUser.delete();
         } catch (error: any) {
             if (error.code === 'auth/requires-recent-login') {
+                // Firebase security: requires recent authentication before account deletion
+                // This is a security feature, not a bug
                 throw new Error(
-                    'For security, please sign out and sign back in, then try deleting your account again.'
+                    'RECENT_LOGIN_REQUIRED' // Special error code for UI to handle
                 );
             }
             throw error;
