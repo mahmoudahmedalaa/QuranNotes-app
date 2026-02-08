@@ -1,5 +1,5 @@
-import { View, StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
-import { Text, useTheme, Switch } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, Switch } from 'react-native';
+import { Text, useTheme } from 'react-native-paper';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -68,7 +68,31 @@ export default function SettingsScreen() {
                                             await deleteAccount();
                                             router.replace('/(auth)/login');
                                         } catch (e: any) {
-                                            Alert.alert('Error', e.message || 'Failed to delete account. Please try again.');
+                                            // Handle Firebase re-auth requirement gracefully
+                                            const msg = e?.message || '';
+                                            if (msg.includes('sign out') || msg.includes('recent')) {
+                                                Alert.alert(
+                                                    'Quick Security Step',
+                                                    'For your protection, please sign in again before deleting. We\'ll sign you out now — just sign back in and try again.',
+                                                    [
+                                                        { text: 'Not Now', style: 'cancel' },
+                                                        {
+                                                            text: 'Sign Out Now',
+                                                            onPress: async () => {
+                                                                try {
+                                                                    await logout();
+                                                                    router.replace('/(auth)/login');
+                                                                } catch { /* ignore */ }
+                                                            },
+                                                        },
+                                                    ]
+                                                );
+                                            } else {
+                                                Alert.alert(
+                                                    'Could Not Delete',
+                                                    'Something went wrong. Please try again later.',
+                                                );
+                                            }
                                         }
                                     },
                                 },
@@ -405,7 +429,8 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.theme === 'dark'}
                                 onValueChange={toggleDarkMode}
-                                color={theme.colors.primary}
+                                trackColor={{ false: '#D0D0D0', true: theme.colors.primary }}
+                                thumbColor={settings.theme === 'dark' ? '#FFF' : '#F4F4F4'}
                             />
                         </View>
                     </View>
@@ -446,43 +471,77 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.dailyReminderEnabled}
                                 onValueChange={handleToggleReminder}
-                                color={theme.colors.primary}
+                                trackColor={{ false: '#D0D0D0', true: theme.colors.primary }}
+                                thumbColor={settings.dailyReminderEnabled ? '#FFF' : '#F4F4F4'}
                             />
                         </View>
                         {settings.dailyReminderEnabled && (
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.card,
-                                    { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
-                                    Shadows.sm,
-                                    pressed && styles.cardPressed,
-                                ]}
-                                onPress={handlePickReminderTime}>
-                                <View
-                                    style={[
-                                        styles.iconContainer,
-                                        { backgroundColor: theme.colors.primaryContainer },
-                                    ]}>
-                                    <Ionicons name="time" size={18} color={theme.colors.primary} />
-                                </View>
-                                <View style={styles.cardContent}>
-                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                        Reminder Time
-                                    </Text>
-                                    <Text
+                            <>
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                        Shadows.sm,
+                                        pressed && styles.cardPressed,
+                                    ]}
+                                    onPress={handlePickReminderTime}>
+                                    <View
                                         style={[
-                                            styles.cardSubtitle,
-                                            { color: theme.colors.onSurfaceVariant },
+                                            styles.iconContainer,
+                                            { backgroundColor: theme.colors.primaryContainer },
                                         ]}>
-                                        {settings.dailyReminderHour.toString().padStart(2, '0')}:{settings.dailyReminderMinute.toString().padStart(2, '0')}
-                                    </Text>
-                                </View>
-                                <Ionicons
-                                    name="chevron-forward"
-                                    size={20}
-                                    color={theme.colors.onSurfaceVariant}
-                                />
-                            </Pressable>
+                                        <Ionicons name="time" size={18} color={theme.colors.primary} />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                            Reminder Time
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.cardSubtitle,
+                                                { color: theme.colors.onSurfaceVariant },
+                                            ]}>
+                                            {settings.dailyReminderHour.toString().padStart(2, '0')}:{settings.dailyReminderMinute.toString().padStart(2, '0')}
+                                        </Text>
+                                    </View>
+                                    <Ionicons
+                                        name="chevron-forward"
+                                        size={20}
+                                        color={theme.colors.onSurfaceVariant}
+                                    />
+                                </Pressable>
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                        Shadows.sm,
+                                        pressed && styles.cardPressed,
+                                    ]}
+                                    onPress={async () => {
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        await NotificationService.sendTestNotification();
+                                    }}>
+                                    <View
+                                        style={[
+                                            styles.iconContainer,
+                                            { backgroundColor: '#E3F2FD' },
+                                        ]}>
+                                        <Ionicons name="paper-plane" size={18} color="#1976D2" />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                            Preview Notification
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.cardSubtitle,
+                                                { color: theme.colors.onSurfaceVariant },
+                                            ]}>
+                                            See what it looks like (arrives in 3s)
+                                        </Text>
+                                    </View>
+                                </Pressable>
+                            </>
                         )}
                     </View>
 

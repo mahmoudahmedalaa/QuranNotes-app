@@ -33,6 +33,7 @@ export default function RootLayout() {
                                                 <Stack.Screen name="index" />
                                                 <Stack.Screen name="search" />
                                                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                                                <Stack.Screen name="surah/[id]" />
                                                 <Stack.Screen
                                                     name="note/edit"
                                                     options={{ presentation: 'modal' }}
