@@ -2,12 +2,19 @@
  * VoiceRecognitionService
  * Real-time Arabic speech recognition for Follow Along feature.
  * Uses @jamsch/expo-speech-recognition native module.
+ * Gracefully degrades when native module is unavailable (e.g., Expo Go).
  */
 
-import {
-    ExpoSpeechRecognitionModule,
-    addSpeechRecognitionListener,
-} from '@jamsch/expo-speech-recognition';
+let ExpoSpeechRecognitionModule: any = null;
+let addSpeechRecognitionListener: any = null;
+
+try {
+    const mod = require('@jamsch/expo-speech-recognition');
+    ExpoSpeechRecognitionModule = mod.ExpoSpeechRecognitionModule;
+    addSpeechRecognitionListener = mod.addSpeechRecognitionListener;
+} catch {
+    console.warn('[VoiceRecognition] Native module not available — voice features disabled');
+}
 
 export interface VoiceRecognitionResult {
     transcript: string;
@@ -25,6 +32,7 @@ class VoiceRecognitionServiceImpl {
     private listeners: { remove: () => void }[] = [];
 
     async requestPermissions(): Promise<boolean> {
+        if (!ExpoSpeechRecognitionModule) return false;
         try {
             const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
             return result.granted;
