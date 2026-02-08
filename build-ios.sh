@@ -1,98 +1,127 @@
 #!/bin/bash
 # ============================================================
-# QuranNotes - One-Command iOS Build Script
+# iOS Build Script - Local Xcode (No EAS Required)
 # ============================================================
 # Usage: ./build-ios.sh
 #
-# This script handles everything:
-# 1. Patches Expo/React Native scripts for spaces in path
-# 2. Restores native configurations (background audio, icon)
-# 3. Builds production archive
-# 4. Exports IPA
+# This script builds a production IPA locally using Xcode.
+# No EAS subscription needed. Unlimited builds. Free forever.
+#
+# Prerequisites:
+#   - Mac with Xcode installed
+#   - Apple Developer account ($99/year)
+#   - Project has ios/ directory (run `npx expo prebuild` first)
+#
+# What it does:
+#   1. Cleans previous builds
+#   2. Patches Expo/RN scripts for spaces in project path
+#   3. Restores native iOS configurations
+#   4. Builds production archive
+#   5. Exports IPA ready for TestFlight upload
 # ============================================================
 
 set -eo pipefail
 
-PROJECT_DIR="/Users/mahmoudalaaeldin/Documents/Projects/Vibe Coding/Projects/Quran app"
-SCHEME="QuranNotes"
-WORKSPACE="ios/QuranNotes.xcworkspace"
-ARCHIVE_PATH="./build/QuranNotes.xcarchive"
-EXPORT_PATH="./build"
-EXPORT_OPTIONS="ios/ExportOptions.plist"
-TEAM_ID="2S42RLH67Y"
-
+# ---- Auto-detect project settings ----
+# These are auto-detected from your project files
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
+# Read scheme name from workspace
+if [ -d "ios" ]; then
+  WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | head -n 1)
+  SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+else
+  echo "❌ No ios/ directory found. Run: npx expo prebuild"
+  exit 1
+fi
+
+ARCHIVE_PATH="./build/${SCHEME}.xcarchive"
+EXPORT_PATH="./build"
+EXPORT_OPTIONS="ios/ExportOptions.plist"
+
+# Read Team ID from xcodeproj
+TEAM_ID=$(grep -m 1 "DEVELOPMENT_TEAM" "ios/${SCHEME}.xcodeproj/project.pbxproj" 2>/dev/null | head -n 1 | sed 's/.*= *//;s/;.*//' | tr -d ' "' || echo "")
+
+if [ -z "$TEAM_ID" ]; then
+  echo "⚠️  Could not auto-detect Team ID."
+  echo "   Please set it: export TEAM_ID=YOUR_TEAM_ID"
+  echo "   Find it at: https://developer.apple.com/account → Membership"
+  exit 1
+fi
+
 echo ""
-echo "🚀 QuranNotes iOS Build"
+echo "🚀 iOS Build"
 echo "========================"
+echo "  Project: $SCHEME"
+echo "  Team:    $TEAM_ID"
 echo ""
 
 # ---- Step 1: Clean ----
 echo "🧹 Step 1/6: Cleaning previous builds..."
 rm -rf build/
 mkdir -p build/
-rm -rf ~/Library/Developer/Xcode/DerivedData/QuranNotes-*
+rm -rf ~/Library/Developer/Xcode/DerivedData/${SCHEME}-*
 echo "   ✅ Clean"
 
 # ---- Step 2: Patch scripts for spaces in path ----
-echo "🔧 Step 2/6: Patching build scripts..."
+echo "🔧 Step 2/6: Patching build scripts for path compatibility..."
 
-# Patch EXConstants script (unquoted $PROJECT_DIR)
+# Patch EXConstants script (unquoted $PROJECT_DIR breaks on spaces)
 EXCONST_SCRIPT="node_modules/expo-constants/scripts/get-app-config-ios.sh"
 if [ -f "$EXCONST_SCRIPT" ]; then
-  sed -i '' 's/PROJECT_DIR_BASENAME=$(basename $PROJECT_DIR)/PROJECT_DIR_BASENAME=$(basename "$PROJECT_DIR")/' "$EXCONST_SCRIPT"
+  sed -i '' 's/PROJECT_DIR_BASENAME=$(basename $PROJECT_DIR)/PROJECT_DIR_BASENAME=$(basename "$PROJECT_DIR")/' "$EXCONST_SCRIPT" 2>/dev/null || true
 fi
 
-# Patch react-native-xcode.sh invocation in project.pbxproj (unquoted backtick execution)
-PBXPROJ="ios/QuranNotes.xcodeproj/project.pbxproj"
+# Patch react-native-xcode.sh invocation (unquoted backtick breaks on spaces)
+PBXPROJ="ios/${SCHEME}.xcodeproj/project.pbxproj"
 if [ -f "$PBXPROJ" ]; then
   python3 << 'PYEOF'
-with open("ios/QuranNotes.xcodeproj/project.pbxproj", "r") as f:
-    content = f.read()
-old = '`\\"$NODE_BINARY\\" --print \\"require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'\\"`'
-new = '. \\"$(\\"$NODE_BINARY\\" --print \\"require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'\\")\\"'
-if old in content:
-    content = content.replace(old, new)
-    with open("ios/QuranNotes.xcodeproj/project.pbxproj", "w") as f:
-        f.write(content)
+import sys, os
+scheme = os.environ.get("SCHEME", "")
+pbxproj = f"ios/{scheme}.xcodeproj/project.pbxproj" if scheme else None
+if not pbxproj:
+    # Fallback: find the first .xcodeproj
+    import glob
+    matches = glob.glob("ios/*.xcodeproj/project.pbxproj")
+    pbxproj = matches[0] if matches else None
+if pbxproj and os.path.exists(pbxproj):
+    with open(pbxproj, "r") as f:
+        content = f.read()
+    old = '`\\"$NODE_BINARY\\" --print \\"require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'\\"`'
+    new = '. \\"$(\\"$NODE_BINARY\\" --print \\"require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'\\")\\"'
+    if old in content:
+        content = content.replace(old, new)
+        with open(pbxproj, "w") as f:
+            f.write(content)
 PYEOF
 fi
 
-# Patch EXConstants invocation in Pods project (unquoted script path)
+# Patch Pods project (EXConstants script path quoting)
 PODS_PBXPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
 if [ -f "$PODS_PBXPROJ" ]; then
-  sed -i '' 's|bash -l -c \\"$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh\\"|bash -l -c \\"\\\\\\"$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh\\\\\\"\\"|' "$PODS_PBXPROJ"
+  sed -i '' 's|bash -l -c \\"$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh\\"|bash -l -c \\"\\\\\\"$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh\\\\\\"\\"|' "$PODS_PBXPROJ" 2>/dev/null || true
 fi
 
 echo "   ✅ Patched"
 
 # ---- Step 3: Restore native configs ----
-echo "📱 Step 3/6: Restoring native configurations..."
+echo "📱 Step 3/6: Checking native configurations..."
 
-# Restore UIBackgroundModes if missing
-PLIST="ios/QuranNotes/Info.plist"
-if ! grep -q "UIBackgroundModes" "$PLIST" 2>/dev/null; then
-  sed -i '' '/<key>UIRequiresFullScreen<\/key>/{
-    N
-    s|<key>UIRequiresFullScreen</key>\n.*<false/>|<key>UIRequiresFullScreen</key>\
-    <false/>\
-    <key>UIBackgroundModes</key>\
-    <array>\
-      <string>audio</string>\
-    </array>|
-  }' "$PLIST"
-  echo "   Added UIBackgroundModes"
+# Restore app icon if assets/icon.png exists
+ICON_SOURCE="assets/icon.png"
+ICON_DEST="ios/${SCHEME}/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png"
+if [ -f "$ICON_SOURCE" ] && [ -d "$(dirname "$ICON_DEST")" ]; then
+  sips -s format png -z 1024 1024 "$ICON_SOURCE" --out "$ICON_DEST" > /dev/null 2>&1
+  echo "   Updated app icon"
 fi
 
-# Restore app icon
-sips -s format png -z 1024 1024 "assets/icon.png" --out "ios/QuranNotes/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png" > /dev/null 2>&1
-echo "   ✅ Native configs restored"
+echo "   ✅ Configs checked"
 
 # ---- Step 4: Ensure ExportOptions.plist exists ----
 echo "📄 Step 4/6: Checking ExportOptions.plist..."
 if [ ! -f "$EXPORT_OPTIONS" ]; then
-  cat > "$EXPORT_OPTIONS" << 'PLIST'
+  cat > "$EXPORT_OPTIONS" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -100,7 +129,7 @@ if [ ! -f "$EXPORT_OPTIONS" ]; then
     <key>method</key>
     <string>app-store</string>
     <key>teamID</key>
-    <string>2S42RLH67Y</string>
+    <string>${TEAM_ID}</string>
     <key>uploadSymbols</key>
     <true/>
     <key>uploadBitcode</key>
@@ -130,7 +159,8 @@ xcodebuild archive \
   -quiet
 
 if [ ! -d "$ARCHIVE_PATH" ]; then
-    echo "❌ Archive failed!"
+    echo "❌ Archive failed! Run without -quiet for details:"
+    echo "   Remove '-quiet' from the xcodebuild command in this script"
     exit 1
 fi
 echo ""
@@ -146,7 +176,8 @@ xcodebuild -exportArchive \
   -allowProvisioningUpdates \
   -quiet
 
-if [ ! -f "$EXPORT_PATH/QuranNotes.ipa" ]; then
+IPA_FILE="$EXPORT_PATH/${SCHEME}.ipa"
+if [ ! -f "$IPA_FILE" ]; then
     echo "❌ Export failed!"
     exit 1
 fi
@@ -157,12 +188,8 @@ echo "========================================"
 echo "🎉 BUILD COMPLETE!"
 echo "========================================"
 echo ""
-echo "📱 IPA: $PROJECT_DIR/build/QuranNotes.ipa"
+echo "📱 IPA: $PROJECT_DIR/build/${SCHEME}.ipa"
 echo ""
-echo "📋 To upload to TestFlight:"
-echo "   xcrun altool --upload-app --type ios \\"
-echo "     --file build/QuranNotes.ipa \\"
-echo "     --apiKey <KEY> --apiIssuer <ISSUER>"
-echo ""
-echo "   OR open Xcode → Window → Organizer → Distribute"
+echo "📋 Next: Upload to TestFlight"
+echo "   Open Xcode → Window → Organizer → Distribute"
 echo ""
