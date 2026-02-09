@@ -4,6 +4,14 @@ node_modules/
 # Build artifacts
 build/
 *.ipa
+debug_build.log
+
+# Apple credentials (NEVER commit)
+*.p8
+
+# Ruby (CocoaPods vendor)
+vendor/
+Gemfile.lock
 
 # Expo
 .expo/
@@ -12,6 +20,7 @@ expo-env.d.ts
 
 # iOS
 ios/Pods/
+ios/Podfile.lock
 
 # macOS
 .DS_Store
