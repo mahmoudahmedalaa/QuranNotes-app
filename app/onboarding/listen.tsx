@@ -116,7 +116,7 @@ export default function OnboardingListen() {
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/welcome');
+        router.replace('/');
     };
 
     return (

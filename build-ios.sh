@@ -40,8 +40,13 @@ ARCHIVE_PATH="./build/${SCHEME}.xcarchive"
 EXPORT_PATH="./build"
 EXPORT_OPTIONS="ios/ExportOptions.plist"
 
-# Read Team ID from xcodeproj
-TEAM_ID=$(grep -m 1 "DEVELOPMENT_TEAM" "ios/${SCHEME}.xcodeproj/project.pbxproj" 2>/dev/null | head -n 1 | sed 's/.*= *//;s/;.*//' | tr -d ' "' || echo "")
+# Read Team ID: prefer env var > xcodeproj > eas.json
+if [ -z "$TEAM_ID" ]; then
+  TEAM_ID=$(grep -m 1 "DEVELOPMENT_TEAM" "ios/${SCHEME}.xcodeproj/project.pbxproj" 2>/dev/null | head -n 1 | sed 's/.*= *//;s/;.*//' | tr -d ' "' || echo "")
+fi
+if [ -z "$TEAM_ID" ] && [ -f "eas.json" ]; then
+  TEAM_ID=$(grep -o '"appleTeamId": *"[^"]*"' eas.json | head -n 1 | sed 's/.*"appleTeamId": *"//;s/"//')
+fi
 
 if [ -z "$TEAM_ID" ]; then
   echo "⚠️  Could not auto-detect Team ID."

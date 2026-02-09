@@ -57,8 +57,7 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         const key = getStorageKey();
 
         if (!key) {
-            // No user -> Reset to initial (not completed) or maybe completed if guest?
-            // For now, reset to initial.
+            // No user -> Reset to initial
             setState(INITIAL_STATE);
             setLoading(false);
             return;
@@ -67,10 +66,30 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         try {
             const data = await AsyncStorage.getItem(key);
             if (data) {
-                setState(JSON.parse(data));
+                const parsed = JSON.parse(data);
+                setState(parsed);
             } else {
-                // New user (no data yet) -> Start fresh
-                setState(INITIAL_STATE);
+                // New user (no onboarding data yet)
+                // Check if this is a sign-in (user already exists in Firebase but no local onboarding data).
+                // We check user's creationTime vs current time. If account is older than 60 seconds,
+                // it's a returning user → skip onboarding automatically.
+                const creationTime = user?.createdAt;
+                if (creationTime) {
+                    const ageMs = Date.now() - new Date(creationTime).getTime();
+                    const isReturningUser = ageMs > 60_000; // account older than 60 seconds = returning
+                    if (isReturningUser) {
+                        // Returning user — mark onboarding as complete
+                        const completedState: OnboardingState = { ...INITIAL_STATE, completed: true };
+                        await AsyncStorage.setItem(key, JSON.stringify(completedState));
+                        setState(completedState);
+                    } else {
+                        // Genuinely new user — show onboarding
+                        setState(INITIAL_STATE);
+                    }
+                } else {
+                    // No creation time available — fall back to initial
+                    setState(INITIAL_STATE);
+                }
             }
         } catch (error) {
             console.error('Failed to load onboarding state:', error);
@@ -81,11 +100,14 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 
     const saveState = async (newState: OnboardingState) => {
         const key = getStorageKey();
-        if (!key) return; // Don't save if no user (or save to guest key?)
+
+        // Set state in-memory immediately to prevent race conditions
+        setState(newState);
+
+        if (!key) return;
 
         try {
             await AsyncStorage.setItem(key, JSON.stringify(newState));
-            setState(newState);
         } catch (error) {
             console.error('Failed to save onboarding state:', error);
         }

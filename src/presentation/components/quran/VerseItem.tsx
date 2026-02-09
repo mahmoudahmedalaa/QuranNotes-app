@@ -17,7 +17,7 @@ interface VerseItemProps {
     isPlaying?: boolean;
     hasNote?: boolean;
     isStudyMode?: boolean;
-    isHighlighted?: boolean; // For Follow Along feature
+    isHighlighted?: boolean;
 }
 
 export const VerseItem = ({
@@ -73,8 +73,9 @@ export const VerseItem = ({
                     ],
                     pressed && { opacity: 0.95 },
                 ]}>
-                {/* Verse Number Badge */}
-                <View style={styles.header}>
+
+                {/* Verse Number Badge — standalone row */}
+                <View style={styles.numberRow}>
                     <View
                         style={[
                             styles.numberBadge,
@@ -111,22 +112,35 @@ export const VerseItem = ({
                     </Text>
                 )}
 
-                {/* Action Buttons — Dedicated row below verse content */}
+                {/* Action Buttons — clean row below content */}
                 <View style={[
                     styles.actionsRow,
                     { borderTopColor: theme.colors.outlineVariant || 'rgba(0,0,0,0.06)' },
                 ]}>
                     {onPlay && (
-                        <IconButton
-                            icon={isPlaying ? 'pause-circle' : 'play-circle-outline'}
-                            iconColor={theme.colors.primary}
-                            size={20}
+                        <Pressable
                             onPress={handlePlay}
-                            style={styles.actionIcon}
-                        />
+                            style={({ pressed }) => [
+                                styles.actionBtn,
+                                { backgroundColor: isPlaying ? theme.colors.primaryContainer : theme.colors.surface },
+                                pressed && { opacity: 0.7 },
+                            ]}>
+                            <IconButton
+                                icon={isPlaying ? 'pause-circle' : 'play-circle-outline'}
+                                iconColor={theme.colors.primary}
+                                size={18}
+                                style={styles.actionIconInner}
+                            />
+                        </Pressable>
                     )}
                     {onNote && (
-                        <View>
+                        <Pressable
+                            onPress={onNote}
+                            style={({ pressed }) => [
+                                styles.actionBtn,
+                                { backgroundColor: hasNote ? theme.colors.primaryContainer : theme.colors.surface },
+                                pressed && { opacity: 0.7 },
+                            ]}>
                             <IconButton
                                 icon={hasNote ? 'pencil' : 'pencil-outline'}
                                 iconColor={
@@ -134,9 +148,8 @@ export const VerseItem = ({
                                         ? theme.colors.primary
                                         : theme.colors.onSurfaceVariant
                                 }
-                                size={20}
-                                onPress={onNote}
-                                style={styles.actionIcon}
+                                size={18}
+                                style={styles.actionIconInner}
                             />
                             {hasNote && (
                                 <View
@@ -146,28 +159,42 @@ export const VerseItem = ({
                                     ]}
                                 />
                             )}
-                        </View>
+                        </Pressable>
                     )}
                     {onRecord && (
-                        <IconButton
-                            icon="microphone-outline"
-                            iconColor={theme.colors.onSurfaceVariant}
-                            size={20}
+                        <Pressable
                             onPress={onRecord}
-                            style={styles.actionIcon}
-                        />
+                            style={({ pressed }) => [
+                                styles.actionBtn,
+                                { backgroundColor: theme.colors.surface },
+                                pressed && { opacity: 0.7 },
+                            ]}>
+                            <IconButton
+                                icon="microphone-outline"
+                                iconColor={theme.colors.onSurfaceVariant}
+                                size={18}
+                                style={styles.actionIconInner}
+                            />
+                        </Pressable>
                     )}
                     {onShare && (
-                        <IconButton
-                            icon="share-variant-outline"
-                            iconColor={theme.colors.onSurfaceVariant}
-                            size={20}
+                        <Pressable
                             onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 onShare();
                             }}
-                            style={styles.actionIcon}
-                        />
+                            style={({ pressed }) => [
+                                styles.actionBtn,
+                                { backgroundColor: theme.colors.surface },
+                                pressed && { opacity: 0.7 },
+                            ]}>
+                            <IconButton
+                                icon="share-variant-outline"
+                                iconColor={theme.colors.onSurfaceVariant}
+                                size={18}
+                                style={styles.actionIconInner}
+                            />
+                        </Pressable>
                     )}
                 </View>
 
@@ -196,20 +223,10 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 6,
     },
-    header: {
+    numberRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: Spacing.sm,
-    },
-    actionsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: Spacing.md,
-        paddingTop: Spacing.sm,
-        borderTopWidth: StyleSheet.hairlineWidth,
-    },
-    actionIcon: {
-        margin: 0,
+        marginBottom: Spacing.md,
     },
     numberBadge: {
         borderRadius: BorderRadius.md,
@@ -222,18 +239,36 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '700',
     },
+    textWrapper: {
+        marginBottom: Spacing.md,
+    },
     arabicText: {
         fontSize: 28,
         textAlign: 'right',
         lineHeight: 52,
     },
-    textWrapper: {
-        marginBottom: Spacing.md,
-    },
     translationText: {
         fontSize: 15,
         lineHeight: 24,
         textAlign: 'left',
+    },
+    actionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        marginTop: Spacing.lg,
+        paddingTop: Spacing.md,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    actionBtn: {
+        borderRadius: BorderRadius.md,
+        overflow: 'hidden',
+    },
+    actionIconInner: {
+        margin: 0,
+        width: 36,
+        height: 36,
     },
     divider: {
         height: 1,
@@ -242,8 +277,8 @@ const styles = StyleSheet.create({
     },
     noteDot: {
         position: 'absolute',
-        top: 6,
-        right: 6,
+        top: 2,
+        right: 2,
         width: 8,
         height: 8,
         borderRadius: 4,

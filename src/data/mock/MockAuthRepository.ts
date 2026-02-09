@@ -31,6 +31,8 @@ export class MockAuthRepository implements IAuthRepository {
             displayName: 'Guest User',
             isAnonymous: true,
             photoURL: null,
+            createdAt: new Date().toISOString(),
+            providerId: null,
         };
 
         await this.setCurrentUser(user);
@@ -53,6 +55,8 @@ export class MockAuthRepository implements IAuthRepository {
             displayName: email.split('@')[0],
             isAnonymous: false,
             photoURL: null,
+            createdAt: new Date().toISOString(),
+            providerId: 'password',
         };
 
         await this.setCurrentUser(user);
@@ -72,6 +76,14 @@ export class MockAuthRepository implements IAuthRepository {
         await AsyncStorage.removeItem(MOCK_USER_KEY);
         this.currentUser = null;
         this.notifyListeners(null);
+    }
+
+    async deleteAccount(): Promise<void> {
+        await this.signOut();
+    }
+
+    async reauthenticateAndDelete(_password?: string): Promise<void> {
+        await this.signOut();
     }
 
     onAuthStateChanged(callback: (user: User | null) => void): () => void {

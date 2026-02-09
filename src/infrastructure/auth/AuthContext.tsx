@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { User } from '../../domain/entities/User';
 import { RemoteAuthRepository } from '../../data/remote/RemoteAuthRepository';
 
@@ -14,6 +14,7 @@ interface AuthContextType {
     resetPassword: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     deleteAccount: () => Promise<void>;
+    reauthenticateAndDelete: (password?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
     resetPassword: async () => { },
     logout: async () => { },
     deleteAccount: async () => { },
+    reauthenticateAndDelete: async () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -139,10 +141,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             await authRepo.signOut();
             setUser(null);
-
-            // Clear welcome state for next user (Device Global)
-            await AsyncStorage.removeItem('hasSeenWelcome');
-
         } catch (e) {
             console.error('[AuthContext] logout error:', e);
             throw e;
@@ -157,7 +155,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await authRepo.deleteAccount();
             setUser(null);
         } catch (e) {
-            // Error is handled gracefully in Settings UI with user-friendly alert
+            throw e;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const reauthenticateAndDelete = async (password?: string) => {
+        setLoading(true);
+        try {
+            await authRepo.reauthenticateAndDelete(password);
+            setUser(null);
+        } catch (e) {
             throw e;
         } finally {
             setLoading(false);
@@ -175,6 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetPassword,
         logout,
         deleteAccount,
+        reauthenticateAndDelete,
     };
 
     return (

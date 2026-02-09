@@ -1,11 +1,8 @@
 /**
- * AyahShareCard — Beautiful shareable ayah card with image sharing
+ * AyahShareCard — Premium shareable ayah card
  *
- * Displays an ayah with Arabic text, translation, and surah reference
- * in a premium design. Captures the card as an image using
- * react-native-view-shot and shares via native Share API.
- *
- * Falls back to text sharing if image capture fails.
+ * Single tap to share as a beautiful image.
+ * Falls back to text sharing silently if image capture fails.
  */
 
 import React, { useRef, useState } from 'react';
@@ -46,7 +43,7 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
     const cardRef = useRef<any>(null);
     const [isCapturing, setIsCapturing] = useState(false);
 
-    const shareAsImage = async () => {
+    const handleShare = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setIsCapturing(true);
 
@@ -67,7 +64,7 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                     UTI: 'public.png',
                 });
             } else {
-                // Fallback to text sharing
+                // Silent fallback to text sharing
                 await shareAsText();
             }
         } catch (error) {
@@ -105,6 +102,19 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ type: 'spring', damping: 20, stiffness: 200 }}
                     >
+                        {/* Close button — top right corner */}
+                        <Pressable
+                            style={styles.closeBtn}
+                            onPress={onDismiss}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        >
+                            <Ionicons
+                                name="close-circle"
+                                size={30}
+                                color="rgba(255,255,255,0.7)"
+                            />
+                        </Pressable>
+
                         {/* The Card — captured as image */}
                         <ViewShot ref={cardRef} options={{ format: 'png', quality: 1 }}>
                             <LinearGradient
@@ -170,55 +180,32 @@ export const AyahShareCard: React.FC<AyahShareCardProps> = ({
                             </LinearGradient>
                         </ViewShot>
 
-                        {/* Action Buttons */}
-                        <View style={styles.actions}>
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.actionButton,
-                                    { backgroundColor: theme.colors.primary },
-                                    pressed && { opacity: 0.9 },
-                                    isCapturing && { opacity: 0.6 },
-                                ]}
-                                onPress={shareAsImage}
-                                disabled={isCapturing}
+                        {/* Single Share Button */}
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.shareButton,
+                                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+                                isCapturing && { opacity: 0.6 },
+                            ]}
+                            onPress={handleShare}
+                            disabled={isCapturing}
+                        >
+                            <LinearGradient
+                                colors={Gradients.primary}
+                                style={styles.shareButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
                             >
                                 {isCapturing ? (
                                     <ActivityIndicator size="small" color="#FFF" />
                                 ) : (
-                                    <Ionicons name="image-outline" size={20} color="#FFF" />
+                                    <Ionicons name="share-outline" size={22} color="#FFF" />
                                 )}
-                                <Text style={styles.actionText}>
-                                    {isCapturing ? 'Preparing...' : 'Share Image'}
+                                <Text style={styles.shareButtonText}>
+                                    {isCapturing ? 'Preparing...' : 'Share'}
                                 </Text>
-                            </Pressable>
-
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.actionButton,
-                                    { backgroundColor: theme.colors.surfaceVariant },
-                                    pressed && { opacity: 0.9 },
-                                ]}
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    shareAsText();
-                                }}
-                            >
-                                <Ionicons name="text-outline" size={20} color={theme.colors.onSurfaceVariant} />
-                                <Text style={[styles.actionText, { color: theme.colors.onSurfaceVariant }]}>
-                                    Text
-                                </Text>
-                            </Pressable>
-
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.closeButton,
-                                    pressed && { opacity: 0.7 },
-                                ]}
-                                onPress={onDismiss}
-                            >
-                                <Ionicons name="close-circle" size={32} color={theme.dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.3)'} />
-                            </Pressable>
-                        </View>
+                            </LinearGradient>
+                        </Pressable>
                     </MotiView>
                 </Pressable>
             </Pressable>
@@ -233,8 +220,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: Spacing.lg,
-        zIndex: 9999,
-        elevation: 10,
+    },
+    closeBtn: {
+        position: 'absolute',
+        top: -14,
+        right: -10,
+        zIndex: 10,
+        padding: 4,
     },
     card: {
         width: SCREEN_WIDTH - 48,
@@ -306,28 +298,24 @@ const styles = StyleSheet.create({
         letterSpacing: 2,
         textTransform: 'uppercase',
     },
-    actions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.sm,
+    shareButton: {
         marginTop: Spacing.md,
+        borderRadius: BorderRadius.xl,
+        overflow: 'hidden',
+        ...Shadows.md,
     },
-    actionButton: {
-        flex: 1,
+    shareButtonGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: Spacing.xs,
-        paddingVertical: 14,
-        borderRadius: BorderRadius.lg,
-        ...Shadows.sm,
+        gap: Spacing.sm,
+        paddingVertical: 16,
+        borderRadius: BorderRadius.xl,
     },
-    actionText: {
-        fontSize: 14,
-        fontWeight: '600',
+    shareButtonText: {
+        fontSize: 17,
+        fontWeight: '700',
         color: '#FFF',
-    },
-    closeButton: {
-        padding: 4,
+        letterSpacing: 0.5,
     },
 });

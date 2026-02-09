@@ -59,7 +59,7 @@ export default function OnboardingRecord() {
     const handleSkip = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/welcome');
+        router.replace('/');
     };
 
     const formatTime = (seconds: number) => {

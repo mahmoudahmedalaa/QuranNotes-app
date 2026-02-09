@@ -26,7 +26,7 @@ export default function SettingsScreen() {
     const { settings, updateSettings, resetSettings } = useSettings();
 
     const { toggleDebugPro, isPro } = usePro();
-    const { user, loading, logout, deleteAccount } = useAuth();
+    const { user, loading, logout, deleteAccount, reauthenticateAndDelete } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [pickerDate, setPickerDate] = useState(() => {
@@ -60,7 +60,7 @@ export default function SettingsScreen() {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: () => {
-                        // Double confirmation for destructive action
+                        // Double confirmation
                         Alert.alert(
                             'Are you absolutely sure?',
                             'All your notes, recordings, and settings will be permanently lost.',
@@ -75,25 +75,65 @@ export default function SettingsScreen() {
                                             await deleteAccount();
                                             router.replace('/(auth)/login');
                                         } catch (e: any) {
-                                            // Handle Firebase re-auth requirement gracefully
                                             const msg = e?.message || '';
-                                            if (msg.includes('RECENT_LOGIN_REQUIRED') || msg.includes('sign out') || msg.includes('recent')) {
-                                                Alert.alert(
-                                                    'Security Verification Required',
-                                                    'Firebase requires you to sign in again before deleting your account (security policy). Please sign out, sign back in, and try again.',
-                                                    [
-                                                        { text: 'Cancel', style: 'cancel' },
-                                                        {
-                                                            text: 'Sign Out Now',
-                                                            onPress: async () => {
-                                                                try {
-                                                                    await logout();
-                                                                    router.replace('/(auth)/login');
-                                                                } catch { /* ignore */ }
+                                            if (msg.includes('RECENT_LOGIN_REQUIRED')) {
+                                                // Need re-authentication — handle inline
+                                                const provider = user?.providerId;
+                                                if (provider === 'password') {
+                                                    // Email user — show password prompt
+                                                    Alert.prompt(
+                                                        'Verify Your Identity',
+                                                        'For security, please enter your password to confirm account deletion.',
+                                                        [
+                                                            { text: 'Cancel', style: 'cancel' },
+                                                            {
+                                                                text: 'Delete Account',
+                                                                style: 'destructive',
+                                                                onPress: async (password?: string) => {
+                                                                    if (!password) return;
+                                                                    try {
+                                                                        await reauthenticateAndDelete(password);
+                                                                        router.replace('/(auth)/login');
+                                                                    } catch (reAuthErr: any) {
+                                                                        const reMsg = reAuthErr?.message || '';
+                                                                        if (reMsg.includes('WRONG_PASSWORD')) {
+                                                                            Alert.alert('Incorrect Password', 'The password you entered is incorrect. Please try again.');
+                                                                        } else {
+                                                                            Alert.alert('Could Not Delete', 'Something went wrong. Please try again later.');
+                                                                        }
+                                                                    }
+                                                                },
                                                             },
-                                                        },
-                                                    ]
-                                                );
+                                                        ],
+                                                        'secure-text',
+                                                        '',
+                                                        'Password'
+                                                    );
+                                                } else if (provider === 'google.com' || provider === 'apple.com') {
+                                                    // Social user — re-auth via their provider automatically
+                                                    const providerName = provider === 'google.com' ? 'Google' : 'Apple';
+                                                    Alert.alert(
+                                                        'Verify Your Identity',
+                                                        `For security, you'll need to verify with ${providerName} to delete your account.`,
+                                                        [
+                                                            { text: 'Cancel', style: 'cancel' },
+                                                            {
+                                                                text: `Verify with ${providerName}`,
+                                                                style: 'destructive',
+                                                                onPress: async () => {
+                                                                    try {
+                                                                        await reauthenticateAndDelete();
+                                                                        router.replace('/(auth)/login');
+                                                                    } catch {
+                                                                        Alert.alert('Could Not Delete', 'Re-authentication failed. Please try again.');
+                                                                    }
+                                                                },
+                                                            },
+                                                        ]
+                                                    );
+                                                } else {
+                                                    Alert.alert('Could Not Delete', 'Please sign out, sign back in, and try again.');
+                                                }
                                             } else {
                                                 Alert.alert(
                                                     'Could Not Delete',
@@ -457,7 +497,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.theme === 'dark'}
                                 onValueChange={toggleDarkMode}
-                                trackColor={{ false: '#707070', true: theme.colors.primary }}
+                                trackColor={{ false: '#48484A', true: theme.colors.primary }}
                                 thumbColor={settings.theme === 'dark' ? '#FFF' : '#F4F4F4'}
                             />
                         </View>
@@ -499,7 +539,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={settings.dailyReminderEnabled}
                                 onValueChange={handleToggleReminder}
-                                trackColor={{ false: '#707070', true: theme.colors.primary }}
+                                trackColor={{ false: '#48484A', true: theme.colors.primary }}
                                 thumbColor={settings.dailyReminderEnabled ? '#FFF' : '#F4F4F4'}
                             />
                         </View>

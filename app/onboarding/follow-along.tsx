@@ -39,7 +39,7 @@ export default function OnboardingFollowAlong() {
     const handleSkip = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/welcome');
+        router.replace('/');
     };
 
     const MockVerse = ({ number, isHighlighted }: { number: number; isHighlighted: boolean }) => (

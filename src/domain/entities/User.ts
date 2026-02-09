@@ -4,4 +4,6 @@ export interface User {
     displayName: string | null;
     isAnonymous: boolean;
     photoURL: string | null;
+    createdAt: string | null; // ISO string from Firebase metadata.creationTime
+    providerId: string | null; // 'password' | 'google.com' | 'apple.com' etc.
 }

@@ -52,7 +52,7 @@ export default function OnboardingLibraryTour() {
     const handleSkip = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/welcome');
+        router.replace('/');
     };
 
     return (

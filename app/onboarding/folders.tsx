@@ -35,13 +35,13 @@ export default function OnboardingFolders() {
 
     const handleContinue = () => {
         goToStep(9);
-        router.push('/onboarding/premium');
+        router.push('/onboarding/reminders');
     };
 
     const handleSkip = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await skipOnboarding();
-        router.replace('/welcome');
+        router.replace('/');
     };
 
     return (

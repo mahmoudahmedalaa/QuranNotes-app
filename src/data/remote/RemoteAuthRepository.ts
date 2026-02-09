@@ -9,12 +9,19 @@ export class RemoteAuthRepository implements IAuthRepository {
 
     private mapUser(firebaseUser: firebase.User | null): User | null {
         if (!firebaseUser) return null;
+        // Get primary provider
+        const providerData = firebaseUser.providerData;
+        const primaryProvider = providerData && providerData.length > 0
+            ? providerData[0]?.providerId || null
+            : null;
         return {
             id: firebaseUser.uid,
             email: firebaseUser.email,
             displayName: firebaseUser.displayName,
             isAnonymous: firebaseUser.isAnonymous,
             photoURL: firebaseUser.photoURL,
+            createdAt: firebaseUser.metadata?.creationTime || null,
+            providerId: primaryProvider,
         };
     }
 
@@ -165,11 +172,71 @@ export class RemoteAuthRepository implements IAuthRepository {
             await currentUser.delete();
         } catch (error: any) {
             if (error.code === 'auth/requires-recent-login') {
-                // Firebase security: requires recent authentication before account deletion
-                // This is a security feature, not a bug
                 throw new Error(
-                    'RECENT_LOGIN_REQUIRED' // Special error code for UI to handle
+                    'RECENT_LOGIN_REQUIRED'
                 );
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Re-authenticate the user and then delete their account.
+     * For email users: uses email + password.
+     * For Google/Apple: uses the social provider re-auth flow.
+     */
+    async reauthenticateAndDelete(password?: string): Promise<void> {
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            throw new Error('No user is currently signed in');
+        }
+
+        // Determine provider
+        const providerData = currentUser.providerData;
+        const primaryProvider = providerData && providerData.length > 0
+            ? providerData[0]?.providerId
+            : null;
+
+        try {
+            if (primaryProvider === 'password' && password && currentUser.email) {
+                // Email/password re-authentication
+                const credential = firebase.auth.EmailAuthProvider.credential(
+                    currentUser.email,
+                    password
+                );
+                await currentUser.reauthenticateWithCredential(credential);
+            } else if (primaryProvider === 'google.com') {
+                // Google re-authentication
+                const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+                GoogleSignin.configure({
+                    webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
+                });
+                await GoogleSignin.hasPlayServices();
+                const response = await GoogleSignin.signIn();
+                const idToken = response.data?.idToken;
+                if (!idToken) throw new Error('Google re-auth failed: no token');
+                const googleCred = firebase.auth.GoogleAuthProvider.credential(idToken);
+                await currentUser.reauthenticateWithCredential(googleCred);
+            } else if (primaryProvider === 'apple.com') {
+                // Apple re-authentication
+                const AppleAuthentication = await import('expo-apple-authentication');
+                const appleCredential = await AppleAuthentication.signInAsync({
+                    requestedScopes: [0, 1],
+                });
+                if (!appleCredential.identityToken) throw new Error('Apple re-auth failed: no token');
+                const provider = new firebase.auth.OAuthProvider('apple.com');
+                const appleCred = provider.credential({ idToken: appleCredential.identityToken });
+                await currentUser.reauthenticateWithCredential(appleCred);
+            } else {
+                throw new Error('RECENT_LOGIN_REQUIRED');
+            }
+
+            // Now delete
+            await AsyncStorage.clear();
+            await currentUser.delete();
+        } catch (error: any) {
+            if (error.code === 'auth/wrong-password') {
+                throw new Error('WRONG_PASSWORD');
             }
             throw error;
         }
