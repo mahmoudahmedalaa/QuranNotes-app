@@ -13,17 +13,17 @@
 #   - Project has ios/ directory (run `npx expo prebuild` first)
 #
 # What it does:
-#   1. Cleans previous builds
-#   2. Patches Expo/RN scripts for spaces in project path
-#   3. Restores native iOS configurations
-#   4. Builds production archive
-#   5. Exports IPA ready for TestFlight upload
+#   1. Auto-increments build number in app.json
+#   2. Cleans previous builds
+#   3. Patches Expo/RN scripts for spaces in project path
+#   4. Restores native iOS configurations (icon, signing)
+#   5. Builds production archive
+#   6. Exports IPA ready for TestFlight upload
 # ============================================================
 
 set -eo pipefail
 
 # ---- Auto-detect project settings ----
-# These are auto-detected from your project files
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
@@ -55,22 +55,41 @@ if [ -z "$TEAM_ID" ]; then
   exit 1
 fi
 
+# Read version info from app.json
+APP_VERSION=$(python3 -c "import json; d=json.load(open('app.json')); print(d['expo']['version'])")
+BUILD_NUMBER=$(python3 -c "import json; d=json.load(open('app.json')); print(d['expo']['ios']['buildNumber'])")
+
 echo ""
 echo "🚀 iOS Build"
 echo "========================"
 echo "  Project: $SCHEME"
+echo "  Version: $APP_VERSION ($BUILD_NUMBER)"
 echo "  Team:    $TEAM_ID"
 echo ""
 
-# ---- Step 1: Clean ----
-echo "🧹 Step 1/6: Cleaning previous builds..."
+# ---- Step 1: Auto-increment build number ----
+echo "🔢 Step 1/7: Incrementing build number..."
+NEW_BUILD=$((BUILD_NUMBER + 1))
+python3 << PYEOF
+import json
+with open('app.json', 'r') as f:
+    data = json.load(f)
+data['expo']['ios']['buildNumber'] = '$NEW_BUILD'
+with open('app.json', 'w') as f:
+    json.dump(data, f, indent=2)
+PYEOF
+echo "   Build number: $BUILD_NUMBER → $NEW_BUILD"
+echo "   ✅ Incremented"
+
+# ---- Step 2: Clean ----
+echo "🧹 Step 2/7: Cleaning previous builds..."
 rm -rf build/
 mkdir -p build/
 rm -rf ~/Library/Developer/Xcode/DerivedData/${SCHEME}-*
 echo "   ✅ Clean"
 
-# ---- Step 2: Patch scripts for spaces in path ----
-echo "🔧 Step 2/6: Patching build scripts for path compatibility..."
+# ---- Step 3: Patch scripts for spaces in path ----
+echo "🔧 Step 3/7: Patching build scripts for path compatibility..."
 
 # Patch EXConstants script (unquoted $PROJECT_DIR breaks on spaces)
 EXCONST_SCRIPT="node_modules/expo-constants/scripts/get-app-config-ios.sh"
@@ -86,7 +105,6 @@ import sys, os
 scheme = os.environ.get("SCHEME", "")
 pbxproj = f"ios/{scheme}.xcodeproj/project.pbxproj" if scheme else None
 if not pbxproj:
-    # Fallback: find the first .xcodeproj
     import glob
     matches = glob.glob("ios/*.xcodeproj/project.pbxproj")
     pbxproj = matches[0] if matches else None
@@ -110,8 +128,8 @@ fi
 
 echo "   ✅ Patched"
 
-# ---- Step 3: Restore native configs ----
-echo "📱 Step 3/6: Checking native configurations..."
+# ---- Step 4: Restore native configs ----
+echo "📱 Step 4/7: Checking native configurations..."
 
 # Restore app icon if assets/icon.png exists
 ICON_SOURCE="assets/icon.png"
@@ -121,18 +139,21 @@ if [ -f "$ICON_SOURCE" ] && [ -d "$(dirname "$ICON_DEST")" ]; then
   echo "   Updated app icon"
 fi
 
+# Ensure correct signing in pbxproj
+sed -i '' "s/DEVELOPMENT_TEAM = [A-Z0-9]*/DEVELOPMENT_TEAM = $TEAM_ID/g" "$PBXPROJ" 2>/dev/null || true
+echo "   Signing team: $TEAM_ID"
+
 echo "   ✅ Configs checked"
 
-# ---- Step 4: Ensure ExportOptions.plist exists ----
-echo "📄 Step 4/6: Checking ExportOptions.plist..."
-if [ ! -f "$EXPORT_OPTIONS" ]; then
-  cat > "$EXPORT_OPTIONS" << PLIST
+# ---- Step 5: Force-write ExportOptions.plist ----
+echo "📄 Step 5/7: Writing ExportOptions.plist..."
+cat > "$EXPORT_OPTIONS" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>method</key>
-    <string>app-store</string>
+    <string>app-store-connect</string>
     <key>teamID</key>
     <string>${TEAM_ID}</string>
     <key>uploadSymbols</key>
@@ -144,12 +165,10 @@ if [ ! -f "$EXPORT_OPTIONS" ]; then
 </dict>
 </plist>
 PLIST
-  echo "   Created ExportOptions.plist"
-fi
-echo "   ✅ Ready"
+echo "   ✅ Ready (team: $TEAM_ID)"
 
-# ---- Step 5: Build Archive ----
-echo "🔨 Step 5/6: Building archive (5-10 minutes)..."
+# ---- Step 6: Build Archive ----
+echo "🔨 Step 6/7: Building archive (5-10 minutes)..."
 echo ""
 
 xcodebuild archive \
@@ -161,6 +180,8 @@ xcodebuild archive \
   -allowProvisioningUpdates \
   CODE_SIGN_STYLE=Automatic \
   DEVELOPMENT_TEAM="$TEAM_ID" \
+  MARKETING_VERSION="$APP_VERSION" \
+  CURRENT_PROJECT_VERSION="$NEW_BUILD" \
   -quiet
 
 if [ ! -d "$ARCHIVE_PATH" ]; then
@@ -171,8 +192,8 @@ fi
 echo ""
 echo "   ✅ Archive created"
 
-# ---- Step 6: Export IPA ----
-echo "📤 Step 6/6: Exporting IPA..."
+# ---- Step 7: Export IPA ----
+echo "📤 Step 7/7: Exporting IPA..."
 
 xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
@@ -193,8 +214,10 @@ echo "========================================"
 echo "🎉 BUILD COMPLETE!"
 echo "========================================"
 echo ""
-echo "📱 IPA: $PROJECT_DIR/build/${SCHEME}.ipa"
+echo "📱 Version: $APP_VERSION ($NEW_BUILD)"
+echo "📦 IPA:     $PROJECT_DIR/build/${SCHEME}.ipa"
 echo ""
 echo "📋 Next: Upload to TestFlight"
-echo "   Open Xcode → Window → Organizer → Distribute"
+echo "   Drag build/${SCHEME}.ipa into Transporter app"
+echo "   Or: Open Xcode → Window → Organizer → Distribute"
 echo ""

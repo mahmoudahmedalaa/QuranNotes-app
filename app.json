@@ -2,7 +2,7 @@
   "expo": {
     "name": "QuranNotes",
     "slug": "quran-notes",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mahmoudahmedalaa.qurannotes",
-      "buildNumber": "6",
+      "buildNumber": "8",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "UIBackgroundModes": [
