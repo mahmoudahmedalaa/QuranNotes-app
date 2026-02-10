@@ -18,13 +18,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mahmoudahmedalaa.qurannotes",
-      "buildNumber": "5",
+      "buildNumber": "15",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow QuranNotes to use the microphone for speech recognition",
         "NSSpeechRecognitionUsageDescription": "Allow QuranNotes to use speech recognition for voice follow-along",
         "NSPhotoLibraryUsageDescription": "Allow QuranNotes to access your photo library to select a profile picture",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -43,17 +46,16 @@
     "plugins": [
       "expo-router",
       [
+        "expo-av",
+        {
+          "microphonePermission": "Allow QuranNotes to use the microphone for voice recordings"
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
           "color": "#ffffff"
-        }
-      ],
-      [
-        "@jamsch/expo-speech-recognition",
-        {
-          "microphonePermission": "Allow QuranNotes to use the microphone for speech recognition",
-          "speechRecognitionPermission": "Allow QuranNotes to use speech recognition for voice follow-along"
         }
       ],
       "expo-web-browser",

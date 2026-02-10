@@ -4,11 +4,6 @@
  * Uses @jamsch/expo-speech-recognition native module.
  */
 
-import {
-    ExpoSpeechRecognitionModule,
-    addSpeechRecognitionListener,
-} from '@jamsch/expo-speech-recognition';
-
 export interface VoiceRecognitionResult {
     transcript: string;
     isFinal: boolean;
@@ -18,6 +13,35 @@ export interface VoiceRecognitionResult {
 export type VoiceRecognitionCallback = (result: VoiceRecognitionResult) => void;
 export type VoiceRecognitionErrorCallback = (error: string) => void;
 
+// Use NativeModules directly to avoid Metro bundling crashes.
+// Metro resolves ALL require() calls at bundle time, even inside try-catch.
+// So we access the native module through React Native's NativeModules bridge.
+import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+
+let moduleChecked = false;
+let moduleAvailable = false;
+let speechEmitter: NativeEventEmitter | null = null;
+
+function isSpeechModuleAvailable(): boolean {
+    if (moduleChecked) return moduleAvailable;
+
+    moduleChecked = true;
+    moduleAvailable = !!NativeModules.ExpoSpeechRecognition;
+
+    if (moduleAvailable) {
+        speechEmitter = new NativeEventEmitter(NativeModules.ExpoSpeechRecognition);
+        console.log('Speech recognition native module is available');
+    } else {
+        console.warn('Speech recognition native module not available');
+    }
+
+    return moduleAvailable;
+}
+
+function getSpeechModule(): any {
+    return NativeModules.ExpoSpeechRecognition;
+}
+
 class VoiceRecognitionServiceImpl {
     private isListening: boolean = false;
     private onResultCallback: VoiceRecognitionCallback | null = null;
@@ -25,8 +49,13 @@ class VoiceRecognitionServiceImpl {
     private listeners: { remove: () => void }[] = [];
 
     async requestPermissions(): Promise<boolean> {
+        if (!isSpeechModuleAvailable()) {
+            console.warn('Speech recognition module not available');
+            return false;
+        }
+
         try {
-            const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+            const result = await getSpeechModule().requestPermissionsAsync();
             return result.granted;
         } catch (error) {
             console.error('Failed to request speech permissions:', error);
@@ -38,6 +67,13 @@ class VoiceRecognitionServiceImpl {
         onResult: VoiceRecognitionCallback,
         onError?: VoiceRecognitionErrorCallback
     ): Promise<boolean> {
+        if (!isSpeechModuleAvailable()) {
+            const errorMsg = 'Speech recognition is not available on this device';
+            console.warn(errorMsg);
+            onError?.(errorMsg);
+            return false;
+        }
+
         if (this.isListening) {
             console.log('Already listening');
             return true;
@@ -55,33 +91,36 @@ class VoiceRecognitionServiceImpl {
             }
 
             // Set up listeners before starting
-            const resultListener = addSpeechRecognitionListener('result', (event: any) => {
-                if (event.results && event.results.length > 0) {
-                    const result = event.results[0];
-                    this.onResultCallback?.({
-                        transcript: result.transcript,
-                        isFinal: event.isFinal,
-                        confidence: result.confidence || 0.8,
-                    });
-                }
-            });
+            // Use NativeEventEmitter to listen for speech events
+            if (speechEmitter) {
+                const resultSub = speechEmitter.addListener('result', (event: any) => {
+                    if (event.results && event.results.length > 0) {
+                        const result = event.results[0];
+                        this.onResultCallback?.({
+                            transcript: result.transcript,
+                            isFinal: event.isFinal,
+                            confidence: result.confidence || 0.8,
+                        });
+                    }
+                });
 
-            const errorListener = addSpeechRecognitionListener('error', (event: any) => {
-                console.error('Speech recognition error:', event.error, event.message);
-                this.onErrorCallback?.(event.message || event.error || 'Recognition error');
-            });
+                const errorSub = speechEmitter.addListener('error', (event: any) => {
+                    console.error('Speech recognition error:', event.error, event.message);
+                    this.onErrorCallback?.(event.message || event.error || 'Recognition error');
+                });
 
-            const endListener = addSpeechRecognitionListener('end', () => {
-                // Auto-restart for continuous recognition if still active
-                if (this.isListening) {
-                    this.restartRecognition();
-                }
-            });
+                const endSub = speechEmitter.addListener('end', () => {
+                    // Auto-restart for continuous recognition if still active
+                    if (this.isListening) {
+                        this.restartRecognition();
+                    }
+                });
 
-            this.listeners = [resultListener, errorListener, endListener];
+                this.listeners = [resultSub, errorSub, endSub];
+            }
 
             // Start native speech recognition with Arabic
-            ExpoSpeechRecognitionModule.start({
+            getSpeechModule().start({
                 lang: 'ar-SA', // Arabic (Saudi Arabia) - best for Quran recitation
                 interimResults: true, // Get partial results
                 continuous: true, // Keep listening
@@ -101,7 +140,7 @@ class VoiceRecognitionServiceImpl {
 
     private restartRecognition(): void {
         try {
-            ExpoSpeechRecognitionModule.start({
+            getSpeechModule().start({
                 lang: 'ar-SA',
                 interimResults: true,
                 continuous: true,
@@ -127,7 +166,7 @@ class VoiceRecognitionServiceImpl {
         this.listeners = [];
 
         try {
-            ExpoSpeechRecognitionModule.stop();
+            getSpeechModule().stop();
         } catch (error) {
             console.error('Failed to stop listening:', error);
         }

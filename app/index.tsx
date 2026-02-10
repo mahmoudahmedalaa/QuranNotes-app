@@ -33,21 +33,21 @@ export default function Index() {
         );
     }
 
-    // 1. First-time device install -> Welcome Screen (Mascot)
-    if (!hasSeenWelcome) {
-        return <Redirect href="/welcome" />;
-    }
-
-    // 2. Not signed in -> Auth (Login/Signup)
+    // 1. Not signed in -> Auth (Login/Signup)
     if (!user) {
         return <Redirect href="/(auth)/login" />;
     }
 
-    // 3. New user who hasn't completed onboarding -> Onboarding Flow
+    // 2. New user who hasn't completed onboarding -> Onboarding Flow
     if (shouldShowOnboarding) {
         return <Redirect href="/onboarding" />;
     }
 
-    // 4. Fully authenticated + onboarded -> Home
+    // 3. Authenticated + onboarded but hasn't seen welcome -> Welcome Screen
+    if (!hasSeenWelcome) {
+        return <Redirect href="/welcome" />;
+    }
+
+    // 4. Fully authenticated + onboarded + welcomed -> Home
     return <Redirect href="/(tabs)" />;
 }

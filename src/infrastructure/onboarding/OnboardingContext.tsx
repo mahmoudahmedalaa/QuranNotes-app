@@ -57,8 +57,7 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
         const key = getStorageKey();
 
         if (!key) {
-            // No user -> Reset to initial (not completed) or maybe completed if guest?
-            // For now, reset to initial.
+            // No user -> Reset to initial (not completed)
             setState(INITIAL_STATE);
             setLoading(false);
             return;
@@ -81,14 +80,14 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
 
     const saveState = async (newState: OnboardingState) => {
         const key = getStorageKey();
-        if (!key) return; // Don't save if no user (or save to guest key?)
-
-        try {
-            await AsyncStorage.setItem(key, JSON.stringify(newState));
-            setState(newState);
-        } catch (error) {
-            console.error('Failed to save onboarding state:', error);
+        if (key) {
+            try {
+                await AsyncStorage.setItem(key, JSON.stringify(newState));
+            } catch (error) {
+                console.error('Failed to save onboarding state:', error);
+            }
         }
+        setState(newState);
     };
 
     const goToStep = (step: number) => {

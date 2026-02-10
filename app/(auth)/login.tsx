@@ -62,8 +62,15 @@ export default function LoginScreen() {
                 return;
             }
 
-            // Existing user logging in — mark onboarding complete so they skip it
-            await completeOnboarding();
+            // Check if this is a new sign-up (should see onboarding) or returning user (skip it)
+            const isNewSignUp = await AsyncStorage.getItem('@quran_notes:isNewSignUp');
+            if (isNewSignUp === 'true') {
+                // New user — clear the flag, let them go through onboarding
+                await AsyncStorage.removeItem('@quran_notes:isNewSignUp');
+            } else {
+                // Returning user — skip onboarding
+                await completeOnboarding();
+            }
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Login failed');
@@ -77,7 +84,7 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithGoogle();
-            // Social login — mark onboarding complete (skip for social users)
+            // Social login — returning user, skip onboarding
             await completeOnboarding();
             router.replace('/');
         } catch (e: any) {
@@ -92,7 +99,7 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithApple();
-            // Social login — mark onboarding complete (skip for social users)
+            // Social login — returning user, skip onboarding
             await completeOnboarding();
             router.replace('/');
         } catch (e: any) {

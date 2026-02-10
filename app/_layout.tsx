@@ -31,6 +31,8 @@ export default function RootLayout() {
                                                     },
                                                 }}>
                                                 <Stack.Screen name="index" />
+                                                <Stack.Screen name="welcome" options={{ headerShown: false }} />
+                                                <Stack.Screen name="onboarding" options={{ headerShown: false }} />
                                                 <Stack.Screen name="search" />
                                                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                                                 <Stack.Screen

@@ -137,9 +137,9 @@ GOOGLE_PLAY_SERVICE_ACCOUNT=...
 - `.env` — Credentials (never commit)
 
 **Reference Documents (read-only for context):**
-- `PRD-QuranNotes-MVP.md` — What to build
-- `TechDesign-QuranNotes-MVP.md` — How to build it
-- `quran_app_research.md` — Market research and competitor analysis
+- `docs/PRD-QuranNotes-MVP.md` — What to build
+- `docs/TechDesign-QuranNotes-MVP.md` — How to build it
+- `docs/quran_app_research.md` — Market research and competitor analysis
 
 ---
 
@@ -232,41 +232,39 @@ When something breaks:
 
 **Project Structure:**
 ```
-quran-notes/
+QuranApp/
 ├── AGENTS.md                    ← This file (master plan)
-├── directives/                  ← SOPs for specific tasks
-│   ├── setup-expo-project.md
-│   ├── implement-clean-architecture.md
-│   ├── setup-firebase.md
-│   ├── setup-revenuecat.md
-│   ├── build-quran-reader.md
-│   ├── build-note-system.md
-│   ├── build-audio-recording.md
-│   ├── deploy-to-app-store.md
-│   └── autonomous-testing-and-qa.md ← Testing protocol
-├── execution/                   ← Deterministic scripts
-│   ├── init-project.sh
-│   ├── create-folder-structure.js
-│   ├── setup-firebase.js
-│   ├── setup-revenuecat.js
-│   ├── build-component.js
-│   ├── run-tests.js
-│   ├── deploy-preview.sh
-│   └── deploy-production.sh
-├── src/                         ← React Native source code
-├── .tmp/                        ← Temporary files (gitignored)
+├── README.md                    ← Project overview
+├── app/                         ← Expo Router screens (file-based routing)
+├── src/                         ← App source code (Clean Architecture)
+│   ├── domain/                  ← Entities, repos, use cases (pure TS)
+│   ├── data/                    ← Data sources (local, remote, models)
+│   ├── infrastructure/          ← External services (Firebase, audio, payments)
+│   ├── presentation/            ← Components, hooks, theme
+│   ├── application/             ← App-level services
+│   └── __tests__/               ← Integration tests
+├── assets/                      ← App icons and splash screen
+├── ios/                         ← iOS native project
+├── docs/                        ← All documentation & reference material
+│   ├── PRD-QuranNotes-MVP.md    ← Product requirements
+│   ├── TechDesign-*.md          ← Technical design docs
+│   ├── DEPLOYMENT.md            ← Deployment guide
+│   ├── directives/              ← Agent SOPs (testing, building)
+│   ├── logs/                    ← Build logs
+│   ├── promotional/             ← App Store screenshots
+│   └── skills/                  ← AI skill definitions
 ├── .env                         ← Credentials (gitignored)
-├── PRD-QuranNotes-MVP.md        ← Product requirements
-├── TechDesign-QuranNotes-MVP.md ← Technical design
-└── docs/                        ← Additional documentation
+├── app.json / eas.json          ← Expo & EAS config
+├── package.json                 ← Dependencies
+└── tsconfig.json                ← TypeScript config
 ```
 
 **Key Principles:**
-- `directives/` = Instruction set (what to do)
-- `execution/` = Tools to do it (how to do it)
-- `src/` = Actual app code (output)
-- `.tmp/` = Can be deleted anytime
-- Deliverables = Working app in App Store
+- `src/` = App source code (Clean Architecture layers)
+- `app/` = Expo Router screens (thin UI wrappers)
+- `docs/` = All documentation, skills, directives, and reference material
+- `assets/` = App icons and splash screen only
+- Root = Config files only (no loose docs or design files)
 
 ---
 
