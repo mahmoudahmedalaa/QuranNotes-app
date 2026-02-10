@@ -17,6 +17,7 @@ export default function OnboardingLayout() {
             <Stack.Screen name="note" />
             <Stack.Screen name="library-tour" />
             <Stack.Screen name="folders" />
+            <Stack.Screen name="reminders" />
             <Stack.Screen name="premium" />
         </Stack>
     );

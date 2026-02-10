@@ -35,7 +35,7 @@ export default function OnboardingFolders() {
 
     const handleContinue = () => {
         goToStep(9);
-        router.push('/onboarding/premium');
+        router.push('/onboarding/reminders' as any);
     };
 
     const handleSkip = async () => {

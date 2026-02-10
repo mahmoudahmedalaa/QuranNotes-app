@@ -1,6 +1,6 @@
-import { View, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Switch as RNSwitch } from 'react-native';
 import { Text, useTheme, Switch } from 'react-native-paper';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import { usePro } from '../../src/infrastructure/auth/ProContext';
 import { useAuth } from '../../src/infrastructure/auth/AuthContext';
+import { NotificationService } from '../../src/infrastructure/notifications/NotificationService';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 export default function SettingsScreen() {
     const theme = useTheme();
@@ -26,6 +28,66 @@ export default function SettingsScreen() {
     const { toggleDebugPro, isPro } = usePro();
     const { user, loading, logout } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
+
+    // Notification state
+    const [reminderEnabled, setReminderEnabled] = useState(settings.dailyReminderEnabled);
+    const [reminderTime, setReminderTime] = useState(() => {
+        const d = new Date();
+        d.setHours(settings.reminderHour, settings.reminderMinute, 0, 0);
+        return d;
+    });
+
+    // Sync state with settings on load
+    useEffect(() => {
+        setReminderEnabled(settings.dailyReminderEnabled);
+        const d = new Date();
+        d.setHours(settings.reminderHour, settings.reminderMinute, 0, 0);
+        setReminderTime(d);
+    }, [settings.dailyReminderEnabled, settings.reminderHour, settings.reminderMinute]);
+
+    const handleReminderToggle = async (value: boolean) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setReminderEnabled(value);
+
+        if (value) {
+            const granted = await NotificationService.requestPermissions();
+            if (granted) {
+                const hour = reminderTime.getHours();
+                const minute = reminderTime.getMinutes();
+                await NotificationService.scheduleDailyReminder(hour, minute);
+                await updateSettings({ dailyReminderEnabled: true, reminderHour: hour, reminderMinute: minute });
+            } else {
+                setReminderEnabled(false);
+                Alert.alert('Permissions Required', 'Please enable notifications in your device settings.');
+            }
+        } else {
+            await NotificationService.cancelDailyReminder();
+            await updateSettings({ dailyReminderEnabled: false });
+        }
+    };
+
+    const handleReminderTimeChange = async (_event: DateTimePickerEvent, selectedDate?: Date) => {
+        if (selectedDate) {
+            setReminderTime(selectedDate);
+            const hour = selectedDate.getHours();
+            const minute = selectedDate.getMinutes();
+            if (reminderEnabled) {
+                await NotificationService.scheduleDailyReminder(hour, minute);
+            }
+            await updateSettings({ reminderHour: hour, reminderMinute: minute });
+        }
+    };
+
+    const handleTestNotification = async () => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const granted = await NotificationService.requestPermissions();
+        if (granted) {
+            await NotificationService.sendTestNotification();
+            Alert.alert('Sent! 🔔', 'A preview notification will appear in ~3 seconds.');
+        } else {
+            Alert.alert('Permissions Required', 'Please enable notifications in your device settings.');
+        }
+    };
 
     const handleSignOut = async () => {
         Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -266,6 +328,159 @@ export default function SettingsScreen() {
                         </Pressable>
                     </View>
 
+                    {/* Notifications Section */}
+                    <View style={styles.section}>
+                        <Text
+                            style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                            NOTIFICATIONS
+                        </Text>
+
+                        {/* Reminder Toggle Card */}
+                        <View
+                            style={[
+                                styles.card,
+                                { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
+                                Shadows.sm,
+                            ]}>
+                            <View
+                                style={[
+                                    styles.iconContainer,
+                                    { backgroundColor: theme.colors.primaryContainer },
+                                ]}>
+                                <Ionicons
+                                    name="notifications"
+                                    size={18}
+                                    color={theme.colors.primary}
+                                />
+                            </View>
+                            <View style={styles.cardContent}>
+                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                    Daily Reminders
+                                </Text>
+                                <Text
+                                    style={[
+                                        styles.cardSubtitle,
+                                        { color: theme.colors.onSurfaceVariant },
+                                    ]}>
+                                    Get notified to read Quran daily
+                                </Text>
+                            </View>
+                            <RNSwitch
+                                value={reminderEnabled}
+                                onValueChange={handleReminderToggle}
+                                trackColor={{ false: '#48484A', true: theme.colors.primary }}
+                                thumbColor={reminderEnabled ? '#FFF' : '#F4F4F4'}
+                            />
+                        </View>
+
+                        {/* Time Picker — only when enabled */}
+                        {reminderEnabled && (
+                            <>
+                                <View
+                                    style={[
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
+                                        Shadows.sm,
+                                    ]}>
+                                    <View
+                                        style={[
+                                            styles.iconContainer,
+                                            { backgroundColor: theme.colors.primaryContainer },
+                                        ]}>
+                                        <Ionicons
+                                            name="time-outline"
+                                            size={18}
+                                            color={theme.colors.primary}
+                                        />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                            Reminder Time
+                                        </Text>
+                                    </View>
+                                    <DateTimePicker
+                                        value={reminderTime}
+                                        mode="time"
+                                        is24Hour={false}
+                                        onChange={handleReminderTimeChange}
+                                        display="default"
+                                        themeVariant={theme.dark ? 'dark' : 'light'}
+                                    />
+                                </View>
+
+                                {/* Quick Prayer Time Chips */}
+                                <View style={styles.chipRow}>
+                                    {[
+                                        { label: '🌅 Fajr', hour: 5, minute: 30 },
+                                        { label: '☀️ Dhuhr', hour: 13, minute: 0 },
+                                        { label: '🌙 Isha', hour: 21, minute: 0 },
+                                    ].map((time) => (
+                                        <Pressable
+                                            key={time.label}
+                                            style={({ pressed }) => [
+                                                styles.timeChip,
+                                                { backgroundColor: theme.colors.primaryContainer },
+                                                pressed && { opacity: 0.7 },
+                                            ]}
+                                            onPress={async () => {
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                const d = new Date();
+                                                d.setHours(time.hour, time.minute, 0, 0);
+                                                setReminderTime(d);
+                                                if (reminderEnabled) {
+                                                    await NotificationService.scheduleDailyReminder(time.hour, time.minute);
+                                                }
+                                                await updateSettings({ reminderHour: time.hour, reminderMinute: time.minute });
+                                            }}>
+                                            <Text style={[styles.chipLabel, { color: theme.colors.primary }]}>
+                                                {time.label}
+                                            </Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+
+                                {/* Preview Notification */}
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.card,
+                                        { backgroundColor: theme.colors.surface },
+                                        Shadows.sm,
+                                        pressed && styles.cardPressed,
+                                    ]}
+                                    onPress={handleTestNotification}>
+                                    <View
+                                        style={[
+                                            styles.iconContainer,
+                                            { backgroundColor: theme.colors.secondaryContainer },
+                                        ]}>
+                                        <Ionicons
+                                            name="send"
+                                            size={18}
+                                            color={theme.colors.secondary}
+                                        />
+                                    </View>
+                                    <View style={styles.cardContent}>
+                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                            Preview Notification
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.cardSubtitle,
+                                                { color: theme.colors.onSurfaceVariant },
+                                            ]}>
+                                            Send a test in 3 seconds
+                                        </Text>
+                                    </View>
+                                    <Ionicons
+                                        name="chevron-forward"
+                                        size={20}
+                                        color={theme.colors.onSurfaceVariant}
+                                    />
+                                </Pressable>
+                            </>
+                        )}
+                    </View>
+
                     {/* Appearance Section */}
                     <View style={styles.section}>
                         <Text
@@ -425,5 +640,20 @@ const styles = StyleSheet.create({
     cardSubtitle: {
         fontSize: 12,
         marginTop: 2,
+    },
+    chipRow: {
+        flexDirection: 'row',
+        gap: Spacing.sm,
+        paddingHorizontal: Spacing.xs,
+        marginBottom: Spacing.sm,
+    },
+    timeChip: {
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
+        borderRadius: BorderRadius.lg,
+    },
+    chipLabel: {
+        fontSize: 13,
+        fontWeight: '600',
     },
 });
