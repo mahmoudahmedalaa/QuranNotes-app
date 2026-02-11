@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../auth/AuthContext';
 
@@ -41,12 +41,21 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     const { user } = useAuth();
     const [state, setState] = useState<OnboardingState>(INITIAL_STATE);
     const [loading, setLoading] = useState(true);
+    const prevUserIdRef = useRef<string | null>(null);
 
     // Determines the storage key based on current user
     const getStorageKey = () => {
         if (!user) return null;
         return `${ONBOARDING_KEY_PREFIX}${user.id}`;
     };
+
+    // Synchronously reset loading when user changes — prevents routing with stale state
+    const currentUserId = user?.id ?? null;
+    if (currentUserId !== prevUserIdRef.current) {
+        prevUserIdRef.current = currentUserId;
+        setLoading(true);
+        setState(INITIAL_STATE);
+    }
 
     useEffect(() => {
         loadOnboardingState();
