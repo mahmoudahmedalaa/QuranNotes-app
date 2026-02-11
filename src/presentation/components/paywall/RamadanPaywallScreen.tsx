@@ -174,7 +174,7 @@ export default function RamadanPaywallScreen() {
                         transition={{ type: 'timing', duration: 500, delay: 200 }}
                         style={styles.header}>
                         <Text style={styles.ramadanBadge}>RAMADAN SPECIAL</Text>
-                        <Text style={styles.title}>Start Your Best{'\n'}Ramadan Ever</Text>
+                        <Text style={styles.title}>Your Ramadan{'\n'}Companion</Text>
                         <Text style={styles.subtitle}>
                             Deepen your connection with the Quran{'\n'}this blessed month
                         </Text>
