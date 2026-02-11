@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform, Pressable, Switch, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Platform, Pressable, Switch, Dimensions, Linking } from 'react-native';
 import { Text, Button, useTheme, ActivityIndicator } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { revenueCatService, PurchasesOffering, PurchasesPackage } from '../../../infrastructure/payments/RevenueCatService';
@@ -260,6 +260,31 @@ export default function PaywallScreen() {
                     <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
                         <Text style={styles.secondaryText}>Maybe Later</Text>
                     </Pressable>
+
+                    {/* Restore Purchases */}
+                    <Pressable onPress={handleRestore} style={styles.restoreButton}>
+                        <Text style={styles.restoreText}>Restore Purchases</Text>
+                    </Pressable>
+
+                    {/* Subscription Disclosure */}
+                    <Text style={styles.disclosureText}>
+                        {isAnnual
+                            ? `Annual subscription: $${ANNUAL_PRICE.toFixed(2)}/year ($${(ANNUAL_PRICE / 12).toFixed(2)}/mo).`
+                            : `Monthly subscription: $${MONTHLY_PRICE.toFixed(2)}/month.`
+                        }{' '}
+                        Payment will be charged to your Apple ID account. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage in Settings → Apple ID → Subscriptions.
+                    </Text>
+
+                    {/* Legal Links */}
+                    <View style={styles.legalRow}>
+                        <Pressable onPress={() => Linking.openURL('https://mahmoudahmedalaa.github.io/QuranNotes-app/legal/privacy.html')}>
+                            <Text style={styles.legalLink}>Privacy Policy</Text>
+                        </Pressable>
+                        <Text style={styles.legalDivider}>|</Text>
+                        <Pressable onPress={() => Linking.openURL('https://mahmoudahmedalaa.github.io/QuranNotes-app/legal/terms.html')}>
+                            <Text style={styles.legalLink}>Terms of Use</Text>
+                        </Pressable>
+                    </View>
                 </MotiView>
             </SafeAreaView>
         </LinearGradient>
@@ -402,5 +427,41 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: 'rgba(255,255,255,0.8)',
         fontWeight: '500',
+    },
+    restoreButton: {
+        alignItems: 'center',
+        paddingBottom: Spacing.sm,
+    },
+    restoreText: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.6)',
+        fontWeight: '500',
+        textDecorationLine: 'underline',
+    },
+    disclosureText: {
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.5)',
+        textAlign: 'center',
+        lineHeight: 16,
+        paddingHorizontal: Spacing.sm,
+        marginTop: Spacing.xs,
+    },
+    legalRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: Spacing.sm,
+        marginTop: Spacing.md,
+        paddingBottom: Spacing.sm,
+    },
+    legalLink: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.6)',
+        fontWeight: '500',
+        textDecorationLine: 'underline',
+    },
+    legalDivider: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.3)',
     },
 });

@@ -13,6 +13,7 @@ interface AuthContextType {
     registerWithEmail: (email: string, pass: string) => Promise<void>;
     resetPassword: (email: string) => Promise<void>;
     logout: () => Promise<void>;
+    deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
     registerWithEmail: async () => { },
     resetPassword: async () => { },
     logout: async () => { },
+    deleteAccount: async () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -149,6 +151,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const deleteAccount = async () => {
+        setLoading(true);
+        try {
+            await authRepo.deleteAccount();
+            setUser(null);
+
+            // Clear all AsyncStorage for this user
+            await AsyncStorage.removeItem('hasSeenWelcome');
+            await AsyncStorage.removeItem('hasCompletedOnboarding');
+
+        } catch (e) {
+            console.error('[AuthContext] deleteAccount error:', e);
+            throw e;
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const value: AuthContextType = {
         user,
         loading,
@@ -159,6 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         registerWithEmail,
         resetPassword,
         logout,
+        deleteAccount,
     };
 
     return (

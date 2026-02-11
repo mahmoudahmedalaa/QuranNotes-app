@@ -1,6 +1,7 @@
-import { auth } from '../../infrastructure/firebase/config';
+import { auth, db } from '../../infrastructure/firebase/config';
 import { IAuthRepository } from '../../domain/repositories/IAuthRepository';
 import { User } from '../../domain/entities/User';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 
@@ -144,6 +145,79 @@ export class RemoteAuthRepository implements IAuthRepository {
 
     async sendPasswordReset(email: string): Promise<void> {
         await auth.sendPasswordResetEmail(email);
+    }
+
+    async deleteAccount(): Promise<void> {
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            throw new Error('No user is currently signed in.');
+        }
+
+        const uid = currentUser.uid;
+
+        // Step 1: Silent re-authentication to avoid 'requires-recent-login'
+        try {
+            const providerId = currentUser.providerData?.[0]?.providerId;
+
+            if (providerId === 'google.com') {
+                // Re-auth with Google silently
+                const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+                GoogleSignin.configure({
+                    webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
+                });
+                await GoogleSignin.hasPlayServices();
+                const response = await GoogleSignin.signIn();
+                const idToken = response.data?.idToken;
+                if (idToken) {
+                    const googleCredential = firebase.auth.GoogleAuthProvider.credential(idToken);
+                    await currentUser.reauthenticateWithCredential(googleCredential);
+                }
+            } else if (providerId === 'apple.com') {
+                // Re-auth with Apple
+                const AppleAuthentication = await import('expo-apple-authentication');
+                const credential = await AppleAuthentication.signInAsync({
+                    requestedScopes: [0, 1],
+                });
+                if (credential.identityToken) {
+                    const provider = new firebase.auth.OAuthProvider('apple.com');
+                    const appleCredential = provider.credential({
+                        idToken: credential.identityToken,
+                    });
+                    await currentUser.reauthenticateWithCredential(appleCredential);
+                }
+            }
+            // For anonymous users, no re-auth needed
+            // For email users, we try without re-auth first and catch the error
+        } catch (reAuthError: any) {
+            console.warn('[DeleteAccount] Re-auth attempt failed, proceeding to try delete anyway:', reAuthError.message);
+            // Continue — the delete call will fail if re-auth was actually required
+        }
+
+        // Step 2: Delete all Firestore user data
+        const collections = ['notes', 'recordings', 'folders'];
+        for (const col of collections) {
+            try {
+                const q = query(collection(db, col), where('userId', '==', uid));
+                const snapshot = await getDocs(q);
+                const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, col, d.id)));
+                await Promise.all(deletePromises);
+                console.log(`[DeleteAccount] Deleted ${snapshot.size} docs from ${col}`);
+            } catch (error: any) {
+                console.warn(`[DeleteAccount] Failed to delete ${col}:`, error.message);
+                // Continue with other collections even if one fails
+            }
+        }
+
+        // Step 3: Delete the Firebase Auth account
+        try {
+            await currentUser.delete();
+            console.log('[DeleteAccount] Firebase Auth account deleted');
+        } catch (deleteError: any) {
+            if (deleteError.code === 'auth/requires-recent-login') {
+                throw new Error('For security, please sign out and sign back in, then try deleting your account again.');
+            }
+            throw deleteError;
+        }
     }
 
     async signOut(): Promise<void> {

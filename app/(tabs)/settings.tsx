@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, Pressable, Alert, Switch as RNSwitch, Animated, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Switch as RNSwitch, Animated, LayoutAnimation, Platform, UIManager, Linking } from 'react-native';
 import { Text, useTheme, Switch } from 'react-native-paper';
 import { useState, useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,7 +39,7 @@ export default function SettingsScreen() {
     const { settings, updateSettings, resetSettings } = useSettings();
 
     const { toggleDebugPro, isPro } = usePro();
-    const { user, loading, logout } = useAuth();
+    const { user, loading, logout, deleteAccount } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
 
     // Notification state
@@ -123,6 +123,42 @@ export default function SettingsScreen() {
                 },
             },
         ]);
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            'Delete Account',
+            'Are you sure you want to delete your account? This will permanently delete all your notes, recordings, folders, and data. This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete Everything',
+                    style: 'destructive',
+                    onPress: () => {
+                        Alert.alert(
+                            'Final Confirmation',
+                            'This is your last chance. All your data will be permanently deleted and cannot be recovered.',
+                            [
+                                { text: 'Keep My Account', style: 'cancel' },
+                                {
+                                    text: 'Delete Forever',
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                        try {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                            await deleteAccount();
+                                            Alert.alert('Account Deleted', 'Your account and all data have been permanently deleted.');
+                                        } catch (error: any) {
+                                            Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+                                        }
+                                    },
+                                },
+                            ]
+                        );
+                    },
+                },
+            ]
+        );
     };
 
     const toggleDarkMode = () => {
@@ -619,11 +655,114 @@ export default function SettingsScreen() {
                                         styles.cardSubtitle,
                                         { color: theme.colors.onSurfaceVariant },
                                     ]}>
-                                    1.0.0
+                                    2.0.0
                                 </Text>
                             </View>
                         </View>
                     </View>
+
+                    {/* Legal Section */}
+                    <View style={styles.section}>
+                        <Text
+                            style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                            LEGAL
+                        </Text>
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.card,
+                                { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
+                                Shadows.sm,
+                                pressed && styles.cardPressed,
+                            ]}
+                            onPress={() => Linking.openURL('https://mahmoudahmedalaa.github.io/QuranNotes-app/legal/privacy.html')}>
+                            <View
+                                style={[
+                                    styles.iconContainer,
+                                    { backgroundColor: theme.colors.primaryContainer },
+                                ]}>
+                                <Ionicons name="shield-checkmark" size={18} color={theme.colors.primary} />
+                            </View>
+                            <View style={styles.cardContent}>
+                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                    Privacy Policy
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name="open-outline"
+                                size={18}
+                                color={theme.colors.onSurfaceVariant}
+                            />
+                        </Pressable>
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.card,
+                                { backgroundColor: theme.colors.surface },
+                                Shadows.sm,
+                                pressed && styles.cardPressed,
+                            ]}
+                            onPress={() => Linking.openURL('https://mahmoudahmedalaa.github.io/QuranNotes-app/legal/terms.html')}>
+                            <View
+                                style={[
+                                    styles.iconContainer,
+                                    { backgroundColor: theme.colors.secondaryContainer },
+                                ]}>
+                                <Ionicons name="document-text" size={18} color={theme.colors.secondary} />
+                            </View>
+                            <View style={styles.cardContent}>
+                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                    Terms of Use
+                                </Text>
+                            </View>
+                            <Ionicons
+                                name="open-outline"
+                                size={18}
+                                color={theme.colors.onSurfaceVariant}
+                            />
+                        </Pressable>
+                    </View>
+
+                    {/* Danger Zone */}
+                    {user && (
+                        <View style={styles.section}>
+                            <Text
+                                style={[styles.sectionTitle, { color: theme.colors.error }]}>
+                                DANGER ZONE
+                            </Text>
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.error + '40' },
+                                    Shadows.sm,
+                                    pressed && styles.cardPressed,
+                                ]}
+                                onPress={handleDeleteAccount}>
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: theme.colors.errorContainer || '#FFEBEE' },
+                                    ]}>
+                                    <Ionicons name="trash" size={18} color={theme.colors.error} />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.error }]}>
+                                        Delete Account
+                                    </Text>
+                                    <Text
+                                        style={[
+                                            styles.cardSubtitle,
+                                            { color: theme.colors.onSurfaceVariant },
+                                        ]}>
+                                        Permanently delete all data
+                                    </Text>
+                                </View>
+                                <Ionicons
+                                    name="chevron-forward"
+                                    size={20}
+                                    color={theme.colors.error}
+                                />
+                            </Pressable>
+                        </View>
+                    )}
 
                     {/* Debug Section */}
 
