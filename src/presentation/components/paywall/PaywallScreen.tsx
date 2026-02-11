@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, Platform, Pressable, Switch, Dimensions, Linking } from 'react-native';
 import { Text, Button, useTheme, ActivityIndicator } from 'react-native-paper';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Redirect } from 'expo-router';
 import { revenueCatService, PurchasesOffering, PurchasesPackage } from '../../../infrastructure/payments/RevenueCatService';
 import { usePro } from '../../../infrastructure/auth/ProContext';
 import { Spacing, BorderRadius, Gradients } from '../../theme/DesignSystem';
@@ -10,6 +10,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { isRamadan } from '../../../utils/ramadanUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +35,11 @@ export default function PaywallScreen() {
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
     const [isAnnual, setIsAnnual] = useState(true);
+
+    // During Ramadan, redirect to the special Ramadan paywall
+    if (isRamadan()) {
+        return <Redirect href={'/ramadan-paywall' as any} />;
+    }
 
     // Get context-specific messaging
     const getMessage = () => {

@@ -43,6 +43,10 @@ export default function RootLayout() {
                                                     name="paywall"
                                                     options={{ presentation: 'modal', headerShown: false }}
                                                 />
+                                                <Stack.Screen
+                                                    name="ramadan-paywall"
+                                                    options={{ presentation: 'modal', headerShown: false }}
+                                                />
                                             </Stack>
                                         </FolderProvider>
                                     </NoteProvider>
