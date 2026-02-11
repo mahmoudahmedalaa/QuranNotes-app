@@ -3,8 +3,8 @@
  * Provides helpers for date-gating Ramadan features
  */
 
-// Ramadan 2026 dates (approximate — based on predicted Islamic calendar)
-export const RAMADAN_2026_START = new Date('2026-02-17T00:00:00');
+// Ramadan 2026 promo period (starts early for pre-Ramadan buzz)
+export const RAMADAN_2026_START = new Date('2026-02-12T00:00:00');
 export const RAMADAN_2026_END = new Date('2026-03-19T23:59:59');
 
 /**
