@@ -154,12 +154,14 @@ export class RemoteAuthRepository implements IAuthRepository {
         }
 
         const uid = currentUser.uid;
-        const providerId = currentUser.providerData?.[0]?.providerId;
-        console.log('[DeleteAccount] Starting for user:', uid, 'provider:', providerId, 'isAnonymous:', currentUser.isAnonymous);
+        const providers = (currentUser.providerData || []).filter(p => p != null).map(p => p.providerId);
+        console.log('[DeleteAccount] Starting for user:', uid);
+        console.log('[DeleteAccount] Providers:', JSON.stringify(providers));
+        console.log('[DeleteAccount] isAnonymous:', currentUser.isAnonymous);
 
-        // Step 1: Delete all Firestore user data FIRST
-        const collections = ['notes', 'recordings', 'folders'];
-        for (const col of collections) {
+        // Step 1: Delete all Firestore user data FIRST (before auth deletion)
+        const collectionsToDelete = ['notes', 'recordings', 'folders'];
+        for (const col of collectionsToDelete) {
             try {
                 const q = query(collection(db, col), where('userId', '==', uid));
                 const snapshot = await getDocs(q);
@@ -180,55 +182,89 @@ export class RemoteAuthRepository implements IAuthRepository {
             if (error.code !== 'auth/requires-recent-login') {
                 throw error;
             }
-            console.log('[DeleteAccount] Requires re-auth, attempting for provider:', providerId);
+            console.log('[DeleteAccount] Requires re-auth — will sign in fresh');
         }
 
-        // Step 3: Re-authenticate based on provider — errors are NOT swallowed
-        if (providerId === 'google.com') {
-            const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
-            GoogleSignin.configure({
-                webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
-            });
-            await GoogleSignin.hasPlayServices();
-            const response = await GoogleSignin.signIn();
-            const idToken = response.data?.idToken;
-            if (!idToken) {
-                throw new Error('Could not get Google credentials. Please try again.');
+        // Step 3: Sign in fresh to get a new auth session
+        // KEY FIX: Use signInWithCredential (NOT reauthenticateWithCredential)
+        // reauthenticateWithCredential requires a nonce for Apple which we don't have.
+        // signInWithCredential creates a brand new fresh session.
+        // On iOS, try Apple first (most common), then Google, then anonymous.
+        let signedInFresh = false;
+
+        // Try Apple Sign-In (works for most iOS users regardless of providerData)
+        if (!signedInFresh) {
+            try {
+                const AppleAuthentication = await import('expo-apple-authentication');
+                const isAvailable = await AppleAuthentication.isAvailableAsync();
+                if (isAvailable) {
+                    console.log('[DeleteAccount] Trying Apple Sign-In for re-auth...');
+                    const appleResult = await AppleAuthentication.signInAsync({
+                        requestedScopes: [0, 1],
+                    });
+                    if (appleResult.identityToken) {
+                        const provider = new firebase.auth.OAuthProvider('apple.com');
+                        const credential = provider.credential({
+                            idToken: appleResult.identityToken,
+                        });
+                        await auth.signInWithCredential(credential);
+                        signedInFresh = true;
+                        console.log('[DeleteAccount] Apple re-auth successful via signInWithCredential');
+                    }
+                }
+            } catch (appleError: any) {
+                console.log('[DeleteAccount] Apple re-auth failed:', appleError.code, appleError.message);
+                // User may have cancelled or Apple isn't their provider — try next
             }
-            const googleCredential = firebase.auth.GoogleAuthProvider.credential(idToken);
-            await currentUser.reauthenticateWithCredential(googleCredential);
-            console.log('[DeleteAccount] Google re-auth successful');
-
-        } else if (providerId === 'apple.com') {
-            const AppleAuthentication = await import('expo-apple-authentication');
-            const appleResponse = await AppleAuthentication.signInAsync({
-                requestedScopes: [0, 1],
-            });
-            if (!appleResponse.identityToken) {
-                throw new Error('Could not get Apple credentials. Please try again.');
-            }
-            const provider = new firebase.auth.OAuthProvider('apple.com');
-            const oauthCredential = provider.credential({
-                idToken: appleResponse.identityToken,
-            });
-            await currentUser.reauthenticateWithCredential(oauthCredential);
-            console.log('[DeleteAccount] Apple re-auth successful');
-
-        } else if (currentUser.isAnonymous) {
-            // Anonymous users: sign in anonymously again to get a fresh session
-            console.log('[DeleteAccount] Anonymous user — re-signing in anonymously');
-            await auth.signInAnonymously();
-
-        } else {
-            // Email/password user — no way to silently re-auth without password
-            // This is a fallback that shouldn't normally happen for most iOS users
-            throw new Error('Please sign out and sign back in, then try deleting your account.');
         }
 
-        // Step 4: Retry delete after successful re-auth
-        console.log('[DeleteAccount] Re-auth complete, retrying delete...');
-        await currentUser.delete();
-        console.log('[DeleteAccount] Account deleted successfully after re-auth');
+        // Try Google Sign-In
+        if (!signedInFresh) {
+            try {
+                console.log('[DeleteAccount] Trying Google Sign-In for re-auth...');
+                const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+                GoogleSignin.configure({
+                    webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
+                });
+                await GoogleSignin.hasPlayServices();
+                const response = await GoogleSignin.signIn();
+                const idToken = response.data?.idToken;
+                if (idToken) {
+                    const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+                    await auth.signInWithCredential(credential);
+                    signedInFresh = true;
+                    console.log('[DeleteAccount] Google re-auth successful via signInWithCredential');
+                }
+            } catch (googleError: any) {
+                console.log('[DeleteAccount] Google re-auth failed:', googleError.code, googleError.message);
+            }
+        }
+
+        // Try anonymous (for anonymous users)
+        if (!signedInFresh && currentUser.isAnonymous) {
+            try {
+                console.log('[DeleteAccount] Trying anonymous re-auth...');
+                await auth.signInAnonymously();
+                signedInFresh = true;
+                console.log('[DeleteAccount] Anonymous re-auth successful');
+            } catch (anonError: any) {
+                console.log('[DeleteAccount] Anonymous re-auth failed:', anonError.message);
+            }
+        }
+
+        if (!signedInFresh) {
+            throw new Error('Could not verify your identity. Please try again.');
+        }
+
+        // Step 4: Delete with the FRESH auth.currentUser reference
+        const freshUser = auth.currentUser;
+        if (!freshUser) {
+            throw new Error('Authentication state lost after re-auth. Please try again.');
+        }
+
+        console.log('[DeleteAccount] Deleting with fresh user:', freshUser.uid);
+        await freshUser.delete();
+        console.log('[DeleteAccount] Account deleted successfully');
     }
 
     async signOut(): Promise<void> {
