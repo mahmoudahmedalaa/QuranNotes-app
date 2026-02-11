@@ -721,12 +721,12 @@ export default function SettingsScreen() {
                         </Pressable>
                     </View>
 
-                    {/* Danger Zone */}
+                    {/* Account Actions */}
                     {user && (
                         <View style={styles.section}>
                             <Text
-                                style={[styles.sectionTitle, { color: theme.colors.error }]}>
-                                DANGER ZONE
+                                style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                                ACCOUNT
                             </Text>
                             <Pressable
                                 style={({ pressed }) => [
