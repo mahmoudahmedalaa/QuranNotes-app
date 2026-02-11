@@ -1,6 +1,6 @@
-import { View, StyleSheet, ScrollView, Pressable, Alert, Switch as RNSwitch } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Alert, Switch as RNSwitch, Animated, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Text, useTheme, Switch } from 'react-native-paper';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,19 @@ import { useAuth } from '../../src/infrastructure/auth/AuthContext';
 import { NotificationService } from '../../src/infrastructure/notifications/NotificationService';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const PRAYER_TIMES = [
+    { label: 'Fajr', emoji: '🌅', key: 'Fajr', hour: 5, minute: 30, desc: '5:30 AM' },
+    { label: 'Dhuhr', emoji: '☀️', key: 'Dhuhr', hour: 12, minute: 30, desc: '12:30 PM' },
+    { label: 'Asr', emoji: '🌤️', key: 'Asr', hour: 15, minute: 30, desc: '3:30 PM' },
+    { label: 'Maghrib', emoji: '🌇', key: 'Maghrib', hour: 18, minute: 15, desc: '6:15 PM' },
+    { label: 'Isha', emoji: '🌙', key: 'Isha', hour: 21, minute: 0, desc: '9:00 PM' },
+];
+
 export default function SettingsScreen() {
     const theme = useTheme();
     const router = require('expo-router').useRouter();
@@ -31,6 +44,13 @@ export default function SettingsScreen() {
 
     // Notification state
     const [reminderEnabled, setReminderEnabled] = useState(settings.dailyReminderEnabled);
+    const [timePickerExpanded, setTimePickerExpanded] = useState(false);
+    const [selectedChip, setSelectedChip] = useState<string>(() => {
+        const h = settings.reminderHour;
+        const m = settings.reminderMinute;
+        const match = PRAYER_TIMES.find(p => p.hour === h && p.minute === m);
+        return match ? match.key : 'Custom';
+    });
     const [reminderTime, setReminderTime] = useState(() => {
         const d = new Date();
         d.setHours(settings.reminderHour, settings.reminderMinute, 0, 0);
@@ -69,6 +89,7 @@ export default function SettingsScreen() {
     const handleReminderTimeChange = async (_event: DateTimePickerEvent, selectedDate?: Date) => {
         if (selectedDate) {
             setReminderTime(selectedDate);
+            setSelectedChip('Custom');
             const hour = selectedDate.getHours();
             const minute = selectedDate.getMinutes();
             if (reminderEnabled) {
@@ -373,70 +394,123 @@ export default function SettingsScreen() {
                             />
                         </View>
 
-                        {/* Time Picker — only when enabled */}
+                        {/* Reminder Time — expandable card */}
                         {reminderEnabled && (
                             <>
                                 <View
                                     style={[
-                                        styles.card,
+                                        styles.expandableCard,
                                         { backgroundColor: theme.colors.surface, marginBottom: Spacing.sm },
                                         Shadows.sm,
                                     ]}>
-                                    <View
-                                        style={[
-                                            styles.iconContainer,
-                                            { backgroundColor: theme.colors.primaryContainer },
-                                        ]}>
-                                        <Ionicons
-                                            name="time-outline"
-                                            size={18}
-                                            color={theme.colors.primary}
-                                        />
-                                    </View>
-                                    <View style={styles.cardContent}>
-                                        <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                            Reminder Time
-                                        </Text>
-                                    </View>
-                                    <DateTimePicker
-                                        value={reminderTime}
-                                        mode="time"
-                                        is24Hour={false}
-                                        onChange={handleReminderTimeChange}
-                                        display="default"
-                                        themeVariant={theme.dark ? 'dark' : 'light'}
-                                    />
-                                </View>
-
-                                {/* Quick Prayer Time Chips */}
-                                <View style={styles.chipRow}>
-                                    {[
-                                        { label: '🌅 Fajr', hour: 5, minute: 30 },
-                                        { label: '☀️ Dhuhr', hour: 13, minute: 0 },
-                                        { label: '🌙 Isha', hour: 21, minute: 0 },
-                                    ].map((time) => (
-                                        <Pressable
-                                            key={time.label}
-                                            style={({ pressed }) => [
-                                                styles.timeChip,
+                                    {/* Header row — tappable */}
+                                    <Pressable
+                                        style={styles.expandableHeader}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                            setTimePickerExpanded(!timePickerExpanded);
+                                        }}>
+                                        <View
+                                            style={[
+                                                styles.iconContainer,
                                                 { backgroundColor: theme.colors.primaryContainer },
-                                                pressed && { opacity: 0.7 },
-                                            ]}
-                                            onPress={async () => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                                const d = new Date();
-                                                d.setHours(time.hour, time.minute, 0, 0);
-                                                setReminderTime(d);
-                                                if (reminderEnabled) {
-                                                    await NotificationService.scheduleDailyReminder(time.hour, time.minute);
-                                                }
-                                                await updateSettings({ reminderHour: time.hour, reminderMinute: time.minute });
-                                            }}>
-                                            <Text style={[styles.chipLabel, { color: theme.colors.primary }]}>
-                                                {time.label}
+                                            ]}>
+                                            <Ionicons
+                                                name="time-outline"
+                                                size={18}
+                                                color={theme.colors.primary}
+                                            />
+                                        </View>
+                                        <View style={styles.cardContent}>
+                                            <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                                Reminder Time
                                             </Text>
-                                        </Pressable>
-                                    ))}
+                                            <Text
+                                                style={[
+                                                    styles.cardSubtitle,
+                                                    { color: theme.colors.onSurfaceVariant },
+                                                ]}>
+                                                {selectedChip === 'Custom'
+                                                    ? `Custom · ${reminderTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+                                                    : `${PRAYER_TIMES.find(p => p.key === selectedChip)?.emoji || '🕌'} ${selectedChip} · ${PRAYER_TIMES.find(p => p.key === selectedChip)?.desc || ''}`}
+                                            </Text>
+                                        </View>
+                                        <Ionicons
+                                            name={timePickerExpanded ? 'chevron-up' : 'chevron-down'}
+                                            size={20}
+                                            color={theme.colors.onSurfaceVariant}
+                                        />
+                                    </Pressable>
+
+                                    {/* Expanded options */}
+                                    {timePickerExpanded && (
+                                        <View style={styles.expandedContent}>
+                                            <View style={[styles.divider, { backgroundColor: theme.colors.surfaceVariant }]} />
+
+                                            {PRAYER_TIMES.map((time) => {
+                                                const isActive = selectedChip === time.key;
+                                                return (
+                                                    <Pressable
+                                                        key={time.key}
+                                                        style={({ pressed }) => [
+                                                            styles.prayerRow,
+                                                            isActive && { backgroundColor: theme.colors.primaryContainer },
+                                                            pressed && { opacity: 0.7 },
+                                                        ]}
+                                                        onPress={async () => {
+                                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                            setSelectedChip(time.key);
+                                                            const d = new Date();
+                                                            d.setHours(time.hour, time.minute, 0, 0);
+                                                            setReminderTime(d);
+                                                            if (reminderEnabled) {
+                                                                await NotificationService.scheduleDailyReminder(time.hour, time.minute);
+                                                            }
+                                                            await updateSettings({ reminderHour: time.hour, reminderMinute: time.minute });
+                                                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                                            setTimePickerExpanded(false);
+                                                        }}>
+                                                        <Text style={styles.prayerEmoji}>{time.emoji}</Text>
+                                                        <Text style={[styles.prayerLabel, { color: theme.colors.onSurface }]}>
+                                                            {time.label}
+                                                        </Text>
+                                                        <Text style={[styles.prayerTime, { color: theme.colors.onSurfaceVariant }]}>
+                                                            {time.desc}
+                                                        </Text>
+                                                        {isActive && (
+                                                            <Ionicons
+                                                                name="checkmark-circle"
+                                                                size={20}
+                                                                color={theme.colors.primary}
+                                                                style={{ marginLeft: Spacing.xs }}
+                                                            />
+                                                        )}
+                                                    </Pressable>
+                                                );
+                                            })}
+
+                                            {/* Custom time option */}
+                                            <View style={[styles.divider, { backgroundColor: theme.colors.surfaceVariant }]} />
+                                            <View style={styles.customTimeRow}>
+                                                <Text style={styles.prayerEmoji}>⏰</Text>
+                                                <Text style={[styles.prayerLabel, {
+                                                    color: selectedChip === 'Custom' ? theme.colors.primary : theme.colors.onSurface,
+                                                    fontWeight: selectedChip === 'Custom' ? '700' : '500',
+                                                }]}>
+                                                    Custom Time
+                                                </Text>
+                                                <DateTimePicker
+                                                    value={reminderTime}
+                                                    mode="time"
+                                                    is24Hour={false}
+                                                    onChange={handleReminderTimeChange}
+                                                    display="default"
+                                                    themeVariant={theme.dark ? 'dark' : 'light'}
+                                                />
+                                            </View>
+                                        </View>
+                                    )}
                                 </View>
 
                                 {/* Preview Notification */}
@@ -643,6 +717,7 @@ const styles = StyleSheet.create({
     },
     chipRow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: Spacing.sm,
         paddingHorizontal: Spacing.xs,
         marginBottom: Spacing.sm,
@@ -655,5 +730,53 @@ const styles = StyleSheet.create({
     chipLabel: {
         fontSize: 13,
         fontWeight: '600',
+    },
+    // Expandable card styles
+    expandableCard: {
+        borderRadius: BorderRadius.lg,
+        overflow: 'hidden',
+    },
+    expandableHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: Spacing.md,
+    },
+    expandedContent: {
+        paddingBottom: Spacing.xs,
+    },
+    divider: {
+        height: StyleSheet.hairlineWidth,
+        marginHorizontal: Spacing.md,
+        marginVertical: Spacing.xs,
+    },
+    prayerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: Spacing.sm + 2,
+        paddingHorizontal: Spacing.md,
+        marginHorizontal: Spacing.sm,
+        borderRadius: BorderRadius.md,
+    },
+    prayerEmoji: {
+        fontSize: 18,
+        width: 28,
+        textAlign: 'center',
+    },
+    prayerLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        flex: 1,
+        marginLeft: Spacing.sm,
+    },
+    prayerTime: {
+        fontSize: 13,
+        fontWeight: '400',
+    },
+    customTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: Spacing.xs,
+        paddingHorizontal: Spacing.md,
+        marginHorizontal: Spacing.sm,
     },
 });

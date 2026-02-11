@@ -46,6 +46,13 @@ export default function OnboardingListen() {
         try {
             setIsPlaying(true);
 
+            // Ensure audio mode is set for playback (not recording)
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: true,
+            });
+
             // Primary: EveryAyah CDN (Al-Fatiha verse 1)
             const primaryUrl = 'https://everyayah.com/data/Alafasy_128kbps/001001.mp3';
             // Fallback: Islamic Network CDN

@@ -25,6 +25,7 @@ export default function OnboardingReminders() {
     const { settings, updateSettings } = useSettings();
 
     const [enabled, setEnabled] = useState(true); // Opted-in by default
+    const [selectedChip, setSelectedChip] = useState<string>('Fajr');
     const [pickerDate, setPickerDate] = useState(() => {
         const d = new Date();
         d.setHours(6, 0, 0, 0); // Default to 6:00 AM for Fajr
@@ -39,6 +40,7 @@ export default function OnboardingReminders() {
     const handleTimeChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
         if (selectedDate) {
             setPickerDate(selectedDate);
+            setSelectedChip('Custom');
         }
     };
 
@@ -153,54 +155,71 @@ export default function OnboardingReminders() {
                             >
                                 <View style={[styles.timeSeparator, { backgroundColor: theme.colors.outlineVariant }]} />
 
-                                <View style={styles.timeSection}>
-                                    <View style={styles.timeInfo}>
-                                        <Ionicons name="time-outline" size={22} color={theme.colors.primary} />
-                                        <Text style={[styles.timeLabel, { color: theme.colors.onSurface }]}>
-                                            Reminder Time
-                                        </Text>
-                                    </View>
-
-                                    <DateTimePicker
-                                        value={pickerDate}
-                                        mode="time"
-                                        is24Hour={false}
-                                        onChange={handleTimeChange}
-                                        display="default"
-                                        themeVariant={theme.dark ? 'dark' : 'light'}
-                                    />
-                                </View>
-
-                                {/* Suggested times */}
+                                {/* Prayer Time Selection */}
                                 <View style={styles.suggestedTimes}>
                                     <Text style={[styles.suggestedLabel, { color: theme.colors.onSurfaceVariant }]}>
-                                        Popular prayer times:
+                                        Set by prayer time:
                                     </Text>
-                                    <View style={styles.timeChips}>
-                                        {[
-                                            { label: '🌅 Fajr', hour: 5, minute: 30 },
-                                            { label: '☀️ After Dhuhr', hour: 13, minute: 0 },
-                                            { label: '🌙 After Isha', hour: 21, minute: 0 },
-                                        ].map((time) => (
+                                    {[
+                                        { label: 'Fajr', emoji: '🌅', key: 'Fajr', hour: 5, minute: 30, desc: '5:30 AM' },
+                                        { label: 'Dhuhr', emoji: '☀️', key: 'Dhuhr', hour: 12, minute: 30, desc: '12:30 PM' },
+                                        { label: 'Asr', emoji: '🌤️', key: 'Asr', hour: 15, minute: 30, desc: '3:30 PM' },
+                                        { label: 'Maghrib', emoji: '🌇', key: 'Maghrib', hour: 18, minute: 15, desc: '6:15 PM' },
+                                        { label: 'Isha', emoji: '🌙', key: 'Isha', hour: 21, minute: 0, desc: '9:00 PM' },
+                                    ].map((time) => {
+                                        const isActive = selectedChip === time.key;
+                                        return (
                                             <Pressable
-                                                key={time.label}
+                                                key={time.key}
                                                 style={({ pressed }) => [
-                                                    styles.chip,
-                                                    { backgroundColor: theme.colors.primaryContainer },
+                                                    styles.prayerRow,
+                                                    isActive && { backgroundColor: theme.colors.primaryContainer },
                                                     pressed && { opacity: 0.7 },
                                                 ]}
                                                 onPress={() => {
                                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                    setSelectedChip(time.key);
                                                     const d = new Date();
                                                     d.setHours(time.hour, time.minute, 0, 0);
                                                     setPickerDate(d);
-                                                }}
-                                            >
-                                                <Text style={[styles.chipText, { color: theme.colors.primary }]}>
+                                                }}>
+                                                <Text style={styles.prayerEmoji}>{time.emoji}</Text>
+                                                <Text style={[styles.prayerLabel, { color: theme.colors.onSurface }]}>
                                                     {time.label}
                                                 </Text>
+                                                <Text style={[styles.prayerTime, { color: theme.colors.onSurfaceVariant }]}>
+                                                    {time.desc}
+                                                </Text>
+                                                {isActive && (
+                                                    <Ionicons
+                                                        name="checkmark-circle"
+                                                        size={20}
+                                                        color={theme.colors.primary}
+                                                        style={{ marginLeft: Spacing.xs }}
+                                                    />
+                                                )}
                                             </Pressable>
-                                        ))}
+                                        );
+                                    })}
+
+                                    {/* Custom Time */}
+                                    <View style={[styles.customDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+                                    <View style={styles.customTimeRow}>
+                                        <Text style={styles.prayerEmoji}>⏰</Text>
+                                        <Text style={[styles.prayerLabel, {
+                                            color: selectedChip === 'Custom' ? theme.colors.primary : theme.colors.onSurface,
+                                            fontWeight: selectedChip === 'Custom' ? '700' : '500',
+                                        }]}>
+                                            Custom Time
+                                        </Text>
+                                        <DateTimePicker
+                                            value={pickerDate}
+                                            mode="time"
+                                            is24Hour={false}
+                                            onChange={handleTimeChange}
+                                            display="default"
+                                            themeVariant={theme.dark ? 'dark' : 'light'}
+                                        />
                                     </View>
                                 </View>
                             </MotiView>
@@ -333,6 +352,7 @@ const styles = StyleSheet.create({
     },
     timeChips: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: Spacing.sm,
     },
     chip: {
@@ -343,6 +363,39 @@ const styles = StyleSheet.create({
     chipText: {
         fontSize: 13,
         fontWeight: '600',
+    },
+    prayerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: Spacing.sm + 2,
+        paddingHorizontal: Spacing.md,
+        borderRadius: BorderRadius.md,
+        marginBottom: 2,
+    },
+    prayerEmoji: {
+        fontSize: 18,
+        width: 28,
+        textAlign: 'center',
+    },
+    prayerLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        flex: 1,
+        marginLeft: Spacing.sm,
+    },
+    prayerTime: {
+        fontSize: 13,
+        fontWeight: '400',
+    },
+    customDivider: {
+        height: StyleSheet.hairlineWidth,
+        marginVertical: Spacing.sm,
+    },
+    customTimeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: Spacing.xs,
+        paddingHorizontal: Spacing.md,
     },
     ctaContainer: {
         paddingHorizontal: Spacing.xl,
