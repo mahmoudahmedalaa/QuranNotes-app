@@ -3,7 +3,7 @@
  * Shows a countdown before Ramadan, and the full tracker during Ramadan.
  * Uses warm accent colors (gold, green) for progress/achievement, purple for primary actions.
  */
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, Suspense } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { Text, Surface, Card, ProgressBar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,10 +18,17 @@ import { ProgressRing } from '../../src/presentation/components/khatma/ProgressR
 import { RamadanCalendar } from '../../src/presentation/components/khatma/RamadanCalendar';
 import { TodayReadingCard } from '../../src/presentation/components/khatma/TodayReadingCard';
 import { CatchUpBanner } from '../../src/presentation/components/khatma/CatchUpBanner';
-import { KhatmaCelebrationModal } from '../../src/presentation/components/khatma/KhatmaCelebrationModal';
 import { StreakBadge } from '../../src/presentation/components/khatma/StreakBadge';
 import { PostRamadanSummaryView } from '../../src/presentation/components/khatma/PostRamadanSummaryView';
 import { EidCelebrationOverlay } from '../../src/presentation/components/khatma/EidCelebrationOverlay';
+
+// Lazy-load to avoid crashing when react-native-view-shot native module
+// isn't linked yet (requires prebuild + pod install)
+const KhatmaCelebrationModal = React.lazy(() =>
+    import('../../src/presentation/components/khatma/KhatmaCelebrationModal').then(m => ({
+        default: m.KhatmaCelebrationModal,
+    }))
+);
 import {
     Spacing,
     Gradients,
@@ -327,18 +334,22 @@ function ActiveTrackerView() {
             )}
 
             {/* ── Celebration Modal ── */}
-            <KhatmaCelebrationModal
-                visible={showCelebration}
-                onDismiss={() => {
-                    setShowCelebration(false);
-                    celebrationDismissedRef.current = true;
-                }}
-                currentRound={currentRound}
-                daysAhead={daysAhead}
-                ramadanDay={ramadanDay || 30}
-                totalPagesRead={totalPagesRead}
-                completedJuzCount={completedJuz.length}
-            />
+            {showCelebration && (
+                <Suspense fallback={null}>
+                    <KhatmaCelebrationModal
+                        visible={showCelebration}
+                        onDismiss={() => {
+                            setShowCelebration(false);
+                            celebrationDismissedRef.current = true;
+                        }}
+                        currentRound={currentRound}
+                        daysAhead={daysAhead}
+                        ramadanDay={ramadanDay || 30}
+                        totalPagesRead={totalPagesRead}
+                        completedJuzCount={completedJuz.length}
+                    />
+                </Suspense>
+            )}
         </ScrollView>
     );
 }
