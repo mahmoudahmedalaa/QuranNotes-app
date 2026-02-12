@@ -10,7 +10,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { isRamadan } from '../../../utils/ramadanUtils';
+import { isRamadanSeason } from '../../../utils/ramadanUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -36,8 +36,8 @@ export default function PaywallScreen() {
     const [purchasing, setPurchasing] = useState(false);
     const [isAnnual, setIsAnnual] = useState(true);
 
-    // During Ramadan, redirect to the special Ramadan paywall
-    if (isRamadan()) {
+    // During Ramadan season (2 weeks before → end), redirect to the special Ramadan paywall
+    if (isRamadanSeason()) {
         return <Redirect href={'/ramadan-paywall' as any} />;
     }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { MotiView } from 'moti';
@@ -148,13 +149,32 @@ export default function Index() {
                             </View>
                         </View>
 
-                        <AnimatedButton
-                            label="Jump"
-                            icon="book-outline"
-                            onPress={() => setPickerVisible(true)}
-                            variant="secondary"
-                            size="sm"
-                        />
+                        <View style={styles.headerActions}>
+                            <AnimatedButton
+                                label="Jump"
+                                icon="book-outline"
+                                onPress={() => setPickerVisible(true)}
+                                variant="secondary"
+                                size="sm"
+                            />
+                            <Pressable
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    router.push('/(tabs)/settings');
+                                }}
+                                style={({ pressed }) => [
+                                    styles.settingsButton,
+                                    { backgroundColor: theme.colors.surfaceVariant },
+                                    pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+                                ]}
+                            >
+                                <Ionicons
+                                    name="settings-outline"
+                                    size={20}
+                                    color={theme.colors.onSurfaceVariant}
+                                />
+                            </Pressable>
+                        </View>
                     </MotiView>
 
                     <StreakCounter />
@@ -262,5 +282,17 @@ const styles = StyleSheet.create({
         borderTopRightRadius: BorderRadius.xxl,
         paddingTop: Spacing.md,
         overflow: 'hidden',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
+    },
+    settingsButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

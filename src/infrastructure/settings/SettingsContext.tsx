@@ -14,6 +14,8 @@ interface AppSettings {
     dailyReminderEnabled: boolean;
     reminderHour: number;
     reminderMinute: number;
+    debugSimulateRamadan: boolean;
+    debugRamadanDay: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -24,6 +26,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     dailyReminderEnabled: false,
     reminderHour: 6,
     reminderMinute: 0,
+    debugSimulateRamadan: false,
+    debugRamadanDay: 5,
 };
 
 const STORAGE_KEY = 'app_settings';
@@ -116,6 +120,8 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
                     dailyReminderEnabled: parsed.dailyReminderEnabled ?? DEFAULT_SETTINGS.dailyReminderEnabled,
                     reminderHour: parsed.reminderHour ?? DEFAULT_SETTINGS.reminderHour,
                     reminderMinute: parsed.reminderMinute ?? DEFAULT_SETTINGS.reminderMinute,
+                    debugSimulateRamadan: parsed.debugSimulateRamadan ?? DEFAULT_SETTINGS.debugSimulateRamadan,
+                    debugRamadanDay: parsed.debugRamadanDay ?? DEFAULT_SETTINGS.debugRamadanDay,
                 };
 
                 setSettings({ ...DEFAULT_SETTINGS, ...loaded });

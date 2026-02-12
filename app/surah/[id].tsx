@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, Animated, ViewToken } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton, useTheme, FAB } from 'react-native-paper';
 import { MotiView, AnimatePresence } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuran } from '../../src/presentation/hooks/useQuran';
-import { useAudioPlayer } from '../../src/presentation/hooks/useAudioPlayer';
+import { useAudio } from '../../src/infrastructure/audio/AudioContext';
 import { useAudioRecorder } from '../../src/presentation/hooks/useAudioRecorder';
 import { VerseItem } from '../../src/presentation/components/quran/VerseItem';
 import { useNotes } from '../../src/presentation/hooks/useNotes';
@@ -19,6 +19,9 @@ import { RecordingSaveModal } from '../../src/presentation/components/recording/
 import { VoiceFollowAlongOverlay } from '../../src/presentation/components/voice/VoiceFollowAlongOverlay';
 import { FollowAlongSaveModal } from '../../src/presentation/components/voice/FollowAlongSaveModal';
 import { FollowAlongSession } from '../../src/domain/entities/FollowAlongSession';
+import { useKhatma } from '../../src/infrastructure/khatma/KhatmaContext';
+import { BookmarkFAB } from '../../src/presentation/components/khatma/BookmarkFAB';
+import { Verse } from '../../src/domain/entities/Quran';
 import {
     Spacing,
     Gradients,
@@ -28,14 +31,14 @@ import {
 import * as Haptics from 'expo-haptics';
 
 export default function SurahDetail() {
-    const { id } = useLocalSearchParams();
+    const { id, verse: verseParam } = useLocalSearchParams<{ id: string; verse?: string }>();
     const router = useRouter();
     const theme = useTheme();
     const insets = useSafeAreaInsets();
     const scrollY = useRef(new Animated.Value(0)).current;
 
     const { surah, loading, error, loadSurah } = useQuran();
-    const { playingVerse, isPlaying, playFromVerse, pause, resume, stop } = useAudioPlayer();
+    const { playingVerse, isPlaying, playFromVerse, pause, resume, stop } = useAudio();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder();
     const { notes } = useNotes();
     const followAlong = useVoiceFollowAlong(surah?.verses || [], surah?.number, surah?.englishName, surah?.name);
@@ -48,10 +51,74 @@ export default function SurahDetail() {
     const [followAlongModalVisible, setFollowAlongModalVisible] = useState(false);
     const [completedFollowAlongSession, setCompletedFollowAlongSession] = useState<FollowAlongSession | null>(null);
     const flatListRef = useRef<any>(null);
+    const { recordPageRead, saveBookmark } = useKhatma();
+    const lastVisibleVerseRef = useRef<{ surah: number; verse: number; page: number; surahName?: string } | null>(null);
+    const [hasVisibleVerse, setHasVisibleVerse] = useState(false);
+    const layoutReadyRef = useRef(false);
 
     useEffect(() => {
         if (id) loadSurah(Number(id));
     }, [id]);
+
+    // ── Scroll-to-bookmark: auto-scroll to verse when navigating from Khatma ──
+    useEffect(() => {
+        if (verseParam && surah?.verses && flatListRef.current) {
+            const index = surah.verses.findIndex((v: Verse) => v.number === Number(verseParam));
+            if (index >= 0) {
+                const tryScroll = () => {
+                    if (layoutReadyRef.current) {
+                        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.3 });
+                    } else {
+                        setTimeout(tryScroll, 200);
+                    }
+                };
+                setTimeout(tryScroll, 300);
+            }
+        }
+    }, [verseParam, surah]);
+
+    // ── FlatList scroll error recovery ──
+    const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
+        const offset = info.averageItemLength * info.index;
+        flatListRef.current?.scrollToOffset({ offset, animated: true });
+        setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.3 });
+        }, 200);
+    }, []);
+
+    // ── Khatma auto-tracking: record pages as verses become visible ──
+    const viewabilityConfig = useMemo(() => ({
+        viewAreaCoveragePercentThreshold: 50,
+        minimumViewTime: 1500, // Must be visible for 1.5s to count as "read"
+    }), []);
+
+    const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+        if (!surah) return;
+        viewableItems.forEach(({ item }) => {
+            const verse = item as Verse;
+            if (verse.page) {
+                recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
+                // Track last visible verse for bookmark
+                lastVisibleVerseRef.current = {
+                    surah: surah.number,
+                    verse: verse.number,
+                    page: verse.page,
+                    surahName: surah.englishName,
+                };
+            }
+        });
+        if (viewableItems.length > 0) setHasVisibleVerse(true);
+    }, [surah, recordPageRead]);
+
+    // ── Khatma auto-tracking: record page when audio plays a verse ──
+    useEffect(() => {
+        if (!surah || !playingVerse) return;
+        if (playingVerse.surah !== surah.number) return;
+        const verse = surah.verses.find((v: Verse) => v.number === playingVerse.verse);
+        if (verse?.page) {
+            recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
+        }
+    }, [surah, playingVerse, recordPageRead]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -160,16 +227,12 @@ export default function SurahDetail() {
                 onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
                     useNativeDriver: false,
                 })}
-                onScrollToIndexFailed={(info) => {
-                    setTimeout(() => {
-                        flatListRef.current?.scrollToIndex({
-                            index: info.index,
-                            animated: true,
-                        });
-                    }, 100);
-                }}
+                onScrollToIndexFailed={onScrollToIndexFailed}
+                onLayout={() => { layoutReadyRef.current = true; }}
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
+                viewabilityConfig={viewabilityConfig}
+                onViewableItemsChanged={onViewableItemsChanged}
                 renderItem={({ item, index }: { item: any; index: number }) => (
                     <VerseItem
                         verse={item}
@@ -488,6 +551,19 @@ export default function SurahDetail() {
             />
 
             {/* Follow Along is now accessible via the header icon buttons */}
+
+            {/* Bookmark FAB */}
+            {surah && (
+                <BookmarkFAB
+                    hasPosition={hasVisibleVerse}
+                    onBookmark={() => {
+                        const pos = lastVisibleVerseRef.current;
+                        if (pos) {
+                            saveBookmark(pos.page, pos.surah, pos.verse, pos.surahName);
+                        }
+                    }}
+                />
+            )}
         </View>
     );
 }

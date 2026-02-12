@@ -89,7 +89,7 @@ export const SurahList = ({ surahs, onSelect }: Props) => {
 const styles = StyleSheet.create({
     listContent: {
         paddingHorizontal: Spacing.md,
-        paddingBottom: Spacing.xl,
+        paddingBottom: 100,
         paddingTop: Spacing.xs,
     },
     numberBadge: {
