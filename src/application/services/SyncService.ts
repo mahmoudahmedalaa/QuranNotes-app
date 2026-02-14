@@ -30,7 +30,6 @@ export class SyncService {
             folderSync.sync('folders'),
         ]);
 
-        console.log('Global sync completed');
     }
 }
 
@@ -77,7 +76,6 @@ class EntitySyncManager {
                 (await this.localRepo.saveAllRecordings?.(finalItems)) ||
                 (await this.localRepo.saveAllFolders?.(finalItems));
 
-            console.log(`${label} sync done`);
         } catch (e) {
             console.error(`${label} sync error:`, e);
         }

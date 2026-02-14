@@ -34,27 +34,11 @@ export const useInsightsData = (): InsightMetrics => {
     const [loading, setLoading] = useState(true);
 
     const fetchData = useCallback(async () => {
-        // Don't set loading to true here to avoid flickering on re-focus
-        /* eslint-disable no-console */
         try {
-            console.log('[Insights] Fetching data...');
-
             const [fetchedRecordings, fetchedNotes] = await Promise.all([
                 recordingRepo.getAllRecordings(),
                 noteRepo.getAllNotes(),
             ]);
-
-            console.log(
-                `[Insights] Fetched ${fetchedRecordings.length} recordings, ${fetchedNotes.length} notes`,
-            );
-
-            if (fetchedRecordings.length > 0) {
-                console.log(
-                    '[Insights] Latest Recording:',
-                    JSON.stringify(fetchedRecordings[fetchedRecordings.length - 1].createdAt),
-                );
-            }
-            /* eslint-enable no-console */
 
             setRecordings(fetchedRecordings);
             setNotes(fetchedNotes);

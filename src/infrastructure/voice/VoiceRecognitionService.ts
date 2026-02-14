@@ -30,7 +30,6 @@ function isSpeechModuleAvailable(): boolean {
 
     if (moduleAvailable) {
         speechEmitter = new NativeEventEmitter(NativeModules.ExpoSpeechRecognition);
-        console.log('Speech recognition native module is available');
     } else {
         console.warn('Speech recognition native module not available');
     }
@@ -75,7 +74,6 @@ class VoiceRecognitionServiceImpl {
         }
 
         if (this.isListening) {
-            console.log('Already listening');
             return true;
         }
 
@@ -129,7 +127,6 @@ class VoiceRecognitionServiceImpl {
             });
 
             this.isListening = true;
-            console.log('Voice recognition started (Arabic - ar-SA)');
             return true;
         } catch (error) {
             console.error('Failed to start listening:', error);
@@ -171,7 +168,6 @@ class VoiceRecognitionServiceImpl {
             console.error('Failed to stop listening:', error);
         }
 
-        console.log('Voice recognition stopped');
     }
 
     getIsListening(): boolean {

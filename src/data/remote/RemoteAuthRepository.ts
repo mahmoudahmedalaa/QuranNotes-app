@@ -29,7 +29,6 @@ export class RemoteAuthRepository implements IAuthRepository {
 
     async signInWithGoogle(): Promise<User> {
         try {
-            console.log('[Google Sign-In] Starting Google authentication...');
             // Import Google Sign-In
             const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
 
@@ -42,7 +41,6 @@ export class RemoteAuthRepository implements IAuthRepository {
             await GoogleSignin.hasPlayServices();
             const response = await GoogleSignin.signIn();
 
-            console.log('[Google Sign-In] Got response:', !!response);
 
             const idToken = response.data?.idToken;
 
@@ -51,17 +49,14 @@ export class RemoteAuthRepository implements IAuthRepository {
                 throw new Error('No ID token received from Google');
             }
 
-            console.log('[Google Sign-In] Got ID Token, creating credential...');
 
             // Create Firebase credential using compat API
             const googleCredential = firebase.auth.GoogleAuthProvider.credential(idToken);
 
-            console.log('[Google Sign-In] Signing in to Firebase...');
 
             // Sign in to Firebase
             const credential = await auth.signInWithCredential(googleCredential);
 
-            console.log('[Google Sign-In] Success! User:', credential.user?.uid);
 
             return this.mapUser(credential.user)!;
         } catch (error: any) {
@@ -75,7 +70,6 @@ export class RemoteAuthRepository implements IAuthRepository {
             // Import Apple Authentication
             const AppleAuthentication = await import('expo-apple-authentication');
 
-            console.log('[Apple Sign-In] Starting Apple authentication...');
 
             // Sign in with Apple - use numeric values for scopes
             // AppleAuthenticationScope: FULL_NAME = 0, EMAIL = 1
@@ -83,7 +77,6 @@ export class RemoteAuthRepository implements IAuthRepository {
                 requestedScopes: [0, 1],
             });
 
-            console.log('[Apple Sign-In] Got Apple credential, identityToken:', !!credential.identityToken);
 
             if (!credential.identityToken) {
                 throw new Error('No identity token received from Apple');
@@ -95,12 +88,10 @@ export class RemoteAuthRepository implements IAuthRepository {
                 idToken: credential.identityToken,
             });
 
-            console.log('[Apple Sign-In] Signing in to Firebase...');
 
             // Sign in to Firebase
             const firebaseCredential = await auth.signInWithCredential(appleCredential);
 
-            console.log('[Apple Sign-In] Success! User:', firebaseCredential.user?.uid);
 
             return this.mapUser(firebaseCredential.user)!;
         } catch (error: any) {
@@ -154,7 +145,6 @@ export class RemoteAuthRepository implements IAuthRepository {
         }
 
         const uid = currentUser.uid;
-        console.log('[DeleteAccount] Starting for user:', uid);
 
         // Step 1: Delete all user data from Firestore
         const collectionsToDelete = ['notes', 'recordings', 'folders'];
@@ -164,7 +154,6 @@ export class RemoteAuthRepository implements IAuthRepository {
                 const snapshot = await getDocs(q);
                 const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, col, d.id)));
                 await Promise.all(deletePromises);
-                console.log(`[DeleteAccount] Deleted ${snapshot.size} docs from ${col}`);
             } catch (error: any) {
                 console.warn(`[DeleteAccount] Failed to delete ${col}:`, error.message);
             }
@@ -173,11 +162,9 @@ export class RemoteAuthRepository implements IAuthRepository {
         // Step 2: Try to delete the auth account
         try {
             await currentUser.delete();
-            console.log('[DeleteAccount] Auth account deleted');
         } catch (error: any) {
             // If Firebase requires recent login, just sign out instead.
             // All user data is already deleted above — the empty auth shell is harmless.
-            console.log('[DeleteAccount] Could not delete auth record:', error.code, '— signing out instead');
             await auth.signOut();
         }
     }

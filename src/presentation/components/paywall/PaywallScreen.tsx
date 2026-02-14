@@ -120,7 +120,6 @@ export default function PaywallScreen() {
                 ]);
             } else if (userCancelled) {
                 // User cancelled, do nothing (no scary error message)
-                console.log('User cancelled purchase');
             } else {
                 // Show friendly error message
                 Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');

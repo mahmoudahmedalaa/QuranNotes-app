@@ -17,20 +17,28 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { StreakCounter } from '../../src/presentation/components/stats/StreakCounter';
 import { ReadingPositionService, ReadingPosition } from '../../src/infrastructure/reading/ReadingPositionService';
+import { useAudio } from '../../src/infrastructure/audio/AudioContext';
 
 export default function Index() {
     const { loading, error, surahList, loadSurahList } = useQuran();
     const router = useRouter();
     const theme = useTheme();
+    const { playingVerse } = useAudio();
     const [pickerVisible, setPickerVisible] = useState(false);
     const [minLoading, setMinLoading] = useState(true);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [loadingAttribution, setLoadingAttribution] = useState('');
     const [globalPosition, setGlobalPosition] = useState<ReadingPosition | null>(null);
 
-    // Refresh global position every time the home screen gains focus
+    // Refresh global position when home screen gains focus OR audio stops.
+    // Hide card while audio is active — the GlobalMiniPlayer handles that.
     useFocusEffect(
         useCallback(() => {
+            if (playingVerse) {
+                // Audio is active → hide card, mini player takes over
+                setGlobalPosition(null);
+                return;
+            }
             ReadingPositionService.getGlobal().then(pos => {
                 if (pos && pos.verse > 1) {
                     setGlobalPosition(pos);
@@ -38,7 +46,7 @@ export default function Index() {
                     setGlobalPosition(null);
                 }
             });
-        }, [])
+        }, [playingVerse])
     );
 
     const MESSAGES = [

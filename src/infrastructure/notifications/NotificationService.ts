@@ -119,7 +119,6 @@ export class NotificationService {
             }
 
             if (finalStatus !== 'granted') {
-                console.log('Failed to get push token for push notification!');
                 return;
             }
 
@@ -127,7 +126,6 @@ export class NotificationService {
                 projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID
             })).data;
         } else {
-            console.log('Must use physical device for Push Notifications');
         }
 
         return token;

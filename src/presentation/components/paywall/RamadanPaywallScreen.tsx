@@ -92,7 +92,6 @@ export default function RamadanPaywallScreen() {
                     [{ text: 'Jazak Allah Khair', onPress: () => router.back() }]
                 );
             } else if (userCancelled) {
-                console.log('User cancelled purchase');
             } else {
                 Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
             }

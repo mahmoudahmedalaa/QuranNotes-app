@@ -219,7 +219,6 @@ export function useVoiceFollowAlong(
 
             try {
                 await repository.current.saveSession(session);
-                console.log('Follow along session saved:', session.id);
             } catch (error) {
                 console.error('Failed to save session:', error);
             }

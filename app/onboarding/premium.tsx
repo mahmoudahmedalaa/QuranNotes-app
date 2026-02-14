@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, Switch, Dimensions } from 'react-native';
-import { Text, useTheme, Button } from 'react-native-paper';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Pressable, Switch, Dimensions, Alert } from 'react-native';
+import { Text, useTheme, Button, ActivityIndicator } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
@@ -14,11 +14,13 @@ import {
     Gradients,
 } from '../../src/presentation/theme/DesignSystem';
 import * as Haptics from 'expo-haptics';
+import { revenueCatService, PurchasesOffering } from '../../src/infrastructure/payments/RevenueCatService';
+import { usePro } from '../../src/infrastructure/auth/ProContext';
 
 const { width } = Dimensions.get('window');
 
 const FEATURES = [
-    { icon: 'infinity', title: 'Unlimited Recordings', description: 'No 10-recording limit' },
+    { icon: 'infinity', title: 'Unlimited Recordings', description: 'No 5-recording limit' },
     { icon: 'chart-box', title: 'Pro Insights', description: 'Reflection heatmap & analytics' },
     { icon: 'fire', title: 'Streak Tracking', description: 'Daily consistency gamification' },
     { icon: 'cloud-sync', title: 'Cloud Sync', description: 'Backup across all devices' },
@@ -34,16 +36,55 @@ export default function OnboardingPremium() {
     const router = useRouter();
     const { highlight } = useLocalSearchParams();
     const { completeOnboarding } = useOnboarding();
+    const { checkStatus } = usePro();
     const [isAnnual, setIsAnnual] = useState(true);
+    const [offering, setOffering] = useState<PurchasesOffering | null>(null);
+    const [purchasing, setPurchasing] = useState(false);
 
     const highlightIndex = highlight ? parseInt(highlight as string) : null;
 
+    useEffect(() => {
+        const loadOfferings = async () => {
+            try {
+                const current = await revenueCatService.getOfferings();
+                setOffering(current);
+            } catch (e) {
+                // Offerings may fail on simulator — still allow free start
+            }
+        };
+        loadOfferings();
+    }, []);
+
     const handleSubscribe = async () => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // TODO: Integrate with RevenueCat
-        console.log('Subscribing to:', isAnnual ? 'annual' : 'monthly');
-        await completeOnboarding();
-        router.replace('/');
+        if (!offering) {
+            Alert.alert('Error', 'Could not load products. Please try again or start free.');
+            return;
+        }
+
+        const packageToBuy = isAnnual ? offering.annual : offering.monthly;
+        if (!packageToBuy) {
+            Alert.alert('Error', 'Product not available.');
+            return;
+        }
+
+        setPurchasing(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        try {
+            const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
+            if (success) {
+                checkStatus();
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                await completeOnboarding();
+                router.replace('/');
+            } else if (!userCancelled) {
+                Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Something went wrong. Please try again.');
+        } finally {
+            setPurchasing(false);
+        }
     };
 
     const handleStartFree = async () => {
@@ -154,7 +195,9 @@ export default function OnboardingPremium() {
                         style={styles.ctaButton}
                         labelStyle={styles.ctaLabel}
                         buttonColor="#FFFFFF"
-                        textColor="#5B7FFF">
+                        textColor="#5B7FFF"
+                        loading={purchasing}
+                        disabled={purchasing}>
                         Unlock Full Access
                     </Button>
                     <Pressable onPress={handleStartFree} style={styles.secondaryButton}>

@@ -26,7 +26,6 @@ if (!firebase.apps.length) {
             authModule.initializeAuth(app, {
                 persistence: authModule.getReactNativePersistence(AsyncStorage)
             });
-            console.log('[Firebase Config] Initialized with AsyncStorage persistence');
         }
     } catch (e: any) {
         // Ignore "Auth already initialized" error which can happen with hot reload

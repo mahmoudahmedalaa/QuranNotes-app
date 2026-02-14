@@ -65,7 +65,6 @@ export class MockAuthRepository implements IAuthRepository {
     }
 
     async sendPasswordReset(email: string): Promise<void> {
-        console.log('Mock: Password reset email would be sent to:', email);
     }
 
     async signOut(): Promise<void> {

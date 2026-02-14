@@ -64,7 +64,6 @@ export class AudioPlayerService {
             // Fallback URL using Islamic Network CDN
             const fallbackUrl = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${surah}:${verse}.mp3`;
 
-            console.log('[AudioPlayer] Loading verse:', primaryUrl);
 
             // Keep reference to old sound for cleanup AFTER new one starts
             const oldSound = this.sound;
@@ -98,7 +97,6 @@ export class AudioPlayerService {
                 );
                 newSound = sound;
             } catch (_primaryError) {
-                console.log('[AudioPlayer] Primary URL failed, trying fallback:', fallbackUrl);
                 const { sound } = await Audio.Sound.createAsync(
                     { uri: fallbackUrl },
                     { shouldPlay: true },
@@ -141,7 +139,6 @@ export class AudioPlayerService {
                 await this.sound.unloadAsync();
             } catch (e) {
                 // Sound might already be unloaded
-                console.log('[AudioPlayer] Cleanup:', e);
             }
             this.sound = null;
         }

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSettings } from '../../src/infrastructure/settings/SettingsContext';
 import { ReciterPicker } from '../../src/presentation/components/common/ReciterPicker';
 import { getReciterById } from '../../src/domain/entities/Reciter';
@@ -35,7 +36,7 @@ const PRAYER_TIMES = [
 
 export default function SettingsScreen() {
     const theme = useTheme();
-    const router = require('expo-router').useRouter();
+    const router = useRouter();
     const { settings, updateSettings, resetSettings } = useSettings();
 
     const { toggleDebugPro, isPro } = usePro();

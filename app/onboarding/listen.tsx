@@ -66,9 +66,7 @@ export default function OnboardingListen() {
                     { shouldPlay: true },
                 );
                 newSound = result.sound;
-                console.log('[Onboarding] Playing from primary URL');
             } catch (primaryError) {
-                console.log('[Onboarding] Primary failed, trying fallback');
                 const result = await Audio.Sound.createAsync(
                     { uri: fallbackUrl },
                     { shouldPlay: true },
@@ -89,7 +87,6 @@ export default function OnboardingListen() {
                         }
                         setIsPlaying(false);
                     } catch (error) {
-                        console.log('Error stopping sound:', error);
                         setIsPlaying(false);
                     }
                 }, 8000);

@@ -49,9 +49,7 @@ class RevenueCatService {
         }
 
         try {
-            console.log('[RevenueCat] Fetching offerings...');
             const offerings = await Purchases.getOfferings();
-            console.log('[RevenueCat] Offerings fetched:', JSON.stringify(offerings));
             if (!offerings.current) {
                 console.warn('[RevenueCat] No current offering found. Check RevenueCat dashboard.');
             }
@@ -64,20 +62,17 @@ class RevenueCatService {
 
     async purchasePackage(pack: PurchasesPackage): Promise<{ success: boolean; userCancelled?: boolean; error?: string }> {
         try {
-            console.log('[RevenueCat] Purchasing package:', pack.identifier);
             const { customerInfo } = await Purchases.purchasePackage(pack);
             const isPro = this.isPro(customerInfo);
             return { success: isPro };
         } catch (e: any) {
             // Log full error for debugging
-            console.log('[RevenueCat] Purchase Error Object:', e);
 
             // Robust Cancellation Detection
             // Code 1 = UserCancelled
             const isCancelled = e.userCancelled === true || e.code === '1' || e.code === 1 || (e.message && e.message.includes('cancelled'));
 
             if (isCancelled) {
-                console.log('[RevenueCat] User cancelled purchase - suppressing error.');
                 return { success: false, userCancelled: true };
             }
 

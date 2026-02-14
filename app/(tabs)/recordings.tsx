@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
+import { View, FlatList, StyleSheet, Alert } from 'react-native';
 import {
     Text,
     useTheme,
@@ -11,6 +11,7 @@ import {
     Portal,
     Chip,
 } from 'react-native-paper';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRecordingStorage } from '../../src/presentation/hooks/useRecordingStorage';
 import { useAudioRecorder } from '../../src/presentation/hooks/useAudioRecorder';
@@ -24,6 +25,7 @@ import { FolderManagementDialog } from '../../src/presentation/components/common
 
 export default function RecordingsScreen() {
     const theme = useTheme();
+    const router = useRouter();
     const { recordings, saveRecording, deleteRecording, refreshRecordings } = useRecordingStorage();
     const { folders, addFolder, updateFolder, deleteFolder } = useFolders();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder();
@@ -44,14 +46,10 @@ export default function RecordingsScreen() {
     });
 
     const handleStartRecording = async () => {
-        // GATING LOGIC
-        if (!isPro && recordings.length >= 10) {
-            const { Alert } = require('react-native');
-            const { useRouter } = require('expo-router');
-            const router = require('expo-router').useRouter();
+        if (!isPro && recordings.length >= 5) {
             Alert.alert(
                 'Limit Reached',
-                'Free users can save up to 10 recordings. Upgrade to Pro for unlimited recordings.',
+                'Free users can save up to 5 recordings. Upgrade to Pro for unlimited recordings.',
                 [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Unlock Premium', onPress: () => router.push('/paywall') }
@@ -133,7 +131,7 @@ export default function RecordingsScreen() {
                             icon="play-circle"
                             size={32}
                             iconColor={theme.colors.primary}
-                            onPress={() => console.log('Play recording:', item.id)}
+                            onPress={() => Alert.alert('Coming Soon', 'Playback will be available in the next update.')}
                         />
                     </View>
 

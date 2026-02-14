@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { View, StyleSheet, Pressable } from 'react-native';
 import {
     Modal,
@@ -33,7 +34,7 @@ export const RecordingModal = ({ visible, onDismiss, surahId, verseId }: Recordi
     const { saveRecording, recordings } = useRecordingStorage();
     const { folders } = useFolders();
     const { isPro } = usePro();
-    const router = require('expo-router').useRouter();
+    const router = useRouter();
 
     const [step, setStep] = useState<'recording' | 'saving' | 'limit'>('recording');
     const [duration, setDuration] = useState(0);
@@ -129,7 +130,7 @@ export const RecordingModal = ({ visible, onDismiss, surahId, verseId }: Recordi
                                     Reflection Limit Reached
                                 </Text>
                                 <Text style={[styles.subtitle, { textAlign: 'center', marginBottom: Spacing.xl }]}>
-                                    You've made 10 recordings. Upgrade to Pro for unlimited space to grow your connecton with the Quran.
+                                    You've reached 5 recordings. Upgrade to Pro for unlimited space to grow your connection with the Quran.
                                 </Text>
                                 <Button
                                     mode="contained"
