@@ -19,10 +19,8 @@ interface VerseItemProps {
     onPause?: () => void;
     onNote?: () => void;
     onRecord?: () => void;
-    onBookmark?: () => void;
     onLongPress?: () => void;
     isPlaying?: boolean;
-    isBookmarked?: boolean;
     hasNote?: boolean;
     isStudyMode?: boolean;
     isHighlighted?: boolean; // For Follow Along feature
@@ -35,17 +33,14 @@ export const VerseItem = ({
     onPause,
     onNote,
     onRecord,
-    onBookmark,
     onLongPress,
     isPlaying,
-    isBookmarked,
     hasNote,
     isStudyMode,
     isHighlighted,
 }: VerseItemProps) => {
     const theme = useTheme();
     const [isPeeking, setIsPeeking] = React.useState(false);
-    const [justBookmarked, setJustBookmarked] = React.useState(false);
 
     const handleLongPress = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -61,12 +56,7 @@ export const VerseItem = ({
         }
     };
 
-    const handleBookmark = () => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onBookmark?.();
-        setJustBookmarked(true);
-        setTimeout(() => setJustBookmarked(false), 1200);
-    };
+
 
     return (
         <MotiView
@@ -90,13 +80,7 @@ export const VerseItem = ({
                             borderLeftColor: ACCENT.gold,
                         },
                     ],
-                    // Subtle bookmark accent
-                    !isPlaying && isBookmarked && [
-                        styles.bookmarkedContainer,
-                        {
-                            borderLeftColor: ACCENT.gold,
-                        },
-                    ],
+
                     isHighlighted && [
                         styles.highlightedContainer,
                         {
@@ -166,22 +150,7 @@ export const VerseItem = ({
                                 style={styles.controlButton}
                             />
                         )}
-                        {onBookmark && (
-                            <MotiView
-                                animate={{
-                                    scale: justBookmarked ? [1.3, 1] : 1,
-                                }}
-                                transition={{ type: 'spring', damping: 10 }}
-                            >
-                                <IconButton
-                                    icon={isBookmarked ? 'bookmark' : 'bookmark-outline'}
-                                    iconColor={isBookmarked ? ACCENT.gold : theme.colors.onSurfaceVariant}
-                                    size={22}
-                                    onPress={handleBookmark}
-                                    style={styles.controlButton}
-                                />
-                            </MotiView>
-                        )}
+
                     </View>
                 </View>
 
@@ -225,12 +194,7 @@ const styles = StyleSheet.create({
         borderRadius: BorderRadius.md,
         marginHorizontal: Spacing.xs,
     },
-    bookmarkedContainer: {
-        borderLeftWidth: 3,
-        borderRadius: BorderRadius.md,
-        marginHorizontal: Spacing.xs,
-        backgroundColor: 'rgba(212, 168, 83, 0.06)',
-    },
+
     highlightedContainer: {
         borderRadius: BorderRadius.lg,
         marginHorizontal: Spacing.sm,

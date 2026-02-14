@@ -1,11 +1,48 @@
 /**
  * Ramadan 2026 date utilities
  * Pure functions — no mutable state. Debug flag is passed from React context.
+ *
+ * Dates are initialized from Firestore via RamadanConfigService on app launch,
+ * then kept in sync via real-time listener (onSnapshot).
+ * If Firestore is unavailable, hardcoded defaults are used.
  */
+import { RamadanConfigService } from '../infrastructure/config/RamadanConfigService';
 
-// Ramadan 2026 actual dates
-export const RAMADAN_2026_START = new Date('2026-02-18T00:00:00');
-export const RAMADAN_2026_END = new Date('2026-03-19T23:59:59');
+// ── Mutable dates — updated by initRamadanDates() and live listener ──
+let ramadanStart = new Date('2026-02-18T00:00:00');
+let ramadanEnd = new Date('2026-03-19T23:59:59');
+
+/**
+ * Apply new dates from Firestore (used by both initial fetch and live updates).
+ */
+function applyDates(startDate: string, endDate: string) {
+    ramadanStart = new Date(`${startDate}T00:00:00`);
+    ramadanEnd = new Date(`${endDate}T23:59:59`);
+    console.log(`[Ramadan] Dates applied: ${startDate} → ${endDate}`);
+}
+
+/**
+ * Initialize Ramadan dates from Firestore + start real-time listener.
+ * Call once on app launch. Returns unsubscribe function for cleanup.
+ */
+export async function initRamadanDates(): Promise<() => void> {
+    // Register callback for live updates
+    RamadanConfigService.setOnDatesChanged((dates) => {
+        applyDates(dates.startDate, dates.endDate);
+    });
+
+    // Initial fetch (with cache fallback)
+    try {
+        const dates = await RamadanConfigService.fetch();
+        applyDates(dates.startDate, dates.endDate);
+    } catch (e) {
+        console.log('[Ramadan] Using hardcoded defaults');
+    }
+
+    // Start real-time listener — updates propagate instantly
+    const unsubscribe = RamadanConfigService.listen();
+    return unsubscribe;
+}
 
 /**
  * Check if current date falls within Ramadan 2026
@@ -13,7 +50,7 @@ export const RAMADAN_2026_END = new Date('2026-03-19T23:59:59');
 export function isRamadan(debugOverride?: boolean): boolean {
     if (debugOverride) return true;
     const now = new Date();
-    return now >= RAMADAN_2026_START && now <= RAMADAN_2026_END;
+    return now >= ramadanStart && now <= ramadanEnd;
 }
 
 /**
@@ -23,22 +60,22 @@ export function isRamadan(debugOverride?: boolean): boolean {
  */
 export function isRamadanSeason(): boolean {
     const now = new Date();
-    const promoStart = new Date(RAMADAN_2026_START);
+    const promoStart = new Date(ramadanStart);
     promoStart.setDate(promoStart.getDate() - 14); // 2 weeks before Ramadan
-    return now >= promoStart && now <= RAMADAN_2026_END;
+    return now >= promoStart && now <= ramadanEnd;
 }
 
 /** True during the 3-day Eid window right after Ramadan */
 export function isPostRamadan(): boolean {
     const now = new Date();
-    const eidEnd = new Date(RAMADAN_2026_END);
+    const eidEnd = new Date(ramadanEnd);
     eidEnd.setDate(eidEnd.getDate() + 3);
-    return now > RAMADAN_2026_END && now <= eidEnd;
+    return now > ramadanEnd && now <= eidEnd;
 }
 
 /** True once Ramadan has permanently ended (past last day) */
 export function isRamadanEnded(): boolean {
-    return new Date() > RAMADAN_2026_END;
+    return new Date() > ramadanEnd;
 }
 
 /**
@@ -48,7 +85,7 @@ export function currentRamadanDay(debugOverride?: boolean, debugDay?: number): n
     if (debugOverride) return debugDay ?? 5;
     const now = new Date();
     if (!isRamadan()) return 0;
-    const diff = now.getTime() - RAMADAN_2026_START.getTime();
+    const diff = now.getTime() - ramadanStart.getTime();
     return Math.min(30, Math.floor(diff / (1000 * 60 * 60 * 24)) + 1);
 }
 
@@ -57,7 +94,7 @@ export function currentRamadanDay(debugOverride?: boolean, debugDay?: number): n
  */
 export function daysUntilRamadan(): number {
     const now = new Date();
-    const diff = RAMADAN_2026_START.getTime() - now.getTime();
+    const diff = ramadanStart.getTime() - now.getTime();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 
@@ -67,7 +104,7 @@ export function daysUntilRamadan(): number {
 export function daysUntilRamadanEnds(debugOverride?: boolean, debugDay?: number): number {
     if (debugOverride) return 30 - (debugDay ?? 5);
     const now = new Date();
-    const diff = RAMADAN_2026_END.getTime() - now.getTime();
+    const diff = ramadanEnd.getTime() - now.getTime();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 

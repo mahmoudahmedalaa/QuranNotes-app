@@ -36,7 +36,14 @@ const FEATURES = [
     { icon: 'school', title: 'Smart Study Mode', description: 'Memorize with purpose' },
 ];
 
-export default function RamadanPaywallScreen() {
+interface RamadanPaywallProps {
+    /** Called on successful purchase or skip — used by onboarding to call completeOnboarding */
+    onPurchaseSuccess?: () => void;
+    /** Called when user dismisses — used by onboarding to call completeOnboarding */
+    onDismiss?: () => void;
+}
+
+export default function RamadanPaywallScreen({ onPurchaseSuccess, onDismiss }: RamadanPaywallProps = {}) {
     const theme = useTheme();
     const router = useRouter();
     const { isPro, checkStatus } = usePro();
@@ -44,6 +51,7 @@ export default function RamadanPaywallScreen() {
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
     const [countdown, setCountdown] = useState(ramadanCountdownText());
+    const [isAnnual, setIsAnnual] = useState(true);
 
     useEffect(() => {
         loadOfferings();
@@ -71,8 +79,7 @@ export default function RamadanPaywallScreen() {
             return;
         }
 
-        // Use annual package (the promotional price is configured in App Store Connect)
-        const packageToBuy = offering.annual;
+        const packageToBuy = isAnnual ? offering.annual : offering.monthly;
         if (!packageToBuy) {
             Alert.alert('Error', 'Product not available.');
             return;
@@ -86,11 +93,15 @@ export default function RamadanPaywallScreen() {
             if (success) {
                 checkStatus();
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert(
-                    'Ramadan Mubarak! 🌙',
-                    'You\'re now a Pro member. May this Ramadan be blessed!',
-                    [{ text: 'Jazak Allah Khair', onPress: () => router.back() }]
-                );
+                if (onPurchaseSuccess) {
+                    onPurchaseSuccess();
+                } else {
+                    Alert.alert(
+                        'Ramadan Mubarak! 🌙',
+                        'You\'re now a Pro member. May this Ramadan be blessed!',
+                        [{ text: 'Jazak Allah Khair', onPress: () => router.back() }]
+                    );
+                }
             } else if (userCancelled) {
             } else {
                 Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
@@ -110,7 +121,7 @@ export default function RamadanPaywallScreen() {
         if (success) {
             checkStatus();
             Alert.alert('Restored', 'Your purchases have been restored.');
-            router.back();
+            if (onPurchaseSuccess) onPurchaseSuccess(); else router.back();
         } else {
             Alert.alert('Error', 'Could not restore purchases.');
         }
@@ -141,7 +152,7 @@ export default function RamadanPaywallScreen() {
             <SafeAreaView style={styles.safeArea}>
                 {/* Close Button */}
                 <Pressable
-                    onPress={() => router.back()}
+                    onPress={() => onDismiss ? onDismiss() : router.back()}
                     style={styles.closeButton}
                     hitSlop={16}>
                     <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
@@ -179,38 +190,79 @@ export default function RamadanPaywallScreen() {
                         </Text>
                     </MotiView>
 
-                    {/* Discount Card */}
+                    {/* Plan Selector */}
                     <MotiView
                         from={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ type: 'spring', delay: 400 }}
-                        style={styles.discountCard}>
-                        <LinearGradient
-                            colors={['rgba(212,175,55,0.15)', 'rgba(212,175,55,0.05)']}
-                            style={styles.discountGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}>
-                            <View style={styles.discountBadge}>
-                                <Text style={styles.discountBadgeText}>{SAVINGS_PERCENT}% OFF</Text>
-                            </View>
-                            <View style={styles.priceRow}>
-                                <Text style={styles.originalPrice}>${ORIGINAL_ANNUAL_PRICE.toFixed(2)}</Text>
-                                <Text style={styles.discountPrice}>${RAMADAN_PRICE.toFixed(2)}</Text>
-                                <Text style={styles.priceUnit}>/year</Text>
-                            </View>
-                            <Text style={styles.priceBreakdown}>
-                                Just ${(RAMADAN_PRICE / 12).toFixed(2)}/month • Billed annually
-                            </Text>
+                        style={styles.planSelector}>
 
-                            {/* Countdown Timer */}
-                            <View style={styles.countdownRow}>
-                                <Ionicons name="time-outline" size={14} color="#D4AF37" />
-                                <Text style={styles.countdownText}>
-                                    Offer ends with Ramadan • {countdown}
-                                </Text>
+                        {/* Annual Plan — the star */}
+                        <Pressable
+                            onPress={() => setIsAnnual(true)}
+                            style={[
+                                styles.planCard,
+                                isAnnual && styles.planCardSelected,
+                            ]}>
+                            {isAnnual && (
+                                <View style={styles.bestValueBadge}>
+                                    <Text style={styles.bestValueText}>BEST VALUE</Text>
+                                </View>
+                            )}
+                            <View style={styles.planHeader}>
+                                <View style={[styles.planRadio, isAnnual && styles.planRadioSelected]}>
+                                    {isAnnual && <View style={styles.planRadioDot} />}
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.planName, isAnnual && styles.planNameSelected]}>Annual</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                                        <Text style={[styles.planOriginalPrice, isAnnual && { color: 'rgba(255,255,255,0.4)' }]}>
+                                            ${ORIGINAL_ANNUAL_PRICE.toFixed(2)}
+                                        </Text>
+                                        <Text style={[styles.planPrice, isAnnual && styles.planPriceSelected]}>
+                                            ${RAMADAN_PRICE.toFixed(2)}/yr
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.discountBadge}>
+                                    <Text style={styles.discountBadgeText}>{SAVINGS_PERCENT}% OFF</Text>
+                                </View>
                             </View>
-                        </LinearGradient>
+                            <Text style={[styles.planDetail, isAnnual && { color: 'rgba(212,175,55,0.8)' }]}>
+                                Just ${(RAMADAN_PRICE / 12).toFixed(2)}/mo • Ramadan Special
+                            </Text>
+                        </Pressable>
+
+                        {/* Monthly Plan */}
+                        <Pressable
+                            onPress={() => setIsAnnual(false)}
+                            style={[
+                                styles.planCard,
+                                !isAnnual && styles.planCardSelected,
+                            ]}>
+                            <View style={styles.planHeader}>
+                                <View style={[styles.planRadio, !isAnnual && styles.planRadioSelected]}>
+                                    {!isAnnual && <View style={styles.planRadioDot} />}
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.planName, !isAnnual && styles.planNameSelected]}>Monthly</Text>
+                                    <Text style={[styles.planPrice, !isAnnual && styles.planPriceSelected]}>
+                                        ${MONTHLY_PRICE.toFixed(2)}/mo
+                                    </Text>
+                                </View>
+                            </View>
+                        </Pressable>
                     </MotiView>
+
+                    {/* Countdown Timer */}
+                    {isAnnual && (
+                        <View style={[styles.countdownRow, { alignSelf: 'center', marginBottom: Spacing.sm }]}>
+                            <Ionicons name="time-outline" size={14} color="#D4AF37" />
+                            <Text style={styles.countdownText}>
+                                Offer ends with Ramadan • {countdown}
+                            </Text>
+                        </View>
+                    )}
 
                     {/* Features */}
                     <MotiView
@@ -266,15 +318,19 @@ export default function RamadanPaywallScreen() {
                                 <ActivityIndicator color="#1a0533" />
                             ) : (
                                 <>
-                                    <Text style={styles.ctaText}>Start Your Ramadan Journey</Text>
-                                    <Text style={styles.ctaSubtext}>🌙 50% off — Limited time</Text>
+                                    <Text style={styles.ctaText}>
+                                        {isAnnual ? 'Start Your Ramadan Journey' : 'Subscribe Monthly'}
+                                    </Text>
+                                    <Text style={styles.ctaSubtext}>
+                                        {isAnnual ? '🌙 50% off — Limited time' : `$${MONTHLY_PRICE.toFixed(2)}/month`}
+                                    </Text>
                                 </>
                             )}
                         </LinearGradient>
                     </Pressable>
 
                     {/* Maybe Later */}
-                    <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+                    <Pressable onPress={() => onDismiss ? onDismiss() : router.back()} style={styles.secondaryButton}>
                         <Text style={styles.secondaryText}>Maybe Later</Text>
                     </Pressable>
 
@@ -285,7 +341,10 @@ export default function RamadanPaywallScreen() {
 
                     {/* Disclosure */}
                     <Text style={styles.disclosureText}>
-                        Ramadan offer: ${RAMADAN_PRICE.toFixed(2)} for the first year, then ${ORIGINAL_ANNUAL_PRICE.toFixed(2)}/year.{' '}
+                        {isAnnual
+                            ? `Ramadan offer: $${RAMADAN_PRICE.toFixed(2)} for the first year, then $${ORIGINAL_ANNUAL_PRICE.toFixed(2)}/year. `
+                            : `$${MONTHLY_PRICE.toFixed(2)}/month. `
+                        }
                         Payment will be charged to your Apple ID account. Subscription automatically renews unless
                         cancelled at least 24 hours before the end of the current period.
                         Manage in Settings → Apple ID → Subscriptions.
@@ -388,57 +447,101 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 20,
     },
-    // Discount Card
-    discountCard: {
-        marginHorizontal: Spacing.lg,
-        marginBottom: Spacing.md,
-        borderRadius: BorderRadius.lg,
-        borderWidth: 1,
-        borderColor: 'rgba(212,175,55,0.3)',
-        overflow: 'hidden',
+    // Plan Selector
+    planSelector: {
+        paddingHorizontal: Spacing.lg,
+        marginBottom: Spacing.sm,
+        gap: Spacing.sm,
     },
-    discountGradient: {
-        padding: Spacing.lg,
-        alignItems: 'center',
+    planCard: {
+        borderRadius: BorderRadius.lg,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        padding: Spacing.md,
+        position: 'relative' as const,
+    },
+    planCardSelected: {
+        borderColor: '#D4AF37',
+        backgroundColor: 'rgba(212,175,55,0.08)',
+    },
+    bestValueBadge: {
+        position: 'absolute' as const,
+        top: -10,
+        right: 14,
+        backgroundColor: '#D4AF37',
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 10,
+    },
+    bestValueText: {
+        fontSize: 10,
+        fontWeight: '800' as const,
+        color: '#1a0533',
+        letterSpacing: 0.5,
+    },
+    planHeader: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        gap: Spacing.sm,
+    },
+    planRadio: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+    },
+    planRadioSelected: {
+        borderColor: '#D4AF37',
+    },
+    planRadioDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#D4AF37',
+    },
+    planName: {
+        fontSize: 15,
+        fontWeight: '600' as const,
+        color: 'rgba(255,255,255,0.6)',
+    },
+    planNameSelected: {
+        color: '#FFFFFF',
+    },
+    planOriginalPrice: {
+        fontSize: 14,
+        fontWeight: '500' as const,
+        color: 'rgba(255,255,255,0.25)',
+        textDecorationLine: 'line-through' as const,
+    },
+    planPrice: {
+        fontSize: 18,
+        fontWeight: '700' as const,
+        color: 'rgba(255,255,255,0.5)',
+    },
+    planPriceSelected: {
+        color: '#D4AF37',
+    },
+    planDetail: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.4)',
+        marginTop: 4,
+        marginLeft: 32,
     },
     discountBadge: {
         backgroundColor: '#D4AF37',
-        paddingHorizontal: 14,
-        paddingVertical: 5,
-        borderRadius: 20,
-        marginBottom: Spacing.md,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 12,
     },
     discountBadgeText: {
-        fontSize: 13,
-        fontWeight: '800',
+        fontSize: 10,
+        fontWeight: '800' as const,
         color: '#1a0533',
-        letterSpacing: 1,
-    },
-    priceRow: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-        gap: 8,
-    },
-    originalPrice: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.4)',
-        textDecorationLine: 'line-through',
-    },
-    discountPrice: {
-        fontSize: 44,
-        fontWeight: '800',
-        color: '#D4AF37',
-    },
-    priceUnit: {
-        fontSize: 16,
-        color: 'rgba(212,175,55,0.8)',
-        fontWeight: '500',
-    },
-    priceBreakdown: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.6)',
-        marginTop: Spacing.xs,
+        letterSpacing: 0.5,
     },
     countdownRow: {
         flexDirection: 'row',

@@ -6,15 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Spacing, BorderRadius, Colors } from '../../src/presentation/theme/DesignSystem';
 import { useAuth } from '../../src/infrastructure/auth/AuthContext';
 import { MotiView } from 'moti';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useOnboarding } from '../../src/infrastructure/onboarding/OnboardingContext';
 
 export default function LoginScreen() {
     const theme = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { user, loginWithEmail, loginAnonymously, loginWithGoogle, loginWithApple } = useAuth();
-    const { completeOnboarding } = useOnboarding();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -54,7 +51,7 @@ export default function LoginScreen() {
                 const Toast = require('react-native-toast-message').default;
                 Toast.show({
                     type: 'info',
-                    text1: '📧 Email Not Verified',
+                    text1: 'Email Not Verified',
                     text2: 'Please verify your email before signing in. Check spam/junk folder.',
                     visibilityTime: 5000,
                     position: 'top',
@@ -62,15 +59,8 @@ export default function LoginScreen() {
                 return;
             }
 
-            // Check if this is a new sign-up (should see onboarding) or returning user (skip it)
-            const isNewSignUp = await AsyncStorage.getItem('@quran_notes:isNewSignUp');
-            if (isNewSignUp === 'true') {
-                // New user — clear the flag, let them go through onboarding
-                await AsyncStorage.removeItem('@quran_notes:isNewSignUp');
-            } else {
-                // Returning user — skip onboarding
-                await completeOnboarding();
-            }
+            // Let index.tsx handle routing — OnboardingContext uses per-user state
+            // New users will have shouldShowOnboarding=true, returning users will have it false
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Login failed');
@@ -84,8 +74,8 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithGoogle();
-            // Social login — returning user, skip onboarding
-            await completeOnboarding();
+            // Don't call completeOnboarding here — let index.tsx decide
+            // based on per-user onboarding state (shouldShowOnboarding)
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Google Sign-In failed');
@@ -99,8 +89,8 @@ export default function LoginScreen() {
         setError('');
         try {
             await loginWithApple();
-            // Social login — returning user, skip onboarding
-            await completeOnboarding();
+            // Don't call completeOnboarding here — let index.tsx decide
+            // based on per-user onboarding state (shouldShowOnboarding)
             router.replace('/');
         } catch (e: any) {
             setError(e.message || 'Apple Sign-In failed');

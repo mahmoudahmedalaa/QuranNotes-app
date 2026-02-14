@@ -18,6 +18,7 @@ const FEATURES = [
     { icon: 'infinity', title: 'Unlimited Recordings', description: 'No 5-recording limit' },
     { icon: 'note-text', title: 'Unlimited Notes', description: 'No 7-note limit' },
     { icon: 'folder-multiple', title: 'Unlimited Folders', description: 'No 2-folder limit' },
+    { icon: 'book-open-page-variant', title: 'Khatma Tracker', description: 'Full Quran completion tracking' },
     { icon: 'chart-box', title: 'Pro Insights', description: 'Reflection heatmap & analytics' },
     { icon: 'fire', title: 'Streak Tracking', description: 'Daily consistency gamification' },
     { icon: 'school', title: 'Smart Study Mode', description: 'Memorization helper' },
@@ -66,6 +67,12 @@ export default function PaywallScreen() {
                 return {
                     title: 'Unlock Advanced Insights',
                     subtitle: 'Get detailed analytics and track your spiritual journey.',
+                    highlightIndex: 4
+                };
+            case 'khatma':
+                return {
+                    title: 'Unlock Khatma Tracker',
+                    subtitle: 'Your 3-day free trial has ended. Upgrade to Pro for unlimited Quran completion tracking.',
                     highlightIndex: 3
                 };
             default:

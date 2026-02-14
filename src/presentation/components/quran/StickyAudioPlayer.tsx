@@ -75,9 +75,9 @@ export const StickyAudioPlayer = ({
                                         </Text>
                                         <IconButton
                                             icon="chevron-down"
-                                            size={12}
+                                            size={14}
                                             iconColor={theme.colors.onPrimaryContainer}
-                                            style={{ margin: 0, height: 12, width: 12 }}
+                                            style={{ margin: 0, height: 14, width: 14 }}
                                         />
                                     </View>
                                 </TouchableOpacity>
@@ -184,12 +184,12 @@ const styles = StyleSheet.create({
     reciterBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
         borderRadius: BorderRadius.sm,
     },
     reciterText: {
-        fontSize: 10,
+        fontSize: 13,
         fontWeight: '700',
     },
     verseLabel: {

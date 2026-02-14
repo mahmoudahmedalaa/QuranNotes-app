@@ -1,5 +1,5 @@
 /**
- * RamadanCalendar — Compact collapsible calendar
+ * KhatmaCalendar — Compact collapsible calendar
  * Headspace/Calm-inspired minimal design using a single-hue system.
  *
  * Visual hierarchy (all purple variations):
@@ -27,6 +27,7 @@ interface RamadanCalendarProps {
     getJuzProgress: (juzNumber: number) => { pagesRead: number; totalPages: number; percent: number; isComplete: boolean };
     selectedDay: number;
     onSelectDay: (day: number) => void;
+    monthName?: string;
 }
 
 const COLS = 5;
@@ -41,6 +42,7 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
     getJuzProgress,
     selectedDay,
     onSelectDay,
+    monthName,
 }) => {
     const theme = useTheme();
     const [expanded, setExpanded] = useState(false);
@@ -69,35 +71,40 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         const hasStarted = progress.pagesRead > 0 && !isCompleted;
 
         const circleSize = size === 'compact' ? 40 : 36;
+        const TODAY_COLOR = '#F59E0B'; // Gold/amber — always visible against purple or gray
 
-        // ── 4 states, single hue (purple gradient) ──
+        // ── 4 states, clearer visual hierarchy ──
         let backgroundColor: string;
-        let borderWidth = 0;
-        let borderColor = 'transparent';
+        let innerBorderWidth = 0;
+        let innerBorderColor = 'transparent';
         let textColor: string;
 
         if (isCompleted) {
-            // ✅ Done — solid fill
+            // ✅ Done — solid purple fill
             backgroundColor = PRIMARY;
             textColor = '#FFFFFF';
-        } else if (isCurrent) {
-            // 💜 Today — bold ring
-            backgroundColor = `${PRIMARY}10`;
-            borderWidth = 2.5;
-            borderColor = PRIMARY;
-            textColor = PRIMARY;
         } else if (hasStarted) {
-            // 🟣 Started — light purple fill (same hue, lower opacity)
-            backgroundColor = `${PRIMARY}18`;
+            // 🟣 Started — noticeable purple tint + thin purple border
+            backgroundColor = `${PRIMARY}30`;
+            innerBorderWidth = 1.5;
+            innerBorderColor = `${PRIMARY}60`;
+            textColor = PRIMARY;
+        } else if (isCurrent) {
+            // 💜 Today (not started) — prominent gold ring
+            backgroundColor = `${PRIMARY}15`;
             textColor = PRIMARY;
         } else {
-            // ⬜ Not yet — subtle neutral
-            backgroundColor = `${theme.colors.onSurface}08`;
-            textColor = `${theme.colors.onSurface}50`;
+            // ⬜ Not yet — soft gray
+            backgroundColor = `${theme.colors.surfaceVariant}`;
+            textColor = theme.colors.onSurfaceVariant;
         }
 
-        // Selection ring (doesn't override status appearance)
+        // Today ring — gold/amber, ALWAYS visible regardless of completion state
+        const showTodayRing = isCurrent;
+        // Selection ring (for tapped day, doesn't override today ring)
         const showSelectedRing = isSelected && !isCurrent;
+        // Outer ring (today or selected)
+        const showOuterRing = showTodayRing || showSelectedRing;
 
         return (
             <Pressable
@@ -114,11 +121,15 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
             >
                 <View style={[
                     {
-                        width: circleSize + (showSelectedRing ? 6 : 0),
-                        height: circleSize + (showSelectedRing ? 6 : 0),
-                        borderRadius: (circleSize + 6) / 2,
+                        width: circleSize + (showOuterRing ? 8 : 0),
+                        height: circleSize + (showOuterRing ? 8 : 0),
+                        borderRadius: (circleSize + 8) / 2,
                         alignItems: 'center',
                         justifyContent: 'center',
+                    },
+                    showTodayRing && {
+                        borderWidth: 2.5,
+                        borderColor: TODAY_COLOR,
                     },
                     showSelectedRing && {
                         borderWidth: 2,
@@ -133,8 +144,8 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                             alignItems: 'center',
                             justifyContent: 'center',
                             backgroundColor,
-                            borderWidth,
-                            borderColor,
+                            borderWidth: innerBorderWidth,
+                            borderColor: innerBorderColor,
                         }}
                     >
                         {isCompleted ? (
@@ -160,13 +171,13 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                             styles.dayLabel,
                             {
                                 color: isCurrent
-                                    ? PRIMARY
+                                    ? TODAY_COLOR
                                     : theme.colors.onSurfaceVariant,
                                 fontWeight: isCurrent ? '700' : '400',
                             },
                         ]}
                     >
-                        {isCurrent ? 'Today' : 'Day'}
+                        {isCurrent ? 'Today' : `Juz`}
                     </Text>
                 )}
             </Pressable>
@@ -195,7 +206,7 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         return rows;
     };
 
-    // ── Minimal legend — 3 states, all same hue ──
+    // ── Minimal legend — 3 states with distinct visuals ──
     const renderLegend = () => (
         <View style={styles.legendRow}>
             <View style={styles.legendItem}>
@@ -203,11 +214,11 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                 <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Completed</Text>
             </View>
             <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: `${PRIMARY}25` }]} />
+                <View style={[styles.legendDot, { backgroundColor: `${PRIMARY}30`, borderWidth: 1.5, borderColor: `${PRIMARY}60` }]} />
                 <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Started</Text>
             </View>
             <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: 'transparent', borderWidth: 2, borderColor: PRIMARY }]} />
+                <View style={[styles.legendDot, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#F59E0B' }]} />
                 <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Today</Text>
             </View>
         </View>
@@ -227,11 +238,11 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                 <Pressable onPress={toggleExpand} style={styles.header}>
                     <View style={styles.headerLeft}>
                         <Text style={[styles.headerTitle, { color: theme.colors.onSurface }]}>
-                            Ramadan Journey
+                            {monthName ? `${monthName} Khatma` : 'Khatma Journey'}
                         </Text>
                         <View style={[styles.countBadge, { backgroundColor: `${PRIMARY}12` }]}>
                             <Text style={[styles.countText, { color: PRIMARY }]}>
-                                {completedCount}/30 days
+                                {completedCount}/30 Juz
                             </Text>
                         </View>
                     </View>

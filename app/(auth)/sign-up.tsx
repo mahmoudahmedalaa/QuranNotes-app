@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { Text, TextInput, Button, useTheme, HelperText } from 'react-native-paper';
 import { useRouter, Link, Stack } from 'expo-router';
@@ -42,14 +41,11 @@ export default function SignUpScreen() {
         try {
             await registerWithEmail(email, password);
 
-            // Mark as new sign-up so login screen knows to show onboarding
-            await AsyncStorage.setItem('@quran_notes:isNewSignUp', 'true');
-
             // Show modern toast notification
             const Toast = require('react-native-toast-message').default;
             Toast.show({
                 type: 'success',
-                text1: '✅ Account Created!',
+                text1: 'Account Created!',
                 text2: 'Please check your email to verify your account before signing in.',
                 visibilityTime: 6000,
                 position: 'top',

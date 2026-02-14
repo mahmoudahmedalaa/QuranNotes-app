@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, ViewToken } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, ViewToken, AppState } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton, useTheme, FAB } from 'react-native-paper';
@@ -22,7 +22,7 @@ import { FollowAlongSession } from '../../src/domain/entities/FollowAlongSession
 import { useKhatma } from '../../src/infrastructure/khatma/KhatmaContext';
 import { Verse } from '../../src/domain/entities/Quran';
 import { ReadingPositionService, ReadingPosition } from '../../src/infrastructure/reading/ReadingPositionService';
-import { BookmarkToast } from '../../src/presentation/components/feedback/BookmarkToast';
+
 import {
     Spacing,
     Gradients,
@@ -41,7 +41,7 @@ export default function SurahDetail() {
     const scrollY = useRef(new Animated.Value(0)).current;
 
     const { surah, loading, error, loadSurah } = useQuran();
-    const { playingVerse, isPlaying, playFromVerse, pause, resume, stop } = useAudio();
+    const { playingVerse, isPlaying, playFromVerse, pause, resume, stop, lastCompletedPlayback } = useAudio();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder();
     const { notes } = useNotes();
     const followAlong = useVoiceFollowAlong(surah?.verses || [], surah?.number, surah?.englishName, surah?.name);
@@ -54,16 +54,22 @@ export default function SurahDetail() {
     const [followAlongModalVisible, setFollowAlongModalVisible] = useState(false);
     const [completedFollowAlongSession, setCompletedFollowAlongSession] = useState<FollowAlongSession | null>(null);
     const flatListRef = useRef<any>(null);
-    const { recordPageRead, saveBookmark } = useKhatma();
+    const { recordPageRead } = useKhatma();
     const layoutReadyRef = useRef(false);
     const autoplayTriggeredRef = useRef(false);
+    // Single scroll controller — all scroll requests go through scrollToVerse()
+    const scrollLockRef = useRef(false);
+    const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Stable ref for surah used inside viewability callback (avoids stale closure)
+    const surahRef = useRef(surah);
+    useEffect(() => { surahRef.current = surah; }, [surah]);
 
-    // ── Bookmark state ──
-    const [bookmarkedVerse, setBookmarkedVerse] = useState<number | null>(null);
-    const [showBookmarkToast, setShowBookmarkToast] = useState(false);
-    const [toastVerseNumber, setToastVerseNumber] = useState(0);
+    // ── Reading position state ──
+    const lastVisibleVerseRef = useRef<number>(1);
+    const autoScrollEnabledRef = useRef(true);
     const [savedPosition, setSavedPosition] = useState<ReadingPosition | null>(null);
     const [showResumeBanner, setShowResumeBanner] = useState(false);
+    const [showReturnToAudio, setShowReturnToAudio] = useState(false);
 
     useEffect(() => {
         if (id) loadSurah(Number(id));
@@ -76,95 +82,154 @@ export default function SurahDetail() {
         ReadingPositionService.get(surahId).then(pos => {
             if (pos) {
                 setSavedPosition(pos);
-                setBookmarkedVerse(pos.verse);
-                // Show resume banner only if user has real progress (past verse 1)
-                // and didn't navigate to a specific verse
-                if (!verseParam && pos.verse > 1) {
+                lastVisibleVerseRef.current = pos.verse;
+                // Show resume banner only if user has real progress (past verse 1),
+                // didn't navigate to a specific verse, and isn't auto-playing
+                if (!verseParam && !autoplay && pos.verse > 1) {
                     setShowResumeBanner(true);
                 }
             }
         });
     }, [id, verseParam]);
 
-    // ── Bookmark handler ──
-    const handleBookmarkVerse = useCallback((verse: Verse) => {
-        const surahId = surah?.number;
-        if (!surahId) return;
-
-        // Save to both systems
-        ReadingPositionService.save(surahId, verse.number, surah?.englishName);
-        if (verse.page) {
-            saveBookmark(verse.page, surahId, verse.number, surah?.englishName);
-        }
-
-        // Update local state so re-entry picks up new bookmark
-        const newPos: ReadingPosition = { surah: surahId, verse: verse.number, timestamp: Date.now() };
-        setSavedPosition(newPos);
-        setBookmarkedVerse(verse.number);
-        setToastVerseNumber(verse.number);
-        setShowBookmarkToast(true);
-    }, [surah, saveBookmark]);
-
-    // ── Resume banner scroll handler ──
-    const stickyHeaderHeight = insets.top + 56; // height of collapsed sticky header
-    const handleResumeBannerPress = useCallback(async () => {
-        if (!savedPosition || !surah?.verses || !flatListRef.current) return;
-        const verseNum = savedPosition.verse;
-        const index = surah.verses.findIndex((v: Verse) => v.number === verseNum);
-
-        // Stop any current audio first to clear stale playingVerse highlight
-        await stop();
-
-        if (index >= 0) {
-            flatListRef.current.scrollToIndex({
-                index,
-                animated: true,
-                viewPosition: 0,
-                viewOffset: stickyHeaderHeight,
-            });
-            // Play from the bookmarked verse after scroll settles
-            setTimeout(() => playFromVerse(surah, verseNum), 500);
-        }
-        setShowResumeBanner(false);
-    }, [savedPosition, surah, playFromVerse, stop, stickyHeaderHeight]);
-
-    // ── Scroll-to-bookmark: auto-scroll to verse when navigating from Khatma ──
+    // ── Auto-save reading position on exit ──
     useEffect(() => {
-        if (verseParam && surah?.verses && flatListRef.current) {
-            const verseNum = Number(verseParam);
-            const index = surah.verses.findIndex((v: Verse) => v.number === verseNum);
-            if (index >= 0) {
-                const tryScroll = () => {
-                    if (layoutReadyRef.current) {
-                        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0, viewOffset: insets.top + 56 });
-                        // Auto-play if coming from Khatma "Continue Reading"
-                        if (autoplay === 'true' && !autoplayTriggeredRef.current) {
-                            autoplayTriggeredRef.current = true;
-                            setTimeout(() => playFromVerse(surah, verseNum), 400);
-                        }
-                    } else {
-                        setTimeout(tryScroll, 200);
-                    }
-                };
-                setTimeout(tryScroll, 300);
+        const surahRef = surah;
+        return () => {
+            // Save position when unmounting (leaving screen)
+            if (surahRef && lastVisibleVerseRef.current > 1) {
+                ReadingPositionService.save(
+                    surahRef.number,
+                    lastVisibleVerseRef.current,
+                    surahRef.englishName
+                );
             }
+        };
+    }, [surah]);
+
+    // ── Also save position when app goes to background ──
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextState) => {
+            if (nextState === 'background' || nextState === 'inactive') {
+                if (surah && lastVisibleVerseRef.current > 1) {
+                    ReadingPositionService.save(
+                        surah.number,
+                        lastVisibleVerseRef.current,
+                        surah.englishName
+                    );
+                }
+            }
+        });
+        return () => subscription.remove();
+    }, [surah]);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SINGLE SCROLL CONTROLLER — all scroll requests go through this function.
+    // It acquires a lock for 1.5s to prevent any competing scroll.
+    // ═══════════════════════════════════════════════════════════════════════════
+    const scrollToVerse = useCallback((verseNum: number, animated = true) => {
+        if (!surah?.verses || !flatListRef.current || !layoutReadyRef.current) return;
+        const index = surah.verses.findIndex((v: Verse) => v.number === verseNum);
+        if (index < 0) return;
+
+        // Acquire scroll lock
+        scrollLockRef.current = true;
+        if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+        scrollLockTimerRef.current = setTimeout(() => {
+            scrollLockRef.current = false;
+        }, 1500);
+
+        flatListRef.current.scrollToIndex({
+            index,
+            animated,
+            viewPosition: 0.5,
+        });
+    }, [surah]);
+
+    // ── Resume banner handler ──
+    const handleResumeBannerPress = useCallback(async () => {
+        if (!savedPosition || !surah) return;
+        const verseNum = savedPosition.verse;
+        await stop();
+        scrollToVerse(verseNum);
+        setTimeout(() => playFromVerse(surah, verseNum), 700);
+        setShowResumeBanner(false);
+    }, [savedPosition, surah, playFromVerse, stop, scrollToVerse]);
+
+    // ── Scroll-to-bookmark: verse param from Khatma / Continue Reading ──
+    useEffect(() => {
+        if (verseParam && surah?.verses) {
+            const verseNum = Number(verseParam);
+            const tryScroll = () => {
+                if (layoutReadyRef.current) {
+                    scrollToVerse(verseNum);
+                    if (autoplay === 'true' && !autoplayTriggeredRef.current) {
+                        autoplayTriggeredRef.current = true;
+                        setTimeout(() => playFromVerse(surah, verseNum), 700);
+                    }
+                } else {
+                    setTimeout(tryScroll, 200);
+                }
+            };
+            setTimeout(tryScroll, 300);
         }
     }, [verseParam, surah]);
 
+    // ── Autoplay from verse 1 when no specific verse is given ──
+    useEffect(() => {
+        if (autoplay === 'true' && !verseParam && surah && !autoplayTriggeredRef.current) {
+            autoplayTriggeredRef.current = true;
+            setTimeout(() => playFromVerse(surah, 1), 500);
+        }
+    }, [autoplay, verseParam, surah, playFromVerse]);
+
     // ── Auto-scroll to currently playing verse ──
+    // ONLY fires when scroll lock is NOT active (no intentional scroll in progress)
     useEffect(() => {
         if (!surah?.verses || !playingVerse || !flatListRef.current) return;
         if (playingVerse.surah !== surah.number) return;
+        if (scrollLockRef.current) return; // Another scroll is in progress
+        if (!autoScrollEnabledRef.current) {
+            setShowReturnToAudio(true);
+            return;
+        }
 
+        setShowReturnToAudio(false);
         const index = surah.verses.findIndex((v: Verse) => v.number === playingVerse.verse);
         if (index >= 0 && layoutReadyRef.current) {
+            // Use scrollToIndex directly here — no lock needed since this IS the auto-scroll
             flatListRef.current.scrollToIndex({
                 index,
                 animated: true,
-                viewPosition: 0.3,
+                viewPosition: 0.5,
             });
         }
     }, [playingVerse, surah]);
+
+    // ── Reset auto-scroll when audio stops ──
+    useEffect(() => {
+        if (!playingVerse || !isPlaying) {
+            setShowReturnToAudio(false);
+            autoScrollEnabledRef.current = true;
+        }
+    }, [playingVerse, isPlaying]);
+
+    // ── Manual scroll detection — pause auto-scroll ──
+    const handleScrollBeginDrag = useCallback(() => {
+        if (playingVerse && isPlaying) {
+            autoScrollEnabledRef.current = false;
+            setShowReturnToAudio(true);
+        }
+    }, [playingVerse, isPlaying]);
+
+    // ── Return to Audio handler ──
+    const handleReturnToAudio = useCallback(() => {
+        if (!playingVerse) return;
+        scrollToVerse(playingVerse.verse);
+        autoScrollEnabledRef.current = true;
+        setShowReturnToAudio(false);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, [playingVerse, scrollToVerse]);
 
     // ── FlatList scroll error recovery ──
     const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
@@ -174,30 +239,50 @@ export default function SurahDetail() {
             flatListRef.current?.scrollToIndex({
                 index: info.index,
                 animated: true,
-                viewPosition: 0,
-                viewOffset: insets.top + 56,
+                viewPosition: 0.5,
             });
-        }, 200);
-    }, [insets.top]);
+        }, 300);
+    }, []);
 
     // ── Khatma auto-tracking: record pages as verses become visible ──
-    const viewabilityConfig = useMemo(() => ({
-        viewAreaCoveragePercentThreshold: 50,
-        minimumViewTime: 1500, // Must be visible for 1.5s to count as "read"
-    }), []);
+    // Using viewabilityConfigCallbackPairs ref for stable tracking with Animated.FlatList
+    const viewabilityConfigCallbackPairs = useRef([
+        {
+            viewabilityConfig: {
+                viewAreaCoveragePercentThreshold: 50,
+                minimumViewTime: 500,
+            },
+            onViewableItemsChanged: ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+                const currentSurah = surahRef.current;
+                if (!currentSurah) return;
+                for (const { item } of viewableItems) {
+                    const verse = item as Verse;
+                    if (verse.page) {
+                        recordPageRead(verse.page, currentSurah.number, verse.number, currentSurah.englishName);
+                    }
+                }
+                // Track the last visible verse for auto-save
+                if (viewableItems.length > 0) {
+                    const lastVisible = viewableItems[viewableItems.length - 1];
+                    if (lastVisible?.item?.number) {
+                        lastVisibleVerseRef.current = lastVisible.item.number;
+                    }
+                }
+            },
+        },
+    ]);
 
-    const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-        if (!surah) return;
-        viewableItems.forEach(({ item }) => {
-            const verse = item as Verse;
-            if (verse.page) {
-                recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
-            }
-        });
-    }, [surah, recordPageRead]);
+    // ── Khatma: record first verse on surah load as a baseline ──
+    useEffect(() => {
+        if (!surah || surah.verses.length === 0) return;
+        const firstVerse = surah.verses[0];
+        if (firstVerse.page) {
+            console.log(`[Khatma] Initial tracking: Surah ${surah.number} loaded, recording page ${firstVerse.page}`);
+            recordPageRead(firstVerse.page, surah.number, firstVerse.number, surah.englishName);
+        }
+    }, [surah?.number]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Khatma auto-tracking: record page when audio plays a verse ──
-    // Also auto-advance reading position so "Continue Reading" follows the player
     useEffect(() => {
         if (!surah || !playingVerse) return;
         if (playingVerse.surah !== surah.number) return;
@@ -205,16 +290,23 @@ export default function SurahDetail() {
         if (verse?.page) {
             recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
         }
-
-        // Auto-advance reading position: update bookmark to follow the player
-        // Only auto-advance forward — don't move backwards automatically
-        const currentBookmark = bookmarkedVerse ?? 0;
-        if (playingVerse.verse > currentBookmark) {
-            ReadingPositionService.save(surah.number, playingVerse.verse, surah.englishName);
-            setSavedPosition({ surah: surah.number, verse: playingVerse.verse, timestamp: Date.now() });
-            setBookmarkedVerse(playingVerse.verse);
+        // Update lastVisibleVerse if auto-scroll is active (user is following audio)
+        if (autoScrollEnabledRef.current) {
+            lastVisibleVerseRef.current = playingVerse.verse;
         }
-    }, [surah, playingVerse, recordPageRead, bookmarkedVerse]);
+    }, [surah, playingVerse, recordPageRead]);
+
+    // ── Khatma BATCH tracking: when audio playback completes, record ALL pages ──
+    useEffect(() => {
+        if (!lastCompletedPlayback || !surah) return;
+        if (lastCompletedPlayback.surah !== surah.number) return;
+        // Batch-record every verse page from the completed playlist
+        for (const verse of lastCompletedPlayback.verses) {
+            if (verse.page) {
+                recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
+            }
+        }
+    }, [lastCompletedPlayback, surah, recordPageRead]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -229,16 +321,19 @@ export default function SurahDetail() {
     }, [isRecording]);
 
     // Auto-scroll to highlighted verse during Follow Along
+    // Uses direct scrollToIndex (NOT scrollToVerse) because Follow Along fires
+    // rapid matches and the 1.5s lock would block most scrolls.
+    // This is safe: Follow Along is mutually exclusive with audio playback.
     useEffect(() => {
         if (followAlong.matchedVerseId && surah?.verses && flatListRef.current) {
             const verseIndex = surah.verses.findIndex(
-                (v: any) => v.number === followAlong.matchedVerseId
+                (v: Verse) => v.number === followAlong.matchedVerseId
             );
-            if (verseIndex >= 0) {
+            if (verseIndex >= 0 && layoutReadyRef.current) {
                 flatListRef.current.scrollToIndex({
                     index: verseIndex,
                     animated: true,
-                    viewPosition: 0.3, // Position verse 30% from top
+                    viewPosition: 0.5,
                 });
             }
         }
@@ -322,11 +417,11 @@ export default function SurahDetail() {
                     useNativeDriver: false,
                 })}
                 onScrollToIndexFailed={onScrollToIndexFailed}
+                onScrollBeginDrag={handleScrollBeginDrag}
                 onLayout={() => { layoutReadyRef.current = true; }}
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
-                viewabilityConfig={viewabilityConfig}
-                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs.current}
                 renderItem={({ item, index }: { item: any; index: number }) => (
                     <VerseItem
                         verse={item}
@@ -347,8 +442,6 @@ export default function SurahDetail() {
                             })
                         }
                         onRecord={() => handleRecordVerse(item.number)}
-                        isBookmarked={bookmarkedVerse === item.number}
-                        onBookmark={() => handleBookmarkVerse(item)}
                         isStudyMode={isStudyMode}
                         isHighlighted={followAlong.matchedVerseId === item.number}
                     />
@@ -616,7 +709,7 @@ export default function SurahDetail() {
                             style={styles.resumeBannerContent}
                         >
                             <View style={[styles.resumeIconCircle, { backgroundColor: `${ACCENT_GOLD}18` }]}>
-                                <Ionicons name="bookmark" size={16} color={ACCENT_GOLD} />
+                                <Ionicons name="location" size={16} color={ACCENT_GOLD} />
                             </View>
                             <View style={styles.resumeTextCol}>
                                 <Text style={[styles.resumeBannerTitle, { color: theme.colors.onSurface }]}>
@@ -696,12 +789,35 @@ export default function SurahDetail() {
 
             {/* Follow Along is now accessible via the header icon buttons */}
 
-            {/* Bookmark Toast */}
-            <BookmarkToast
-                visible={showBookmarkToast}
-                verseNumber={toastVerseNumber}
-                onDismiss={() => setShowBookmarkToast(false)}
-            />
+            {/* Return to Audio — floating pill when user scrolls away from playing verse */}
+            <AnimatePresence>
+                {showReturnToAudio && playingVerse && (
+                    <MotiView
+                        from={{ opacity: 0, translateY: 20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        exit={{ opacity: 0, translateY: 20 }}
+                        transition={{ type: 'spring', damping: 18 }}
+                        style={[
+                            styles.returnToAudioContainer,
+                            { bottom: insets.bottom + 80 },
+                        ]}
+                    >
+                        <Pressable
+                            onPress={handleReturnToAudio}
+                            style={({ pressed }) => [
+                                styles.returnToAudioPill,
+                                { backgroundColor: ACCENT_GOLD, opacity: pressed ? 0.85 : 1 },
+                                Shadows.md,
+                            ]}
+                        >
+                            <Ionicons name="arrow-up" size={14} color="#FFF" />
+                            <Text style={styles.returnToAudioText}>
+                                Return
+                            </Text>
+                        </Pressable>
+                    </MotiView>
+                )}
+            </AnimatePresence>
 
         </View>
     );
@@ -875,5 +991,26 @@ const styles = StyleSheet.create({
     resumeDismiss: {
         padding: 6,
         marginLeft: 4,
+    },
+    returnToAudioContainer: {
+        position: 'absolute',
+        alignSelf: 'center',
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 30,
+    },
+    returnToAudioPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 24,
+        gap: 8,
+    },
+    returnToAudioText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '700',
     },
 });

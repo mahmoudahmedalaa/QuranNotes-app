@@ -14,7 +14,7 @@ import { useKhatma } from '../../../infrastructure/khatma/KhatmaContext';
 import { ReadingPositionService } from '../../../infrastructure/reading/ReadingPositionService';
 
 export const AudioKhatmaBridge: React.FC = () => {
-    const { playingVerse, playlist, currentSurahNum, currentSurahName } = useAudio();
+    const { playingVerse, playlist, currentSurahNum, currentSurahName, lastCompletedPlayback } = useAudio();
     const { recordPageRead, completedJuz } = useKhatma();
     const lastRecordedRef = useRef<string | null>(null);
     // Track the highest verse seen per surah to only advance forward
@@ -35,6 +35,7 @@ export const AudioKhatmaBridge: React.FC = () => {
         }
     }, [currentSurahNum]);
 
+    // Per-verse tracking — fires on each verse change during playback
     useEffect(() => {
         if (!playingVerse || !currentSurahNum || playlist.length === 0) return;
 
@@ -61,6 +62,28 @@ export const AudioKhatmaBridge: React.FC = () => {
             ReadingPositionService.save(playingVerse.surah, playingVerse.verse, currentSurahName || undefined);
         }
     }, [playingVerse, playlist, currentSurahNum, currentSurahName, recordPageRead]);
+
+    // ── BATCH tracking: when audio queue finishes, record ALL pages ──
+    // This is the global safety net — fires even if user left the Surah screen.
+    // recordPageRead is idempotent (checks `includes`), so duplicates are harmless.
+    useEffect(() => {
+        if (!lastCompletedPlayback) return;
+        for (const verse of lastCompletedPlayback.verses) {
+            if (verse.page) {
+                recordPageRead(
+                    verse.page,
+                    lastCompletedPlayback.surah,
+                    verse.number,
+                    undefined, // surahName not available here but optional
+                );
+            }
+        }
+        // Save final reading position to the last verse of the completed surah
+        const lastVerse = lastCompletedPlayback.verses[lastCompletedPlayback.verses.length - 1];
+        if (lastVerse) {
+            ReadingPositionService.save(lastCompletedPlayback.surah, lastVerse.number, undefined);
+        }
+    }, [lastCompletedPlayback, recordPageRead]);
 
     // This component renders nothing — it's a pure side-effect bridge
     return null;

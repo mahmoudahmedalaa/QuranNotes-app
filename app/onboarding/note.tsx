@@ -96,10 +96,10 @@ export default function OnboardingNote() {
                         style={styles.verseRef}>
                         <Text
                             style={[styles.verseRefText, { color: theme.colors.onSurfaceVariant }]}>
-                            Al-Fatiha • Verse 1
+                            Ash-Sharh (The Relief) • Verses 5-6
                         </Text>
                         <Text style={[styles.verseArabic, { color: theme.colors.onSurface }]}>
-                            "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"
+                            "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا ۝ إِنَّ مَعَ الْعُسْرِ يُسْرًا"
                         </Text>
                     </MotiView>
 

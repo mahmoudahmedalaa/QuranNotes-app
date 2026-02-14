@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Pressable, Switch, Dimensions, Alert } from 'react-native';
 import { Text, useTheme, Button, ActivityIndicator } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,11 +16,14 @@ import {
 import * as Haptics from 'expo-haptics';
 import { revenueCatService, PurchasesOffering } from '../../src/infrastructure/payments/RevenueCatService';
 import { usePro } from '../../src/infrastructure/auth/ProContext';
+import { isRamadanSeason } from '../../src/utils/ramadanUtils';
+import RamadanPaywallScreen from '../../src/presentation/components/paywall/RamadanPaywallScreen';
 
 const { width } = Dimensions.get('window');
 
 const FEATURES = [
     { icon: 'infinity', title: 'Unlimited Recordings', description: 'No 5-recording limit' },
+    { icon: 'book-open-page-variant', title: 'Khatma Tracker', description: 'Full Quran completion tracking' },
     { icon: 'chart-box', title: 'Pro Insights', description: 'Reflection heatmap & analytics' },
     { icon: 'fire', title: 'Streak Tracking', description: 'Daily consistency gamification' },
     { icon: 'cloud-sync', title: 'Cloud Sync', description: 'Backup across all devices' },
@@ -43,6 +46,14 @@ export default function OnboardingPremium() {
 
     const highlightIndex = highlight ? parseInt(highlight as string) : null;
 
+    // ── Ramadan season? Show the Ramadan paywall instead ──
+    const handleOnboardingComplete = useCallback(async () => {
+        await completeOnboarding();
+        // Dismiss entire onboarding stack first to force clean re-evaluation at index.tsx
+        router.dismissAll();
+        router.replace('/');
+    }, [completeOnboarding, router]);
+
     useEffect(() => {
         const loadOfferings = async () => {
             try {
@@ -54,6 +65,16 @@ export default function OnboardingPremium() {
         };
         loadOfferings();
     }, []);
+
+    // Render Ramadan paywall during Ramadan season (after all hooks)
+    if (isRamadanSeason()) {
+        return (
+            <RamadanPaywallScreen
+                onPurchaseSuccess={handleOnboardingComplete}
+                onDismiss={handleOnboardingComplete}
+            />
+        );
+    }
 
     const handleSubscribe = async () => {
         if (!offering) {
@@ -76,6 +97,7 @@ export default function OnboardingPremium() {
                 checkStatus();
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 await completeOnboarding();
+                router.dismissAll();
                 router.replace('/');
             } else if (!userCancelled) {
                 Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
@@ -90,6 +112,7 @@ export default function OnboardingPremium() {
     const handleStartFree = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await completeOnboarding();
+        router.dismissAll();
         router.replace('/');
     };
 

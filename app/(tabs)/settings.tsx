@@ -40,7 +40,7 @@ export default function SettingsScreen() {
     const { settings, updateSettings, resetSettings } = useSettings();
 
     const { toggleDebugPro, isPro } = usePro();
-    const { user, loading, logout, deleteAccount } = useAuth();
+    const { user, loading, logout, deleteAccount, deleteAccountWithPassword } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
 
     // Notification state
@@ -148,9 +148,16 @@ export default function SettingsScreen() {
                                         try {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                             await deleteAccount();
-                                            Alert.alert('Account Deleted', 'Your account and all data have been permanently deleted.');
+                                            // Navigate to welcome screen with clean stack
+                                            router.dismissAll();
+                                            router.replace('/');
                                         } catch (error: any) {
-                                            Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+                                            if (error.code === 'auth/needs-password') {
+                                                // Email/password user — prompt for password
+                                                promptForPasswordAndDelete();
+                                            } else {
+                                                Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+                                            }
                                         }
                                     },
                                 },
@@ -159,6 +166,42 @@ export default function SettingsScreen() {
                     },
                 },
             ]
+        );
+    };
+
+    /** Prompt email/password users for their password to re-authenticate before deletion. */
+    const promptForPasswordAndDelete = () => {
+        Alert.prompt(
+            'Verify Your Identity',
+            'Please enter your password to confirm account deletion.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete Account',
+                    style: 'destructive',
+                    onPress: async (password?: string) => {
+                        if (!password || password.length === 0) {
+                            Alert.alert('Error', 'Password is required.');
+                            return;
+                        }
+                        try {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                            await deleteAccountWithPassword(password);
+                            router.dismissAll();
+                            router.replace('/');
+                        } catch (error: any) {
+                            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                                Alert.alert('Incorrect Password', 'The password you entered is incorrect. Please try again.', [
+                                    { text: 'OK', onPress: () => promptForPasswordAndDelete() },
+                                ]);
+                            } else {
+                                Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+                            }
+                        }
+                    },
+                },
+            ],
+            'secure-text'
         );
     };
 
@@ -765,8 +808,8 @@ export default function SettingsScreen() {
                         </View>
                     )}
 
-                    {/* Debug Section — only visible in development builds */}
-                    {__DEV__ && (
+                    {/* Debug Section — Ramadan simulator */}
+                    {(
                         <View style={styles.section}>
                             <Text
                                 style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>

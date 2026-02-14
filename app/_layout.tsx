@@ -13,8 +13,22 @@ import { StatusBar } from 'expo-status-bar';
 import { PremiumTheme } from '../src/presentation/theme/DesignSystem';
 import { RepositoryProvider } from '../src/infrastructure/di/RepositoryContext';
 import Toast from 'react-native-toast-message';
+import { toastConfig } from '../src/presentation/components/feedback/toastConfig';
+import { initRamadanDates } from '../src/utils/ramadanUtils';
+import { useEffect } from 'react';
 
 export default function RootLayout() {
+    // Fetch + listen for Ramadan dates from Firestore (real-time)
+    useEffect(() => {
+        let unsubscribe: (() => void) | undefined;
+        initRamadanDates().then((unsub) => {
+            unsubscribe = unsub;
+        });
+        return () => {
+            unsubscribe?.();
+        };
+    }, []);
+
     return (
         <>
             <RepositoryProvider>
@@ -65,6 +79,7 @@ export default function RootLayout() {
                 </AuthProvider>
             </RepositoryProvider>
             <Toast
+                config={toastConfig}
                 topOffset={80}
                 visibilityTime={5000}
             />

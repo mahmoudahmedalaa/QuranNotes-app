@@ -40,6 +40,7 @@ interface TodayReadingCardProps {
     isCompleted: boolean;
     isToday: boolean;
     onToggle: () => void;
+    isTrialExpired?: boolean;
 }
 
 export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
@@ -51,6 +52,7 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
     isCompleted,
     isToday,
     onToggle,
+    isTrialExpired,
 }) => {
     const theme = useTheme();
     const router = useRouter();
@@ -64,6 +66,12 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
     const resumeVerse = audioIsRelevant ? playingVerse!.verse : lastPosition?.verse;
 
     const handleContinueReading = () => {
+        // Premium gate: trial expired → show paywall
+        if (isTrialExpired) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            router.push('/paywall?reason=khatma');
+            return;
+        }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         if (resumeVerse) {
             router.push(`/surah/${resumeSurahNumber}?verse=${resumeVerse}&autoplay=true`);
@@ -131,30 +139,9 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                                 {getHeaderText()}
                             </Text>
                             <Text style={[styles.juzLabel, { color: theme.colors.onSurfaceVariant }]}>
-                                Juz {juz.juzNumber} · {juz.totalPages} pages
+                                Juz {juz.juzNumber} · {juz.startSurah} → {juz.endSurah} · {juz.totalPages} pages
                             </Text>
                         </View>
-                    </View>
-                </View>
-
-                {/* Surah Range */}
-                <View style={[styles.surahRange, { backgroundColor: theme.colors.surfaceVariant }]}>
-                    <View style={styles.surahItem}>
-                        <Text style={[styles.surahArabic, { color: theme.colors.primary }]}>
-                            {juz.startSurahArabic}
-                        </Text>
-                        <Text style={[styles.surahEnglish, { color: theme.colors.onSurfaceVariant }]}>
-                            {juz.startSurah}
-                        </Text>
-                    </View>
-                    <MaterialCommunityIcons name="arrow-right" size={14} color={theme.colors.onSurfaceVariant} />
-                    <View style={styles.surahItem}>
-                        <Text style={[styles.surahArabic, { color: theme.colors.primary }]}>
-                            {juz.endSurahArabic}
-                        </Text>
-                        <Text style={[styles.surahEnglish, { color: theme.colors.onSurfaceVariant }]}>
-                            {juz.endSurah}
-                        </Text>
                     </View>
                 </View>
 
@@ -306,28 +293,6 @@ const styles = StyleSheet.create({
     },
     juzLabel: {
         fontSize: 13,
-        marginTop: 1,
-    },
-    surahRange: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: Spacing.md,
-        paddingVertical: 10,
-        paddingHorizontal: Spacing.md,
-        borderRadius: BorderRadius.md,
-        marginTop: Spacing.sm,
-    },
-    surahItem: {
-        alignItems: 'center',
-    },
-    surahArabic: {
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    surahEnglish: {
-        fontSize: 12,
-        marginTop: 2,
     },
     progressSection: {
         marginTop: Spacing.md,

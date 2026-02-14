@@ -38,7 +38,7 @@ export default function ForgotPasswordScreen() {
             // Show success toast
             Toast.show({
                 type: 'success',
-                text1: '📧 Reset Email Sent!',
+                text1: 'Reset Email Sent!',
                 text2: 'Check your inbox or junk/spam folder for the reset link.',
                 visibilityTime: 5000,
                 position: 'top',

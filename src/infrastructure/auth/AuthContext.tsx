@@ -14,6 +14,8 @@ interface AuthContextType {
     resetPassword: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     deleteAccount: () => Promise<void>;
+    deleteAccountWithPassword: (password: string) => Promise<void>;
+    getSignInProvider: () => 'google.com' | 'apple.com' | 'password' | 'anonymous' | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,6 +29,8 @@ const AuthContext = createContext<AuthContextType>({
     resetPassword: async () => { },
     logout: async () => { },
     deleteAccount: async () => { },
+    deleteAccountWithPassword: async () => { },
+    getSignInProvider: () => null,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -156,11 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             await authRepo.deleteAccount();
             setUser(null);
-
-            // Clear all AsyncStorage for this user
-            await AsyncStorage.removeItem('hasSeenWelcome');
-            await AsyncStorage.removeItem('hasCompletedOnboarding');
-
+            await AsyncStorage.clear();
         } catch (e) {
             console.error('[AuthContext] deleteAccount error:', e);
             throw e;
@@ -168,6 +168,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
         }
     };
+
+    const deleteAccountWithPassword = async (password: string) => {
+        setLoading(true);
+        try {
+            await authRepo.reauthenticateWithPasswordAndDelete(password);
+            setUser(null);
+            await AsyncStorage.clear();
+        } catch (e) {
+            console.error('[AuthContext] deleteAccountWithPassword error:', e);
+            throw e;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getSignInProvider = () => authRepo.getSignInProvider();
 
     const value: AuthContextType = {
         user,
@@ -180,6 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetPassword,
         logout,
         deleteAccount,
+        deleteAccountWithPassword,
+        getSignInProvider,
     };
 
     return (

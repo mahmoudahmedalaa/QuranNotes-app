@@ -138,12 +138,47 @@ export class RemoteAuthRepository implements IAuthRepository {
         await auth.sendPasswordResetEmail(email);
     }
 
-    async deleteAccount(): Promise<void> {
+    /**
+     * Returns the primary sign-in provider for the current user.
+     * Used by the UI to decide which re-auth flow to show.
+     */
+    getSignInProvider(): 'google.com' | 'apple.com' | 'password' | 'anonymous' | null {
         const currentUser = auth.currentUser;
-        if (!currentUser) {
-            throw new Error('No user is currently signed in.');
+        if (!currentUser) return null;
+        if (currentUser.isAnonymous) return 'anonymous';
+        const providers = currentUser.providerData.map(p => p?.providerId).filter(Boolean);
+        if (providers.includes('google.com')) return 'google.com';
+        if (providers.includes('apple.com')) return 'apple.com';
+        if (providers.includes('password')) return 'password';
+        return 'anonymous'; // fallback — treat unrecognized as anonymous
+    }
+
+    /**
+     * Re-authenticate email/password user with their password,
+     * then immediately delete the account and all data.
+     */
+    async reauthenticateWithPasswordAndDelete(password: string): Promise<void> {
+        const currentUser = auth.currentUser;
+        if (!currentUser || !currentUser.email) {
+            throw new Error('No user or email found.');
         }
 
+        // Re-authenticate
+        const credential = firebase.auth.EmailAuthProvider.credential(
+            currentUser.email,
+            password,
+        );
+        await currentUser.reauthenticateWithCredential(credential);
+
+        // Now delete data + account
+        await this.deleteUserDataAndAccount(currentUser);
+    }
+
+    /**
+     * Delete all user data from Firestore, then delete the Firebase Auth account.
+     * This should only be called AFTER successful re-authentication.
+     */
+    private async deleteUserDataAndAccount(currentUser: firebase.User): Promise<void> {
         const uid = currentUser.uid;
 
         // Step 1: Delete all user data from Firestore
@@ -159,14 +194,81 @@ export class RemoteAuthRepository implements IAuthRepository {
             }
         }
 
-        // Step 2: Try to delete the auth account
-        try {
-            await currentUser.delete();
-        } catch (error: any) {
-            // If Firebase requires recent login, just sign out instead.
-            // All user data is already deleted above — the empty auth shell is harmless.
-            await auth.signOut();
+        // Step 2: Delete the Firebase Auth account (re-auth already done)
+        await currentUser.delete();
+        console.log('[DeleteAccount] Account and data deleted successfully');
+    }
+
+    async deleteAccount(): Promise<void> {
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            throw new Error('No user is currently signed in.');
         }
+
+        // Determine provider and re-authenticate FIRST
+        const provider = this.getSignInProvider();
+
+        if (provider === 'anonymous') {
+            // Anonymous users: delete Firestore data and sign out.
+            // The anonymous auth record will be cleaned up by Firebase automatically.
+            const uid = currentUser.uid;
+            const collectionsToDelete = ['notes', 'recordings', 'folders'];
+            for (const col of collectionsToDelete) {
+                try {
+                    const q = query(collection(db, col), where('userId', '==', uid));
+                    const snapshot = await getDocs(q);
+                    const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, col, d.id)));
+                    await Promise.all(deletePromises);
+                } catch (error: any) {
+                    console.warn(`[DeleteAccount] Failed to delete ${col}:`, error.message);
+                }
+            }
+            await auth.signOut();
+            return;
+        }
+
+        if (provider === 'google.com') {
+            try {
+                const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+                GoogleSignin.configure({
+                    webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
+                });
+                await GoogleSignin.hasPlayServices();
+                const response = await GoogleSignin.signIn();
+                const idToken = response.data?.idToken;
+                if (!idToken) throw new Error('Google re-authentication failed.');
+                const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+                await currentUser.reauthenticateWithCredential(credential);
+            } catch (error: any) {
+                console.error('[DeleteAccount] Google re-auth failed:', error);
+                throw new Error('Google re-authentication failed. Please try again.');
+            }
+        } else if (provider === 'apple.com') {
+            try {
+                const AppleAuthentication = await import('expo-apple-authentication');
+                const appleCredential = await AppleAuthentication.signInAsync({
+                    requestedScopes: [0, 1],
+                });
+                if (!appleCredential.identityToken) throw new Error('Apple re-authentication failed.');
+                const oauthProvider = new firebase.auth.OAuthProvider('apple.com');
+                const credential = oauthProvider.credential({
+                    idToken: appleCredential.identityToken,
+                });
+                await currentUser.reauthenticateWithCredential(credential);
+            } catch (error: any) {
+                console.error('[DeleteAccount] Apple re-auth failed:', error);
+                throw new Error('Apple re-authentication failed. Please try again.');
+            }
+        } else if (provider === 'password') {
+            // Email/password users need to provide their password.
+            // Throw a specific error that the UI layer can handle.
+            const err = new Error('Password required for re-authentication.');
+            (err as any).code = 'auth/needs-password';
+            throw err;
+        }
+
+        // Re-auth succeeded — delete data + account
+        await this.deleteUserDataAndAccount(currentUser);
     }
 
     async signOut(): Promise<void> {

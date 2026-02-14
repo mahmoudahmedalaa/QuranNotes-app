@@ -1,4 +1,17 @@
-import { Audio } from 'expo-av';
+/**
+ * AudioPlayerService — Verse playback via react-native-track-player
+ *
+ * Uses the native OS audio queue (AVQueuePlayer on iOS, ExoPlayer on Android)
+ * for gapless playback and lock screen / Dynamic Island controls.
+ *
+ * NOTE: Recording functionality stays on expo-av (AudioRecorderService.ts).
+ */
+import TrackPlayer, {
+    Capability,
+    State,
+    Event,
+    AppKilledPlaybackBehavior,
+} from 'react-native-track-player';
 
 export type PlaybackStatus = {
     isPlaying: boolean;
@@ -6,21 +19,125 @@ export type PlaybackStatus = {
     positionMillis: number;
     durationMillis: number;
     didJustFinish: boolean;
+    /** Track index that just became active (used to sync verse state) */
+    activeTrackIndex?: number;
 };
 
 export class AudioPlayerService {
-    private sound: Audio.Sound | null = null;
     private listeners: ((status: PlaybackStatus) => void)[] = [];
+    private isSetup = false;
+    private setupPromise: Promise<void> | null = null;
 
-    // ── Preload buffer for gapless transitions ──
-    private preloadedSound: Audio.Sound | null = null;
-    private preloadedKey: string | null = null;
+    /** Build CDN URL for a verse */
+    private buildUrl(surah: number, verse: number, cdnFolder: string): string {
+        const s = surah.toString().padStart(3, '0');
+        const v = verse.toString().padStart(3, '0');
+        return `https://everyayah.com/data/${cdnFolder}/${s}${v}.mp3`;
+    }
 
-    constructor() {
-        Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: true,
-            shouldDuckAndroid: true,
+    /** Initialize the track player (idempotent — safe to call multiple times) */
+    async setup(): Promise<void> {
+        if (this.isSetup) return;
+        if (this.setupPromise) return this.setupPromise;
+
+        this.setupPromise = (async () => {
+            try {
+                await TrackPlayer.setupPlayer({
+                    // Buffer ahead for gapless transitions
+                    minBuffer: 30,
+                    maxBuffer: 60,
+                    backBuffer: 10,
+                });
+
+                await TrackPlayer.updateOptions({
+                    capabilities: [
+                        Capability.Play,
+                        Capability.Pause,
+                        Capability.SkipToNext,
+                        Capability.SkipToPrevious,
+                        Capability.SeekTo,
+                        Capability.Stop,
+                    ],
+                    compactCapabilities: [
+                        Capability.Play,
+                        Capability.Pause,
+                        Capability.SkipToNext,
+                    ],
+                    android: {
+                        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+                    },
+                });
+
+                // Subscribe to native events and forward to our listeners
+                this.subscribeToEvents();
+                this.isSetup = true;
+            } catch (e) {
+                console.warn('[AudioPlayer] Setup failed:', e);
+                // Player may already be set up (hot reload). Try to continue.
+                this.isSetup = true;
+                this.subscribeToEvents();
+            }
+        })();
+
+        return this.setupPromise;
+    }
+
+    /** Subscribe to RNTP native events and translate to our PlaybackStatus */
+    private subscribeToEvents() {
+        // Track changed — fires when the player moves to a new track in the queue
+        TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
+            if (event.index !== undefined && event.index !== null) {
+                this.notifyListeners({
+                    isPlaying: true,
+                    isBuffering: false,
+                    positionMillis: 0,
+                    durationMillis: 0,
+                    didJustFinish: false,
+                    activeTrackIndex: event.index,
+                });
+            }
+        });
+
+        // Playback state changed (playing, paused, buffering, etc.)
+        TrackPlayer.addEventListener(Event.PlaybackState, async (event) => {
+            const state = event.state;
+            const isPlaying = state === State.Playing;
+            const isBuffering = state === State.Buffering || state === State.Loading;
+
+            try {
+                const progress = await TrackPlayer.getProgress();
+                this.notifyListeners({
+                    isPlaying,
+                    isBuffering,
+                    positionMillis: Math.round((progress.position || 0) * 1000),
+                    durationMillis: Math.round((progress.duration || 0) * 1000),
+                    didJustFinish: false,
+                });
+            } catch {
+                this.notifyListeners({
+                    isPlaying,
+                    isBuffering,
+                    positionMillis: 0,
+                    durationMillis: 0,
+                    didJustFinish: false,
+                });
+            }
+        });
+
+        // Queue ended — all tracks finished playing
+        TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+            this.notifyListeners({
+                isPlaying: false,
+                isBuffering: false,
+                positionMillis: 0,
+                durationMillis: 0,
+                didJustFinish: true,
+            });
+        });
+
+        // Playback error
+        TrackPlayer.addEventListener(Event.PlaybackError, (event) => {
+            console.error('[AudioPlayer] Playback error:', event.message);
         });
     }
 
@@ -35,186 +152,85 @@ export class AudioPlayerService {
         this.listeners.forEach(l => l(status));
     }
 
-    /** Build CDN URL for a verse */
-    private buildUrl(surah: number, verse: number, cdnFolder: string): string {
-        const s = surah.toString().padStart(3, '0');
-        const v = verse.toString().padStart(3, '0');
-        return `https://everyayah.com/data/${cdnFolder}/${s}${v}.mp3`;
-    }
-
-    /** Build a unique key for a verse (used to match preloaded buffer) */
-    private verseKey(surah: number, verse: number, cdnFolder: string): string {
-        return `${surah}:${verse}:${cdnFolder}`;
-    }
-
     /**
-     * Silently clean up a sound without notifying listeners.
+     * Load a full surah as a queue and start playing from a specific verse.
+     * Each verse becomes a track with metadata for lock screen display.
      */
-    private async silentUnload(sound: Audio.Sound | null) {
-        if (!sound) return;
-        try {
-            await sound.stopAsync();
-            await sound.unloadAsync();
-        } catch (_e) {
-            // already unloaded – ignore
-        }
-    }
-
-    /**
-     * Preload the next verse into memory without playing it.
-     * Call this while the current verse is still playing.
-     * If a different verse was previously preloaded, it's discarded.
-     */
-    async preloadVerse(
-        surah: number,
-        verse: number,
-        cdnFolder: string = 'Alafasy_128kbps',
+    async loadPlaylist(
+        surahNum: number,
+        verses: { number: number }[],
+        startIndex: number,
+        cdnFolder: string,
+        reciterName: string,
+        surahName: string,
     ): Promise<void> {
-        const key = this.verseKey(surah, verse, cdnFolder);
+        await this.setup();
 
-        // Already preloaded — nothing to do
-        if (this.preloadedKey === key && this.preloadedSound) return;
+        // Reset current queue
+        await TrackPlayer.reset();
 
-        // Discard any previous preload
-        if (this.preloadedSound) {
-            this.silentUnload(this.preloadedSound);
-            this.preloadedSound = null;
-            this.preloadedKey = null;
+        // Build tracks for the entire surah
+        const tracks = verses.map((verse, idx) => ({
+            id: `${surahNum}:${verse.number}`,
+            url: this.buildUrl(surahNum, verse.number, cdnFolder),
+            title: `Surah ${surahName} (${idx + 1}/${verses.length})`,
+            artist: `Verse ${verse.number} · ${reciterName}`,
+            album: 'QuranNotes',
+            // Use app icon as artwork for Now Playing
+            artwork: require('../../../assets/icon.png'),
+        }));
+
+        await TrackPlayer.add(tracks);
+
+        // Skip to the starting verse and play
+        if (startIndex > 0) {
+            await TrackPlayer.skip(startIndex);
         }
-
-        try {
-            const url = this.buildUrl(surah, verse, cdnFolder);
-            // Load into memory but DON'T play (shouldPlay: false)
-            const { sound } = await Audio.Sound.createAsync(
-                { uri: url },
-                { shouldPlay: false },
-            );
-            // Only keep if no newer preload has been requested
-            if (this.preloadedKey === null) {
-                this.preloadedSound = sound;
-                this.preloadedKey = key;
-            } else {
-                // A different preload was started — discard this one
-                this.silentUnload(sound);
-            }
-        } catch (_e) {
-            // Preload is best-effort — if it fails, playVerse will load normally
-            this.preloadedSound = null;
-            this.preloadedKey = null;
-        }
+        await TrackPlayer.play();
     }
 
     /**
-     * Play a specific verse. If the verse was preloaded, starts instantly
-     * from the buffer (gapless). Otherwise loads from network as before.
+     * Play a single verse (used when no surah context is available).
+     * For full surah playback, prefer loadPlaylist().
      */
     async playVerse(
         surah: number,
         verse: number,
-        cdnFolder: string = 'Alafasy_128kbps',
+        cdnFolder: string,
+        reciterName: string = 'Reciter',
+        surahName: string = 'Quran',
     ): Promise<void> {
-        try {
-            const key = this.verseKey(surah, verse, cdnFolder);
-            const oldSound = this.sound;
-            this.sound = null;
+        await this.setup();
+        await TrackPlayer.reset();
 
-            const onPlaybackStatusUpdate = (status: any) => {
-                if (status.isLoaded) {
-                    this.notifyListeners({
-                        isPlaying: status.isPlaying,
-                        isBuffering: status.isBuffering,
-                        positionMillis: status.positionMillis,
-                        durationMillis: status.durationMillis || 0,
-                        didJustFinish: status.didJustFinish,
-                    });
+        const track = {
+            id: `${surah}:${verse}`,
+            url: this.buildUrl(surah, verse, cdnFolder),
+            title: `${surahName} — Verse ${verse}`,
+            artist: reciterName,
+            album: 'QuranNotes',
+            artwork: require('../../../assets/icon.png'),
+        };
 
-                    if (status.didJustFinish) {
-                        // Don't unload here — let the swap in handleNextVerse clean up
-                        // This prevents the brief silence between unload and next load
-                    }
-                }
-            };
+        await TrackPlayer.add(track);
+        await TrackPlayer.play();
+    }
 
-            let newSound: Audio.Sound;
-
-            // ── Check if this verse is preloaded (instant start!) ──
-            if (this.preloadedKey === key && this.preloadedSound) {
-                newSound = this.preloadedSound;
-                this.preloadedSound = null;
-                this.preloadedKey = null;
-                // Attach status listener and start playing
-                newSound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
-                await newSound.playAsync();
-            } else {
-                // Discard stale preload if any
-                if (this.preloadedSound) {
-                    this.silentUnload(this.preloadedSound);
-                    this.preloadedSound = null;
-                    this.preloadedKey = null;
-                }
-
-                const primaryUrl = this.buildUrl(surah, verse, cdnFolder);
-                const fallbackUrl = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${surah}:${verse}.mp3`;
-
-                try {
-                    const { sound } = await Audio.Sound.createAsync(
-                        { uri: primaryUrl },
-                        { shouldPlay: true },
-                        onPlaybackStatusUpdate,
-                    );
-                    newSound = sound;
-                } catch (_primaryError) {
-                    const { sound } = await Audio.Sound.createAsync(
-                        { uri: fallbackUrl },
-                        { shouldPlay: true },
-                        onPlaybackStatusUpdate,
-                    );
-                    newSound = sound;
-                }
-            }
-
-            this.sound = newSound;
-            this.silentUnload(oldSound);
-        } catch (error) {
-            console.error('[AudioPlayer] Failed to play audio:', error);
-            this.notifyListeners({
-                isPlaying: false,
-                isBuffering: false,
-                positionMillis: 0,
-                durationMillis: 0,
-                didJustFinish: false,
-            });
-        }
+    /** Preload is a no-op — RNTP handles buffering natively via the queue */
+    async preloadVerse(): Promise<void> {
+        // No-op: RNTP auto-buffers the next track in the queue
     }
 
     async pause(): Promise<void> {
-        if (this.sound) {
-            await this.sound.pauseAsync();
-        }
+        await TrackPlayer.pause();
     }
 
     async resume(): Promise<void> {
-        if (this.sound) {
-            await this.sound.playAsync();
-        }
+        await TrackPlayer.play();
     }
 
     async stop(): Promise<void> {
-        if (this.sound) {
-            try {
-                await this.sound.stopAsync();
-                await this.sound.unloadAsync();
-            } catch (e) {
-                // Sound might already be unloaded
-            }
-            this.sound = null;
-        }
-        // Also clean up any preloaded audio
-        if (this.preloadedSound) {
-            this.silentUnload(this.preloadedSound);
-            this.preloadedSound = null;
-            this.preloadedKey = null;
-        }
+        await TrackPlayer.reset();
         this.notifyListeners({
             isPlaying: false,
             isBuffering: false,
@@ -222,5 +238,20 @@ export class AudioPlayerService {
             durationMillis: 0,
             didJustFinish: false,
         });
+    }
+
+    /** Get current active track index in the queue */
+    async getActiveTrackIndex(): Promise<number | undefined> {
+        try {
+            return await TrackPlayer.getActiveTrackIndex();
+        } catch {
+            return undefined;
+        }
+    }
+
+    /** Skip to a specific track in the queue by index */
+    async skipToTrack(index: number): Promise<void> {
+        await TrackPlayer.skip(index);
+        await TrackPlayer.play();
     }
 }

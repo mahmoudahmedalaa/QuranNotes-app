@@ -14,8 +14,6 @@ import {
     isPageInJuz,
     JuzInfo,
 } from '../../data/khatmaData';
-import { currentRamadanDay, isRamadan } from '../../utils/ramadanUtils';
-import { useSettings } from '../settings/SettingsContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,8 +69,8 @@ interface KhatmaContextType {
     completedJuz: number[];
     isComplete: boolean;
     totalPagesRead: number;
-    ramadanDay: number;
-    isRamadanActive: boolean;
+    /** Current day number (1-30, based on day of month) */
+    currentDay: number;
     catchUp: {
         remainingJuz: number;
         remainingDays: number;
@@ -94,7 +92,7 @@ interface KhatmaContextType {
     toggleJuz: (juzNumber: number) => Promise<void>;
     setLastReadSurahForJuz: (juzNumber: number, surahNumber: number) => Promise<void>;
     resetKhatma: () => Promise<void>;
-    /** Start a new Khatma round from the current day — recalibrates schedule */
+    /** Start a new Khatma round — recalibrates schedule */
     startNextRound: () => Promise<void>;
     /** Explicitly save a bookmark position (used by per-verse bookmark in VerseItem) */
     saveBookmark: (pageNumber: number, surahNumber: number, verseNumber: number, surahName?: string) => void;
@@ -104,8 +102,10 @@ interface KhatmaContextType {
     currentRound: number;
     /** Timestamps of completed rounds */
     completedRounds: number[];
-    /** The adjusted Khatma day (accounting for round start offset) */
+    /** Day number used for Khatma scheduling (accounting for round start) */
     khatmaDay: number;
+    /** True if the 3-day free trial has expired */
+    isTrialExpired: boolean;
 }
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -131,7 +131,6 @@ export const useKhatma = (): KhatmaContextType => {
 
 export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const currentYear = new Date().getFullYear();
-    const { settings } = useSettings();
 
     const [state, setState] = useState<KhatmaState>({
         completedJuz: [],
@@ -158,6 +157,13 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (raw) {
                 const parsed = JSON.parse(raw) as KhatmaState;
                 if (Array.isArray(parsed.completedJuz)) {
+                    console.log(`[Khatma] Loaded progress: ${parsed.completedJuz.length} completed, ${Object.keys(parsed.pagesReadPerJuz || {}).length} Juz with pages tracked`);
+                    // Log detailed page data for debugging
+                    for (const [juz, pages] of Object.entries(parsed.pagesReadPerJuz || {})) {
+                        if (Array.isArray(pages) && pages.length > 0) {
+                            console.log(`[Khatma]   Juz ${juz}: ${pages.length} pages read`);
+                        }
+                    }
                     setState({
                         completedJuz: parsed.completedJuz.filter(
                             (n: number, i: number, arr: number[]) =>
@@ -207,7 +213,11 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
         // Determine which Juz this page belongs to
         const juzNumber = getJuzForPage(pageNumber);
-        if (!juzNumber) return;
+        if (!juzNumber) {
+            console.warn('[Khatma] No Juz found for page:', pageNumber);
+            return;
+        }
+        console.log(`[Khatma] Recording page ${pageNumber} → Juz ${juzNumber} (Surah ${surahNumber}:${verseNumber})`);
 
         setState(prev => {
             const currentPages = prev.pagesReadPerJuz[juzNumber] || [];
@@ -288,6 +298,11 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const totalPages = juzInfo?.totalPages ?? 20;
         const pagesRead = (state.pagesReadPerJuz[juzNumber] || []).length;
         const isJuzComplete = state.completedJuz.includes(juzNumber);
+
+        // Debug: log what we're returning so we can verify data flow
+        if (pagesRead > 0 || isJuzComplete) {
+            console.log(`[Khatma] getJuzProgress(${juzNumber}): ${pagesRead}/${totalPages} pages, complete=${isJuzComplete}`);
+        }
 
         return {
             pagesRead: isJuzComplete ? totalPages : pagesRead,
@@ -377,10 +392,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const startNextRound = useCallback(async () => {
         setState(prev => {
             const newRound = prev.currentRound + 1;
-            const day = currentRamadanDay(
-                settings.debugSimulateRamadan,
-                settings.debugRamadanDay,
-            );
+            const day = Math.min(30, new Date().getDate());
             const newState: KhatmaState = {
                 completedJuz: [],
                 pagesReadPerJuz: {},
@@ -398,7 +410,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             saveProgress(newState);
             return newState;
         });
-    }, [currentYear, settings.debugSimulateRamadan, settings.debugRamadanDay]);
+    }, [currentYear]);
 
     // ── Explicit bookmark save (separate from auto-tracking) ──
     const saveBookmark = useCallback((
@@ -437,18 +449,13 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // ─── Derived values ──────────────────────────────────────────────────
 
-    const debugOn = settings.debugSimulateRamadan;
-    const debugDay = settings.debugRamadanDay;
-    const ramadanDay = currentRamadanDay(debugOn, debugDay);
-    const isRamadanActive = isRamadan(debugOn);
+    // Use day-of-month (1-31, capped at 30) — Khatma is a permanent feature
+    const currentDay = Math.min(30, new Date().getDate());
     const totalPagesRead = useMemo(() => {
-        // Count all individual pages read across all Juz (including partial progress)
         let total = 0;
         for (const juzNum of Object.keys(state.pagesReadPerJuz)) {
             total += (state.pagesReadPerJuz[Number(juzNum)] || []).length;
         }
-        // Also count pages from completed Juz that might have been marked complete
-        // without tracking individual pages (e.g., via "Mark Complete" button)
         for (const juzNum of state.completedJuz) {
             if (!state.pagesReadPerJuz[juzNum] || state.pagesReadPerJuz[juzNum].length === 0) {
                 const juz = getJuzInfo(juzNum);
@@ -459,14 +466,14 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }, [state.pagesReadPerJuz, state.completedJuz]);
 
     // Adjusted "khatma day" — offset by round start for schedule recalibration
-    const khatmaDay = Math.max(1, ramadanDay - (state.roundStartDay || 0));
+    const khatmaDay = Math.max(1, currentDay - (state.roundStartDay || 0));
 
-    const catchUp = calculateDailyTarget(state.completedJuz, khatmaDay > 0 ? khatmaDay : 1, ramadanDay);
+    const catchUp = calculateDailyTarget(state.completedJuz, khatmaDay > 0 ? khatmaDay : 1, currentDay);
 
-    // Today's reading — uses khatmaDay (recalibrated) instead of raw ramadanDay
+    // Today's reading — always available (not gated behind Ramadan)
     const todayReading = useMemo((): TodayReading | null => {
-        if (!isRamadanActive || khatmaDay < 1) return null;
-        const juzNumber = Math.min(khatmaDay, 30); // cap at 30
+        if (khatmaDay < 1) return null;
+        const juzNumber = Math.min(khatmaDay, 30);
         const juzInfo = getJuzForDay(juzNumber);
         if (!juzInfo) return null;
 
@@ -480,7 +487,30 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             lastPosition: progress.lastPosition,
             isComplete: progress.isComplete,
         };
-    }, [isRamadanActive, khatmaDay, getJuzProgress]);
+    }, [khatmaDay, getJuzProgress]);
+
+    // ── Trial tracking: 3-day free trial for Khatma ──
+    const [trialStartDate, setTrialStartDate] = useState<string | null>(null);
+    useEffect(() => {
+        AsyncStorage.getItem('khatma_trial_start').then(date => {
+            if (date) {
+                setTrialStartDate(date);
+            } else {
+                // First time using Khatma — start trial
+                const today = todayDateString();
+                AsyncStorage.setItem('khatma_trial_start', today);
+                setTrialStartDate(today);
+            }
+        });
+    }, []);
+
+    const isTrialExpired = useMemo(() => {
+        if (!trialStartDate) return false;
+        const start = new Date(trialStartDate + 'T00:00:00');
+        const now = new Date();
+        const diffDays = Math.floor((now.getTime() - start.getTime()) / 86400000);
+        return diffDays >= 3;
+    }, [trialStartDate]);
 
     // ── Streak tracking ──
     const streakDays = useMemo(() => {
@@ -498,8 +528,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         completedJuz: state.completedJuz,
         isComplete: state.isComplete,
         totalPagesRead,
-        ramadanDay,
-        isRamadanActive,
+        currentDay,
         catchUp,
         lastReadSurah: state.lastReadSurah,
         loading,
@@ -517,6 +546,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         currentRound: state.currentRound,
         completedRounds: state.completedRounds,
         khatmaDay,
+        isTrialExpired,
     };
 
     return (
