@@ -1,11 +1,12 @@
 /**
  * RamadanCalendar — Compact collapsible calendar
- * Headspace/Calm-inspired minimal design: just 3 visual states.
+ * Headspace/Calm-inspired minimal design using a single-hue system.
  *
- * Circle states (single-hue system):
- *   ✅ Filled primary    = Completed (Juz done)
- *   🟣 Bold ring         = Today (current Juz)
- *   ⬜ Subtle neutral    = Not yet / future
+ * Visual hierarchy (all purple variations):
+ *   ✅ Solid fill        = Completed (Juz done)
+ *   🟣 Light fill        = Started (partially read)
+ *   💜 Bold ring         = Today (current Juz)
+ *   ⬜ Subtle neutral    = Not yet
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
@@ -64,24 +65,30 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         const isCompleted = completedJuz.includes(day);
         const isCurrent = day === currentDay;
         const isSelected = day === selectedDay;
+        const progress = getJuzProgress(day);
+        const hasStarted = progress.pagesRead > 0 && !isCompleted;
 
         const circleSize = size === 'compact' ? 40 : 36;
 
-        // ── 3 simple states ──
+        // ── 4 states, single hue (purple gradient) ──
         let backgroundColor: string;
         let borderWidth = 0;
         let borderColor = 'transparent';
         let textColor: string;
 
         if (isCompleted) {
-            // ✅ Done — filled primary
+            // ✅ Done — solid fill
             backgroundColor = PRIMARY;
             textColor = '#FFFFFF';
         } else if (isCurrent) {
-            // 🟣 Today — outlined ring
+            // 💜 Today — bold ring
             backgroundColor = `${PRIMARY}10`;
             borderWidth = 2.5;
             borderColor = PRIMARY;
+            textColor = PRIMARY;
+        } else if (hasStarted) {
+            // 🟣 Started — light purple fill (same hue, lower opacity)
+            backgroundColor = `${PRIMARY}18`;
             textColor = PRIMARY;
         } else {
             // ⬜ Not yet — subtle neutral
@@ -188,12 +195,16 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         return rows;
     };
 
-    // ── Minimal legend — just 2 key states ──
+    // ── Minimal legend — 3 states, all same hue ──
     const renderLegend = () => (
         <View style={styles.legendRow}>
             <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: PRIMARY }]} />
                 <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Completed</Text>
+            </View>
+            <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: `${PRIMARY}25` }]} />
+                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Started</Text>
             </View>
             <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: 'transparent', borderWidth: 2, borderColor: PRIMARY }]} />
