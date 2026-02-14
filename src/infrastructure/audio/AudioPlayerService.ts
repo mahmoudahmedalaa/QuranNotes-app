@@ -12,6 +12,10 @@ export class AudioPlayerService {
     private sound: Audio.Sound | null = null;
     private listeners: ((status: PlaybackStatus) => void)[] = [];
 
+    // ── Preload buffer for gapless transitions ──
+    private preloadedSound: Audio.Sound | null = null;
+    private preloadedKey: string | null = null;
+
     constructor() {
         Audio.setAudioModeAsync({
             playsInSilentModeIOS: true,
@@ -31,9 +35,20 @@ export class AudioPlayerService {
         this.listeners.forEach(l => l(status));
     }
 
+    /** Build CDN URL for a verse */
+    private buildUrl(surah: number, verse: number, cdnFolder: string): string {
+        const s = surah.toString().padStart(3, '0');
+        const v = verse.toString().padStart(3, '0');
+        return `https://everyayah.com/data/${cdnFolder}/${s}${v}.mp3`;
+    }
+
+    /** Build a unique key for a verse (used to match preloaded buffer) */
+    private verseKey(surah: number, verse: number, cdnFolder: string): string {
+        return `${surah}:${verse}:${cdnFolder}`;
+    }
+
     /**
      * Silently clean up a sound without notifying listeners.
-     * Used to unload the old sound after the new one has already started.
      */
     private async silentUnload(sound: Audio.Sound | null) {
         if (!sound) return;
@@ -46,9 +61,52 @@ export class AudioPlayerService {
     }
 
     /**
-     * Play a specific verse with the given reciter.
-     * Uses a "load-then-swap" strategy: the new audio is loaded and starts
-     * playing BEFORE the old sound is unloaded, eliminating audible gaps.
+     * Preload the next verse into memory without playing it.
+     * Call this while the current verse is still playing.
+     * If a different verse was previously preloaded, it's discarded.
+     */
+    async preloadVerse(
+        surah: number,
+        verse: number,
+        cdnFolder: string = 'Alafasy_128kbps',
+    ): Promise<void> {
+        const key = this.verseKey(surah, verse, cdnFolder);
+
+        // Already preloaded — nothing to do
+        if (this.preloadedKey === key && this.preloadedSound) return;
+
+        // Discard any previous preload
+        if (this.preloadedSound) {
+            this.silentUnload(this.preloadedSound);
+            this.preloadedSound = null;
+            this.preloadedKey = null;
+        }
+
+        try {
+            const url = this.buildUrl(surah, verse, cdnFolder);
+            // Load into memory but DON'T play (shouldPlay: false)
+            const { sound } = await Audio.Sound.createAsync(
+                { uri: url },
+                { shouldPlay: false },
+            );
+            // Only keep if no newer preload has been requested
+            if (this.preloadedKey === null) {
+                this.preloadedSound = sound;
+                this.preloadedKey = key;
+            } else {
+                // A different preload was started — discard this one
+                this.silentUnload(sound);
+            }
+        } catch (_e) {
+            // Preload is best-effort — if it fails, playVerse will load normally
+            this.preloadedSound = null;
+            this.preloadedKey = null;
+        }
+    }
+
+    /**
+     * Play a specific verse. If the verse was preloaded, starts instantly
+     * from the buffer (gapless). Otherwise loads from network as before.
      */
     async playVerse(
         surah: number,
@@ -56,16 +114,7 @@ export class AudioPlayerService {
         cdnFolder: string = 'Alafasy_128kbps',
     ): Promise<void> {
         try {
-            // Build URL using EveryAyah CDN with the selected reciter's folder
-            const paddedSurah = surah.toString().padStart(3, '0');
-            const paddedVerse = verse.toString().padStart(3, '0');
-            const primaryUrl = `https://everyayah.com/data/${cdnFolder}/${paddedSurah}${paddedVerse}.mp3`;
-
-            // Fallback URL using Islamic Network CDN
-            const fallbackUrl = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${surah}:${verse}.mp3`;
-
-
-            // Keep reference to old sound for cleanup AFTER new one starts
+            const key = this.verseKey(surah, verse, cdnFolder);
             const oldSound = this.sound;
             this.sound = null;
 
@@ -80,32 +129,50 @@ export class AudioPlayerService {
                     });
 
                     if (status.didJustFinish) {
-                        this.sound?.unloadAsync();
-                        this.sound = null;
+                        // Don't unload here — let the swap in handleNextVerse clean up
+                        // This prevents the brief silence between unload and next load
                     }
                 }
             };
 
             let newSound: Audio.Sound;
 
-            try {
-                // Load new audio (starts playing immediately via shouldPlay: true)
-                const { sound } = await Audio.Sound.createAsync(
-                    { uri: primaryUrl },
-                    { shouldPlay: true },
-                    onPlaybackStatusUpdate,
-                );
-                newSound = sound;
-            } catch (_primaryError) {
-                const { sound } = await Audio.Sound.createAsync(
-                    { uri: fallbackUrl },
-                    { shouldPlay: true },
-                    onPlaybackStatusUpdate,
-                );
-                newSound = sound;
+            // ── Check if this verse is preloaded (instant start!) ──
+            if (this.preloadedKey === key && this.preloadedSound) {
+                newSound = this.preloadedSound;
+                this.preloadedSound = null;
+                this.preloadedKey = null;
+                // Attach status listener and start playing
+                newSound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
+                await newSound.playAsync();
+            } else {
+                // Discard stale preload if any
+                if (this.preloadedSound) {
+                    this.silentUnload(this.preloadedSound);
+                    this.preloadedSound = null;
+                    this.preloadedKey = null;
+                }
+
+                const primaryUrl = this.buildUrl(surah, verse, cdnFolder);
+                const fallbackUrl = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${surah}:${verse}.mp3`;
+
+                try {
+                    const { sound } = await Audio.Sound.createAsync(
+                        { uri: primaryUrl },
+                        { shouldPlay: true },
+                        onPlaybackStatusUpdate,
+                    );
+                    newSound = sound;
+                } catch (_primaryError) {
+                    const { sound } = await Audio.Sound.createAsync(
+                        { uri: fallbackUrl },
+                        { shouldPlay: true },
+                        onPlaybackStatusUpdate,
+                    );
+                    newSound = sound;
+                }
             }
 
-            // New audio is now playing — swap in and clean up old
             this.sound = newSound;
             this.silentUnload(oldSound);
         } catch (error) {
@@ -141,6 +208,12 @@ export class AudioPlayerService {
                 // Sound might already be unloaded
             }
             this.sound = null;
+        }
+        // Also clean up any preloaded audio
+        if (this.preloadedSound) {
+            this.silentUnload(this.preloadedSound);
+            this.preloadedSound = null;
+            this.preloadedKey = null;
         }
         this.notifyListeners({
             isPlaying: false,

@@ -53,6 +53,9 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const currentSurahNumRef = useRef<number | null>(null);
     const currentSurahNameRef = useRef<string | null>(null);
 
+    // Track whether preload has been triggered for the current verse
+    const preloadTriggeredRef = useRef(false);
+
     // Keep refs in sync with state
     useEffect(() => { playlistRef.current = playlist; }, [playlist]);
     useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
@@ -84,12 +87,15 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const idx = currentIndexRef.current;
         const surahNum = currentSurahNumRef.current;
 
+        // Reset preload flag for the new verse
+        preloadTriggeredRef.current = false;
+
         if (pl.length > 0 && idx < pl.length - 1 && surahNum) {
             const nextIndex = idx + 1;
             const nextVerse = pl[nextIndex];
             setPlayingVerse({ surah: surahNum, verse: nextVerse.number });
             setCurrentIndex(nextIndex);
-            currentIndexRef.current = nextIndex; // update ref immediately too
+            currentIndexRef.current = nextIndex;
             const cdnFolder = getCdnFolder();
             player.playVerse(surahNum, nextVerse.number, cdnFolder);
         } else {
@@ -109,13 +115,33 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         const unsubscribe = player.addListener((status: PlaybackStatus) => {
             setIsPlaying(status.isPlaying);
+
+            // ── Preload next verse when current is halfway done ──
+            if (
+                status.isPlaying &&
+                !preloadTriggeredRef.current &&
+                status.durationMillis > 0 &&
+                status.positionMillis >= status.durationMillis * 0.5
+            ) {
+                preloadTriggeredRef.current = true;
+                const pl = playlistRef.current;
+                const idx = currentIndexRef.current;
+                const surahNum = currentSurahNumRef.current;
+
+                if (pl.length > 0 && idx < pl.length - 1 && surahNum) {
+                    const nextVerse = pl[idx + 1];
+                    const cdnFolder = getCdnFolder();
+                    player.preloadVerse(surahNum, nextVerse.number, cdnFolder);
+                }
+            }
+
             if (status.didJustFinish) {
-                // Minimal delay — just enough for state to settle
-                setTimeout(() => handleNextVerse(), 10);
+                // No delay needed — next verse is preloaded and ready
+                handleNextVerse();
             }
         });
         return unsubscribe;
-    }, [handleNextVerse]);
+    }, [handleNextVerse, getCdnFolder]);
 
     // Play a specific verse
     const playVerse = useCallback(
