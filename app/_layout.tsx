@@ -4,6 +4,7 @@ import { FolderProvider } from '../src/infrastructure/notes/FolderContext';
 import { StreakProvider } from '../src/infrastructure/auth/StreakContext';
 import { KhatmaProvider } from '../src/infrastructure/khatma/KhatmaContext';
 import { AudioProvider } from '../src/infrastructure/audio/AudioContext';
+import { AudioKhatmaBridge } from '../src/presentation/components/khatma/AudioKhatmaBridge';
 import { OnboardingProvider } from '../src/infrastructure/onboarding/OnboardingContext';
 import { AuthProvider } from '../src/infrastructure/auth/AuthContext';
 import { ProProvider } from '../src/infrastructure/auth/ProContext';
@@ -24,6 +25,7 @@ export default function RootLayout() {
                                 <SettingsProvider>
                                     <AudioProvider>
                                         <KhatmaProvider>
+                                            <AudioKhatmaBridge />
                                             <NoteProvider>
                                                 <FolderProvider>
                                                     <StatusBar style="dark" />

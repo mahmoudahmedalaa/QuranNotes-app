@@ -23,30 +23,38 @@ import { Spacing, BorderRadius, Shadows } from '../../theme/DesignSystem';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── Premium color palette ──────────────────────────────────────────────────
+// ─── Color palette — warmer, softer celebration tones (aligned with app gold accents) ──
 const COLORS = {
-    // Gradient background
-    gradientStart: '#064E3B',     // Deep teal
-    gradientMid: '#065F46',       // Emerald
-    gradientEnd: '#047857',       // Bright emerald
+    // Gradient background — softer celebratory violet-indigo
+    gradientStart: '#4A3691',     // Warm medium purple
+    gradientMid: '#352770',       // Muted violet
+    gradientEnd: '#261D55',       // Soft deep indigo
 
-    // Gold accents
-    gold: '#F5A623',
-    goldLight: '#FFD700',
-    goldGlow: 'rgba(245, 166, 35, 0.25)',
+    // Gold accents (matches app secondary #D4A853)
+    gold: '#F5C542',
+    goldLight: '#D4A853',
+    goldGlow: 'rgba(245, 197, 66, 0.30)',
 
-    // Text
-    white: '#FFFFFF',
-    whiteSecondary: 'rgba(255,255,255,0.8)',
-    whiteTertiary: 'rgba(255,255,255,0.5)',
+    // Primary accent — warm gold instead of cold purple
+    primary: '#D4A853',
+    primaryDeep: '#C49A48',
 
-    // Share button gradient
-    shareStart: '#F5A623',
-    shareEnd: '#E8920A',
+    // Text (light on softer dark background)
+    headline: '#FFFFFF',
+    body: '#F0E8D8',              // Warm cream body
+    caption: '#D0C4A8',           // Warm muted caption
+
+    // Share button gradient (warm gold)
+    shareStart: '#F5C542',
+    shareEnd: '#D4A853',
 
     // Badge
-    badgeBg: 'rgba(255,215,0,0.15)',
-    badgeText: '#FFD700',
+    badgeBg: 'rgba(245, 197, 66, 0.15)',
+    badgeText: '#F5C542',
+
+    // Surface overlay
+    surfaceOverlay: 'rgba(255, 255, 255, 0.10)',
+    divider: 'rgba(245, 197, 66, 0.3)',
 };
 
 // ─── Sparkle positions (decorative) ─────────────────────────────────────────
@@ -209,7 +217,7 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                             <MaterialCommunityIcons
                                 name="moon-waning-crescent"
                                 size={64}
-                                color={COLORS.goldLight}
+                                color={COLORS.gold}
                             />
                         </View>
 
@@ -249,7 +257,10 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                         </View>
 
                         {/* App branding for share */}
-                        <Text style={styles.branding}>QuranNotes · Ramadan {new Date().getFullYear()}</Text>
+                        <View style={styles.brandingRow}>
+                            <MaterialCommunityIcons name="bookshelf" size={14} color={COLORS.caption} />
+                            <Text style={styles.branding}>QuranNotes App · Ramadan {new Date().getFullYear()}</Text>
+                        </View>
                     </LinearGradient>
                 </ViewShot>
 
@@ -296,7 +307,7 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                                     pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
                                 ]}
                             >
-                                <MaterialCommunityIcons name="restart" size={18} color={COLORS.white} />
+                                <MaterialCommunityIcons name="restart" size={18} color={COLORS.primary} />
                                 <Text style={styles.nextRoundButtonText}>
                                     Start Round {currentRound + 1}
                                 </Text>
@@ -336,13 +347,13 @@ const styles = StyleSheet.create({
     // ─── Sparkles ────────────────────────────────────────────────────────
     sparkle: {
         position: 'absolute',
-        backgroundColor: COLORS.goldLight,
+        backgroundColor: COLORS.gold,
         zIndex: 1,
     },
     sparkleStatic: {
         position: 'absolute',
-        backgroundColor: COLORS.goldLight,
-        opacity: 0.6,
+        backgroundColor: COLORS.gold,
+        opacity: 0.5,
         zIndex: 1,
     },
 
@@ -352,9 +363,9 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         overflow: 'hidden',
         elevation: 10,
-        shadowColor: '#000',
+        shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.15,
         shadowRadius: 16,
     },
     shareableCard: {
@@ -383,7 +394,7 @@ const styles = StyleSheet.create({
     arabicTitle: {
         fontSize: 42,
         fontWeight: '800',
-        color: COLORS.white,
+        color: COLORS.headline,
         textAlign: 'center',
         lineHeight: 60,
         marginBottom: 4,
@@ -391,14 +402,14 @@ const styles = StyleSheet.create({
     englishHeadline: {
         fontSize: 28,
         fontWeight: '800',
-        color: COLORS.goldLight,
+        color: COLORS.primary,
         textAlign: 'center',
         letterSpacing: 0.5,
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 15,
-        color: COLORS.whiteSecondary,
+        color: COLORS.body,
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: 24,
@@ -409,7 +420,7 @@ const styles = StyleSheet.create({
     statsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: COLORS.surfaceOverlay,
         borderRadius: 16,
         paddingVertical: 16,
         paddingHorizontal: 24,
@@ -423,12 +434,12 @@ const styles = StyleSheet.create({
     statNumber: {
         fontSize: 22,
         fontWeight: '800',
-        color: COLORS.white,
+        color: COLORS.headline,
     },
     statLabel: {
         fontSize: 12,
         fontWeight: '600',
-        color: COLORS.whiteTertiary,
+        color: COLORS.caption,
         marginTop: 2,
         textTransform: 'uppercase',
         letterSpacing: 1,
@@ -436,7 +447,7 @@ const styles = StyleSheet.create({
     statDivider: {
         width: 1,
         height: 30,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: COLORS.divider,
     },
 
     // ─── Round Badge ─────────────────────────────────────────────────────
@@ -460,8 +471,14 @@ const styles = StyleSheet.create({
     branding: {
         fontSize: 11,
         fontWeight: '500',
-        color: COLORS.whiteTertiary,
+        color: COLORS.caption,
         letterSpacing: 0.5,
+    },
+    brandingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        justifyContent: 'center',
     },
 
     // ─── Buttons ─────────────────────────────────────────────────────────
@@ -479,13 +496,13 @@ const styles = StyleSheet.create({
         borderRadius: 30,
         gap: 10,
         elevation: 6,
-        shadowColor: COLORS.gold,
+        shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
     },
     shareButtonText: {
-        color: '#FFF',
+        color: '#1A1A2E',
         fontWeight: '800',
         fontSize: 17,
         letterSpacing: 0.3,
@@ -497,12 +514,12 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 30,
         gap: 8,
-        backgroundColor: 'rgba(255,255,255,0.15)',
+        backgroundColor: 'rgba(212, 168, 83, 0.15)',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.25)',
+        borderColor: 'rgba(212, 168, 83, 0.3)',
     },
     nextRoundButtonText: {
-        color: COLORS.white,
+        color: COLORS.primary,
         fontWeight: '700',
         fontSize: 15,
     },
@@ -512,7 +529,7 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
     },
     closeButtonText: {
-        color: COLORS.whiteTertiary,
+        color: COLORS.caption,
         fontWeight: '600',
         fontSize: 14,
     },

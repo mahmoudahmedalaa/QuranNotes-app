@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { MotiView } from 'moti';
@@ -13,9 +13,10 @@ import { NoorMascot } from '../../src/presentation/components/mascot/NoorMascot'
 import { AnimatedButton } from '../../src/presentation/components/animated/AnimatedButton';
 import { Spacing, BorderRadius, Shadows } from '../../src/presentation/theme/DesignSystem';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { StreakCounter } from '../../src/presentation/components/stats/StreakCounter';
+import { ReadingPositionService, ReadingPosition } from '../../src/infrastructure/reading/ReadingPositionService';
 
 export default function Index() {
     const { loading, error, surahList, loadSurahList } = useQuran();
@@ -25,13 +26,27 @@ export default function Index() {
     const [minLoading, setMinLoading] = useState(true);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [loadingAttribution, setLoadingAttribution] = useState('');
+    const [globalPosition, setGlobalPosition] = useState<ReadingPosition | null>(null);
+
+    // Refresh global position every time the home screen gains focus
+    useFocusEffect(
+        useCallback(() => {
+            ReadingPositionService.getGlobal().then(pos => {
+                if (pos && pos.verse > 1) {
+                    setGlobalPosition(pos);
+                } else {
+                    setGlobalPosition(null);
+                }
+            });
+        }, [])
+    );
 
     const MESSAGES = [
-        '“By the remembrance of Allah do hearts find rest.” — Prophet Muhammad (PBUH)',
-        '“Allah is with those who patiently persevere.” — Prophet Muhammad (PBUH)',
-        '“The best among you are those who learn the Quran.” — Prophet Muhammad (PBUH)',
-        '“Peace is in the words of the Most Merciful.” — Prophet Muhammad (PBUH)',
-        '“Allah is the Light of the heavens and the earth.” — Prophet Muhammad (PBUH)',
+        '"Verily, in the remembrance of Allah do hearts find rest." — Quran 13:28',
+        '"Allah is with those who patiently persevere." — Quran 2:153',
+        '"The best among you are those who learn the Quran and teach it." — Sahih al-Bukhari',
+        '"Allah is the Light of the heavens and the earth." — Quran 24:35',
+        '"Read the Quran, for it will come as an intercessor on the Day of Resurrection." — Sahih Muslim',
     ];
 
     useEffect(() => {
@@ -46,8 +61,8 @@ export default function Index() {
         };
         cycleMessage();
         const interval = setInterval(cycleMessage, 3500);
-        // Show 2 messages (3.5s each) then dismiss
-        const timer = setTimeout(() => setMinLoading(false), 7000);
+        // Show 1 message (3.5s) then dismiss — returning users want to get to reading quickly
+        const timer = setTimeout(() => setMinLoading(false), 3500);
         return () => {
             clearInterval(interval);
             clearTimeout(timer);
@@ -179,6 +194,42 @@ export default function Index() {
 
                     <StreakCounter />
 
+                    {/* Continue Reading Card */}
+                    {globalPosition && (
+                        <MotiView
+                            from={{ opacity: 0, translateY: 15 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'spring', damping: 18, delay: 150 }}
+                            style={{ paddingHorizontal: Spacing.md, marginBottom: Spacing.sm }}
+                        >
+                            <Pressable
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    router.push(`/surah/${globalPosition.surah}?verse=${globalPosition.verse}&autoplay=true`);
+                                }}
+                                style={({ pressed }) => [
+                                    styles.continueCard,
+                                    { backgroundColor: theme.colors.surface },
+                                    Shadows.md,
+                                    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
+                                ]}
+                            >
+                                <View style={[styles.continueIcon, { backgroundColor: `${theme.colors.primary}15` }]}>
+                                    <MaterialCommunityIcons name="book-open-page-variant" size={22} color={theme.colors.primary} />
+                                </View>
+                                <View style={styles.continueTextGroup}>
+                                    <Text style={[styles.continueTitle, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                                        Continue Reading
+                                    </Text>
+                                    <Text style={[styles.continueSubtitle, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
+                                        {globalPosition.surahName || `Surah ${globalPosition.surah}`} · Verse {globalPosition.verse}
+                                    </Text>
+                                </View>
+                                <MaterialCommunityIcons name="play-circle" size={32} color={theme.colors.primary} />
+                            </Pressable>
+                        </MotiView>
+                    )}
+
                     {/* Content Area with subtle background */}
                     <MotiView
                         from={{ opacity: 0, translateY: 30 }}
@@ -294,5 +345,30 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    continueCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: Spacing.md,
+        borderRadius: BorderRadius.lg,
+        gap: Spacing.sm,
+    },
+    continueIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    continueTextGroup: {
+        flex: 1,
+    },
+    continueTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    continueSubtitle: {
+        fontSize: 13,
+        marginTop: 2,
     },
 });

@@ -20,8 +20,9 @@ import { VoiceFollowAlongOverlay } from '../../src/presentation/components/voice
 import { FollowAlongSaveModal } from '../../src/presentation/components/voice/FollowAlongSaveModal';
 import { FollowAlongSession } from '../../src/domain/entities/FollowAlongSession';
 import { useKhatma } from '../../src/infrastructure/khatma/KhatmaContext';
-import { BookmarkFAB } from '../../src/presentation/components/khatma/BookmarkFAB';
 import { Verse } from '../../src/domain/entities/Quran';
+import { ReadingPositionService, ReadingPosition } from '../../src/infrastructure/reading/ReadingPositionService';
+import { BookmarkToast } from '../../src/presentation/components/feedback/BookmarkToast';
 import {
     Spacing,
     Gradients,
@@ -30,8 +31,10 @@ import {
 } from '../../src/presentation/theme/DesignSystem';
 import * as Haptics from 'expo-haptics';
 
+const ACCENT_GOLD = '#D4A853';
+
 export default function SurahDetail() {
-    const { id, verse: verseParam } = useLocalSearchParams<{ id: string; verse?: string }>();
+    const { id, verse: verseParam, autoplay } = useLocalSearchParams<{ id: string; verse?: string; autoplay?: string }>();
     const router = useRouter();
     const theme = useTheme();
     const insets = useSafeAreaInsets();
@@ -52,22 +55,93 @@ export default function SurahDetail() {
     const [completedFollowAlongSession, setCompletedFollowAlongSession] = useState<FollowAlongSession | null>(null);
     const flatListRef = useRef<any>(null);
     const { recordPageRead, saveBookmark } = useKhatma();
-    const lastVisibleVerseRef = useRef<{ surah: number; verse: number; page: number; surahName?: string } | null>(null);
-    const [hasVisibleVerse, setHasVisibleVerse] = useState(false);
     const layoutReadyRef = useRef(false);
+    const autoplayTriggeredRef = useRef(false);
+
+    // ── Bookmark state ──
+    const [bookmarkedVerse, setBookmarkedVerse] = useState<number | null>(null);
+    const [showBookmarkToast, setShowBookmarkToast] = useState(false);
+    const [toastVerseNumber, setToastVerseNumber] = useState(0);
+    const [savedPosition, setSavedPosition] = useState<ReadingPosition | null>(null);
+    const [showResumeBanner, setShowResumeBanner] = useState(false);
 
     useEffect(() => {
         if (id) loadSurah(Number(id));
     }, [id]);
 
+    // ── Load saved reading position on mount ──
+    useEffect(() => {
+        if (!id) return;
+        const surahId = Number(id);
+        ReadingPositionService.get(surahId).then(pos => {
+            if (pos) {
+                setSavedPosition(pos);
+                setBookmarkedVerse(pos.verse);
+                // Show resume banner only if user has real progress (past verse 1)
+                // and didn't navigate to a specific verse
+                if (!verseParam && pos.verse > 1) {
+                    setShowResumeBanner(true);
+                }
+            }
+        });
+    }, [id, verseParam]);
+
+    // ── Bookmark handler ──
+    const handleBookmarkVerse = useCallback((verse: Verse) => {
+        const surahId = surah?.number;
+        if (!surahId) return;
+
+        // Save to both systems
+        ReadingPositionService.save(surahId, verse.number, surah?.englishName);
+        if (verse.page) {
+            saveBookmark(verse.page, surahId, verse.number, surah?.englishName);
+        }
+
+        // Update local state so re-entry picks up new bookmark
+        const newPos: ReadingPosition = { surah: surahId, verse: verse.number, timestamp: Date.now() };
+        setSavedPosition(newPos);
+        setBookmarkedVerse(verse.number);
+        setToastVerseNumber(verse.number);
+        setShowBookmarkToast(true);
+    }, [surah, saveBookmark]);
+
+    // ── Resume banner scroll handler ──
+    const stickyHeaderHeight = insets.top + 56; // height of collapsed sticky header
+    const handleResumeBannerPress = useCallback(async () => {
+        if (!savedPosition || !surah?.verses || !flatListRef.current) return;
+        const verseNum = savedPosition.verse;
+        const index = surah.verses.findIndex((v: Verse) => v.number === verseNum);
+
+        // Stop any current audio first to clear stale playingVerse highlight
+        await stop();
+
+        if (index >= 0) {
+            flatListRef.current.scrollToIndex({
+                index,
+                animated: true,
+                viewPosition: 0,
+                viewOffset: stickyHeaderHeight,
+            });
+            // Play from the bookmarked verse after scroll settles
+            setTimeout(() => playFromVerse(surah, verseNum), 500);
+        }
+        setShowResumeBanner(false);
+    }, [savedPosition, surah, playFromVerse, stop, stickyHeaderHeight]);
+
     // ── Scroll-to-bookmark: auto-scroll to verse when navigating from Khatma ──
     useEffect(() => {
         if (verseParam && surah?.verses && flatListRef.current) {
-            const index = surah.verses.findIndex((v: Verse) => v.number === Number(verseParam));
+            const verseNum = Number(verseParam);
+            const index = surah.verses.findIndex((v: Verse) => v.number === verseNum);
             if (index >= 0) {
                 const tryScroll = () => {
                     if (layoutReadyRef.current) {
-                        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.3 });
+                        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0, viewOffset: insets.top + 56 });
+                        // Auto-play if coming from Khatma "Continue Reading"
+                        if (autoplay === 'true' && !autoplayTriggeredRef.current) {
+                            autoplayTriggeredRef.current = true;
+                            setTimeout(() => playFromVerse(surah, verseNum), 400);
+                        }
                     } else {
                         setTimeout(tryScroll, 200);
                     }
@@ -77,14 +151,34 @@ export default function SurahDetail() {
         }
     }, [verseParam, surah]);
 
+    // ── Auto-scroll to currently playing verse ──
+    useEffect(() => {
+        if (!surah?.verses || !playingVerse || !flatListRef.current) return;
+        if (playingVerse.surah !== surah.number) return;
+
+        const index = surah.verses.findIndex((v: Verse) => v.number === playingVerse.verse);
+        if (index >= 0 && layoutReadyRef.current) {
+            flatListRef.current.scrollToIndex({
+                index,
+                animated: true,
+                viewPosition: 0.3,
+            });
+        }
+    }, [playingVerse, surah]);
+
     // ── FlatList scroll error recovery ──
     const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
         const offset = info.averageItemLength * info.index;
         flatListRef.current?.scrollToOffset({ offset, animated: true });
         setTimeout(() => {
-            flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.3 });
+            flatListRef.current?.scrollToIndex({
+                index: info.index,
+                animated: true,
+                viewPosition: 0,
+                viewOffset: insets.top + 56,
+            });
         }, 200);
-    }, []);
+    }, [insets.top]);
 
     // ── Khatma auto-tracking: record pages as verses become visible ──
     const viewabilityConfig = useMemo(() => ({
@@ -98,19 +192,12 @@ export default function SurahDetail() {
             const verse = item as Verse;
             if (verse.page) {
                 recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
-                // Track last visible verse for bookmark
-                lastVisibleVerseRef.current = {
-                    surah: surah.number,
-                    verse: verse.number,
-                    page: verse.page,
-                    surahName: surah.englishName,
-                };
             }
         });
-        if (viewableItems.length > 0) setHasVisibleVerse(true);
     }, [surah, recordPageRead]);
 
     // ── Khatma auto-tracking: record page when audio plays a verse ──
+    // Also auto-advance reading position so "Continue Reading" follows the player
     useEffect(() => {
         if (!surah || !playingVerse) return;
         if (playingVerse.surah !== surah.number) return;
@@ -118,7 +205,16 @@ export default function SurahDetail() {
         if (verse?.page) {
             recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
         }
-    }, [surah, playingVerse, recordPageRead]);
+
+        // Auto-advance reading position: update bookmark to follow the player
+        // Only auto-advance forward — don't move backwards automatically
+        const currentBookmark = bookmarkedVerse ?? 0;
+        if (playingVerse.verse > currentBookmark) {
+            ReadingPositionService.save(surah.number, playingVerse.verse, surah.englishName);
+            setSavedPosition({ surah: surah.number, verse: playingVerse.verse, timestamp: Date.now() });
+            setBookmarkedVerse(playingVerse.verse);
+        }
+    }, [surah, playingVerse, recordPageRead, bookmarkedVerse]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -215,12 +311,10 @@ export default function SurahDetail() {
         );
     }
 
-    // Determine bottom padding based on active bars
-    const bottomOffset = insets.bottom + (isRecording || playingVerse ? 130 : 60);
-
     return (
         <View style={styles.container}>
             <Animated.FlatList
+                style={{ flex: 1 }}
                 ref={flatListRef}
                 data={surah.verses}
                 keyExtractor={(item: any) => `${surah.number}-${item.number}`}
@@ -245,6 +339,7 @@ export default function SurahDetail() {
                             n => n.surahId === surah.number && n.verseId === item.number,
                         )}
                         onPlay={() => playFromVerse(surah, item.number)}
+                        onPause={pause}
                         onNote={() =>
                             router.push({
                                 pathname: '/note/edit',
@@ -252,11 +347,13 @@ export default function SurahDetail() {
                             })
                         }
                         onRecord={() => handleRecordVerse(item.number)}
+                        isBookmarked={bookmarkedVerse === item.number}
+                        onBookmark={() => handleBookmarkVerse(item)}
                         isStudyMode={isStudyMode}
                         isHighlighted={followAlong.matchedVerseId === item.number}
                     />
                 )}
-                contentContainerStyle={[styles.listContent, { paddingBottom: bottomOffset }]}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
                 ListHeaderComponent={() => {
                     const headerHeight = scrollY.interpolate({
                         inputRange: [-100, 0, 250],
@@ -421,6 +518,7 @@ export default function SurahDetail() {
                                         }}
                                     />
                                 </View>
+
                             </Animated.View>
                         </Animated.View>
                     );
@@ -495,6 +593,52 @@ export default function SurahDetail() {
                 </View>
             </Animated.View>
 
+            {/* Resume Reading Banner — floating overlay below sticky header */}
+            <AnimatePresence>
+                {showResumeBanner && savedPosition && (
+                    <MotiView
+                        from={{ opacity: 0, translateY: -10 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        exit={{ opacity: 0, translateY: -10 }}
+                        transition={{ type: 'spring', damping: 20 }}
+                        style={[
+                            styles.resumeBannerFloating,
+                            {
+                                top: insets.top + 56 + 8,
+                                backgroundColor: theme.colors.surface,
+                                borderColor: `${ACCENT_GOLD}40`,
+                            },
+                            Shadows.md,
+                        ]}
+                    >
+                        <Pressable
+                            onPress={handleResumeBannerPress}
+                            style={styles.resumeBannerContent}
+                        >
+                            <View style={[styles.resumeIconCircle, { backgroundColor: `${ACCENT_GOLD}18` }]}>
+                                <Ionicons name="bookmark" size={16} color={ACCENT_GOLD} />
+                            </View>
+                            <View style={styles.resumeTextCol}>
+                                <Text style={[styles.resumeBannerTitle, { color: theme.colors.onSurface }]}>
+                                    Continue Reading
+                                </Text>
+                                <Text style={[styles.resumeBannerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                                    Ayah {savedPosition.verse} · Tap to resume & play
+                                </Text>
+                            </View>
+                            <Ionicons name="play-circle" size={28} color={ACCENT_GOLD} />
+                        </Pressable>
+                        <Pressable
+                            onPress={() => setShowResumeBanner(false)}
+                            hitSlop={12}
+                            style={styles.resumeDismiss}
+                        >
+                            <Ionicons name="close" size={18} color={theme.colors.onSurfaceVariant} />
+                        </Pressable>
+                    </MotiView>
+                )}
+            </AnimatePresence>
+
             {/* Bars Container - AnimatePresence ensures smooth entry/exit */}
             <AnimatePresence>
                 {playingVerse && !isRecording && (
@@ -552,18 +696,13 @@ export default function SurahDetail() {
 
             {/* Follow Along is now accessible via the header icon buttons */}
 
-            {/* Bookmark FAB */}
-            {surah && (
-                <BookmarkFAB
-                    hasPosition={hasVisibleVerse}
-                    onBookmark={() => {
-                        const pos = lastVisibleVerseRef.current;
-                        if (pos) {
-                            saveBookmark(pos.page, pos.surah, pos.verse, pos.surahName);
-                        }
-                    }}
-                />
-            )}
+            {/* Bookmark Toast */}
+            <BookmarkToast
+                visible={showBookmarkToast}
+                verseNumber={toastVerseNumber}
+                onDismiss={() => setShowBookmarkToast(false)}
+            />
+
         </View>
     );
 }
@@ -695,5 +834,46 @@ const styles = StyleSheet.create({
         right: Spacing.sm,
         borderRadius: BorderRadius.full,
         opacity: 0.9,
+    },
+    resumeBannerFloating: {
+        position: 'absolute',
+        left: Spacing.md,
+        right: Spacing.md,
+        zIndex: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: BorderRadius.lg,
+        borderWidth: 1,
+    },
+    resumeBannerContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    resumeIconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    resumeTextCol: {
+        flex: 1,
+    },
+    resumeBannerTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    resumeBannerSubtitle: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginTop: 1,
+    },
+    resumeDismiss: {
+        padding: 6,
+        marginLeft: 4,
     },
 });

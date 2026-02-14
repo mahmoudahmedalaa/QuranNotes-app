@@ -32,10 +32,23 @@ export class AudioPlayerService {
     }
 
     /**
-     * Play a specific verse with the given reciter
-     * @param surah Surah number (1-114)
-     * @param verse Verse number
-     * @param cdnFolder The EveryAyah CDN folder name (e.g., 'Alafasy_128kbps')
+     * Silently clean up a sound without notifying listeners.
+     * Used to unload the old sound after the new one has already started.
+     */
+    private async silentUnload(sound: Audio.Sound | null) {
+        if (!sound) return;
+        try {
+            await sound.stopAsync();
+            await sound.unloadAsync();
+        } catch (_e) {
+            // already unloaded – ignore
+        }
+    }
+
+    /**
+     * Play a specific verse with the given reciter.
+     * Uses a "load-then-swap" strategy: the new audio is loaded and starts
+     * playing BEFORE the old sound is unloaded, eliminating audible gaps.
      */
     async playVerse(
         surah: number,
@@ -43,9 +56,6 @@ export class AudioPlayerService {
         cdnFolder: string = 'Alafasy_128kbps',
     ): Promise<void> {
         try {
-            // ALWAYS stop previous audio before playing new
-            await this.stop();
-
             // Build URL using EveryAyah CDN with the selected reciter's folder
             const paddedSurah = surah.toString().padStart(3, '0');
             const paddedVerse = verse.toString().padStart(3, '0');
@@ -54,62 +64,54 @@ export class AudioPlayerService {
             // Fallback URL using Islamic Network CDN
             const fallbackUrl = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${surah}:${verse}.mp3`;
 
-            console.log('[AudioPlayer] Attempting primary URL:', primaryUrl);
+            console.log('[AudioPlayer] Loading verse:', primaryUrl);
 
-            let audioUrl = primaryUrl;
+            // Keep reference to old sound for cleanup AFTER new one starts
+            const oldSound = this.sound;
+            this.sound = null;
 
-            // Try primary URL first, fall back if it fails
+            const onPlaybackStatusUpdate = (status: any) => {
+                if (status.isLoaded) {
+                    this.notifyListeners({
+                        isPlaying: status.isPlaying,
+                        isBuffering: status.isBuffering,
+                        positionMillis: status.positionMillis,
+                        durationMillis: status.durationMillis || 0,
+                        didJustFinish: status.didJustFinish,
+                    });
+
+                    if (status.didJustFinish) {
+                        this.sound?.unloadAsync();
+                        this.sound = null;
+                    }
+                }
+            };
+
+            let newSound: Audio.Sound;
+
             try {
+                // Load new audio (starts playing immediately via shouldPlay: true)
                 const { sound } = await Audio.Sound.createAsync(
-                    { uri: audioUrl },
+                    { uri: primaryUrl },
                     { shouldPlay: true },
-                    status => {
-                        if (status.isLoaded) {
-                            this.notifyListeners({
-                                isPlaying: status.isPlaying,
-                                isBuffering: status.isBuffering,
-                                positionMillis: status.positionMillis,
-                                durationMillis: status.durationMillis || 0,
-                                didJustFinish: status.didJustFinish,
-                            });
-
-                            if (status.didJustFinish) {
-                                this.sound?.unloadAsync();
-                                this.sound = null;
-                            }
-                        }
-                    },
+                    onPlaybackStatusUpdate,
                 );
-                this.sound = sound;
-            } catch (primaryError) {
+                newSound = sound;
+            } catch (_primaryError) {
                 console.log('[AudioPlayer] Primary URL failed, trying fallback:', fallbackUrl);
-
-                // Try fallback URL
                 const { sound } = await Audio.Sound.createAsync(
                     { uri: fallbackUrl },
                     { shouldPlay: true },
-                    status => {
-                        if (status.isLoaded) {
-                            this.notifyListeners({
-                                isPlaying: status.isPlaying,
-                                isBuffering: status.isBuffering,
-                                positionMillis: status.positionMillis,
-                                durationMillis: status.durationMillis || 0,
-                                didJustFinish: status.didJustFinish,
-                            });
-
-                            if (status.didJustFinish) {
-                                this.sound?.unloadAsync();
-                                this.sound = null;
-                            }
-                        }
-                    },
+                    onPlaybackStatusUpdate,
                 );
-                this.sound = sound;
+                newSound = sound;
             }
+
+            // New audio is now playing — swap in and clean up old
+            this.sound = newSound;
+            this.silentUnload(oldSound);
         } catch (error) {
             console.error('[AudioPlayer] Failed to play audio:', error);
-            // Notify listeners of error state
             this.notifyListeners({
                 isPlaying: false,
                 isBuffering: false,

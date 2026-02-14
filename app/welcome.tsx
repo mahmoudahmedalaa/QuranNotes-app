@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     hadithContainer: {
         marginTop: Spacing.lg,
         padding: Spacing.lg,
-        backgroundColor: 'rgba(255,255,255,0.5)',
+        backgroundColor: 'rgba(255,255,255,0.12)',
         borderRadius: BorderRadius.xl,
         width: '100%',
     },

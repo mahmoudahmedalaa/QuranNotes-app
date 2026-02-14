@@ -71,10 +71,14 @@ export function getJuzForDay(day: number): JuzInfo | undefined {
 
 /**
  * Calculate dynamic daily target based on progress
+ * @param completedJuz - Array of completed Juz numbers
+ * @param currentDay - The current "khatma day" (may be recalibrated for multi-round)
+ * @param actualRamadanDay - Optional: the real Ramadan day (used for remaining-days calc in multi-round)
  */
 export function calculateDailyTarget(
     completedJuz: number[],
-    currentRamadanDay: number,
+    currentDay: number,
+    actualRamadanDay?: number,
 ): {
     remainingJuz: number;
     remainingDays: number;
@@ -86,9 +90,11 @@ export function calculateDailyTarget(
     const totalJuz = 30;
     const completed = completedJuz.length;
     const remainingJuz = totalJuz - completed;
-    const remainingDays = Math.max(1, 30 - currentRamadanDay + 1);
+    // Use actual Ramadan day for "how many days left" when provided (multi-round)
+    const dayForRemaining = actualRamadanDay ?? currentDay;
+    const remainingDays = Math.max(1, 30 - dayForRemaining + 1);
     const dailyTarget = remainingJuz / remainingDays;
-    const expectedByNow = currentRamadanDay;
+    const expectedByNow = currentDay;
     const isAhead = completed > expectedByNow;
     const isBehind = completed < expectedByNow;
 

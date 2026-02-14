@@ -10,6 +10,7 @@ import {
     getTotalPagesRead,
     getJuzForDay,
     getJuzForPage,
+    getJuzInfo,
     isPageInJuz,
     JuzInfo,
 } from '../../data/khatmaData';
@@ -44,6 +45,8 @@ interface KhatmaState {
     completedRounds: number[];
     /** Current streak day count */
     streakCount: number;
+    /** Ramadan day when the current round started (0 = original, 15 = started on day 15) */
+    roundStartDay: number;
 }
 
 interface JuzProgress {
@@ -91,7 +94,9 @@ interface KhatmaContextType {
     toggleJuz: (juzNumber: number) => Promise<void>;
     setLastReadSurahForJuz: (juzNumber: number, surahNumber: number) => Promise<void>;
     resetKhatma: () => Promise<void>;
-    /** Explicitly save a bookmark position (used by BookmarkFAB) */
+    /** Start a new Khatma round from the current day — recalibrates schedule */
+    startNextRound: () => Promise<void>;
+    /** Explicitly save a bookmark position (used by per-verse bookmark in VerseItem) */
     saveBookmark: (pageNumber: number, surahNumber: number, verseNumber: number, surahName?: string) => void;
     /** Current reading streak in days */
     streakDays: number;
@@ -99,6 +104,8 @@ interface KhatmaContextType {
     currentRound: number;
     /** Timestamps of completed rounds */
     completedRounds: number[];
+    /** The adjusted Khatma day (accounting for round start offset) */
+    khatmaDay: number;
 }
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -136,6 +143,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         currentRound: 1,
         completedRounds: [],
         streakCount: 0,
+        roundStartDay: 0,
     });
     const [loading, setLoading] = useState(true);
 
@@ -164,6 +172,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                         currentRound: parsed.currentRound || 1,
                         completedRounds: parsed.completedRounds || [],
                         streakCount: parsed.streakCount || 0,
+                        roundStartDay: parsed.roundStartDay || 0,
                     });
                 }
             }
@@ -204,10 +213,10 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const currentPages = prev.pagesReadPerJuz[juzNumber] || [];
             // Already recorded this page
             if (currentPages.includes(pageNumber)) {
-                // Still update last-read position if it's a newer verse
+                // Always update last-read position to reflect user's current location
+                // (even if going backwards — user may want to re-read earlier verses)
                 const existingPos = prev.lastReadPosition[juzNumber];
-                if (!existingPos || existingPos.page < pageNumber ||
-                    (existingPos.page === pageNumber && existingPos.verse < verseNumber)) {
+                if (!existingPos || existingPos.page !== pageNumber || existingPos.verse !== verseNumber) {
                     const newState: KhatmaState = {
                         ...prev,
                         lastReadPosition: {
@@ -312,8 +321,19 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const toggleJuz = useCallback(async (juzNumber: number) => {
         setState(prev => {
             if (prev.completedJuz.includes(juzNumber)) {
+                // "Start Over" — remove from completed AND clear saved position/pages
                 const updated = prev.completedJuz.filter(n => n !== juzNumber);
-                const newState: KhatmaState = { ...prev, completedJuz: updated, isComplete: false };
+                const { [juzNumber]: _pos, ...restPositions } = prev.lastReadPosition;
+                const { [juzNumber]: _pages, ...restPages } = prev.pagesReadPerJuz;
+                const { [juzNumber]: _surah, ...restSurah } = prev.lastReadSurah;
+                const newState: KhatmaState = {
+                    ...prev,
+                    completedJuz: updated,
+                    isComplete: false,
+                    lastReadPosition: restPositions,
+                    pagesReadPerJuz: restPages,
+                    lastReadSurah: restSurah,
+                };
                 saveProgress(newState);
                 return newState;
             } else {
@@ -347,10 +367,38 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             currentRound: 1,
             completedRounds: [],
             streakCount: 0,
+            roundStartDay: 0,
         };
         setState(newState);
         await saveProgress(newState);
     }, [currentYear]);
+
+    // ── Start another Khatma from current day (date recalibration) ──
+    const startNextRound = useCallback(async () => {
+        setState(prev => {
+            const newRound = prev.currentRound + 1;
+            const day = currentRamadanDay(
+                settings.debugSimulateRamadan,
+                settings.debugRamadanDay,
+            );
+            const newState: KhatmaState = {
+                completedJuz: [],
+                pagesReadPerJuz: {},
+                lastReadPosition: {},
+                lastReadSurah: {},
+                year: currentYear,
+                isComplete: false,
+                currentRound: newRound,
+                completedRounds: [...prev.completedRounds, Date.now()],
+                streakCount: prev.streakCount,
+                lastProgressDate: prev.lastProgressDate,
+                // Recalibrate: Juz 1 starts TODAY
+                roundStartDay: day > 0 ? day - 1 : 0,
+            };
+            saveProgress(newState);
+            return newState;
+        });
+    }, [currentYear, settings.debugSimulateRamadan, settings.debugRamadanDay]);
 
     // ── Explicit bookmark save (separate from auto-tracking) ──
     const saveBookmark = useCallback((
@@ -393,18 +441,38 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const debugDay = settings.debugRamadanDay;
     const ramadanDay = currentRamadanDay(debugOn, debugDay);
     const isRamadanActive = isRamadan(debugOn);
-    const totalPagesRead = getTotalPagesRead(state.completedJuz);
-    const catchUp = calculateDailyTarget(state.completedJuz, ramadanDay > 0 ? ramadanDay : 1);
+    const totalPagesRead = useMemo(() => {
+        // Count all individual pages read across all Juz (including partial progress)
+        let total = 0;
+        for (const juzNum of Object.keys(state.pagesReadPerJuz)) {
+            total += (state.pagesReadPerJuz[Number(juzNum)] || []).length;
+        }
+        // Also count pages from completed Juz that might have been marked complete
+        // without tracking individual pages (e.g., via "Mark Complete" button)
+        for (const juzNum of state.completedJuz) {
+            if (!state.pagesReadPerJuz[juzNum] || state.pagesReadPerJuz[juzNum].length === 0) {
+                const juz = getJuzInfo(juzNum);
+                total += juz?.totalPages ?? 0;
+            }
+        }
+        return total;
+    }, [state.pagesReadPerJuz, state.completedJuz]);
 
-    // Today's reading — derived from current Ramadan day
+    // Adjusted "khatma day" — offset by round start for schedule recalibration
+    const khatmaDay = Math.max(1, ramadanDay - (state.roundStartDay || 0));
+
+    const catchUp = calculateDailyTarget(state.completedJuz, khatmaDay > 0 ? khatmaDay : 1, ramadanDay);
+
+    // Today's reading — uses khatmaDay (recalibrated) instead of raw ramadanDay
     const todayReading = useMemo((): TodayReading | null => {
-        if (!isRamadanActive || ramadanDay < 1) return null;
-        const juzInfo = getJuzForDay(ramadanDay);
+        if (!isRamadanActive || khatmaDay < 1) return null;
+        const juzNumber = Math.min(khatmaDay, 30); // cap at 30
+        const juzInfo = getJuzForDay(juzNumber);
         if (!juzInfo) return null;
 
-        const progress = getJuzProgress(ramadanDay);
+        const progress = getJuzProgress(juzNumber);
         return {
-            juzNumber: ramadanDay,
+            juzNumber,
             juzInfo,
             pagesRead: progress.pagesRead,
             totalPages: progress.totalPages,
@@ -412,7 +480,7 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             lastPosition: progress.lastPosition,
             isComplete: progress.isComplete,
         };
-    }, [isRamadanActive, ramadanDay, getJuzProgress]);
+    }, [isRamadanActive, khatmaDay, getJuzProgress]);
 
     // ── Streak tracking ──
     const streakDays = useMemo(() => {
@@ -443,10 +511,12 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         toggleJuz,
         setLastReadSurahForJuz,
         resetKhatma,
+        startNextRound,
         saveBookmark,
         streakDays,
         currentRound: state.currentRound,
         completedRounds: state.completedRounds,
+        khatmaDay,
     };
 
     return (

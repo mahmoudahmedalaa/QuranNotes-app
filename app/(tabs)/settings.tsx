@@ -764,42 +764,44 @@ export default function SettingsScreen() {
                         </View>
                     )}
 
-                    {/* Debug Section */}
-                    <View style={styles.section}>
-                        <Text
-                            style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
-                            DEBUG
-                        </Text>
-                        <View
-                            style={[
-                                styles.card,
-                                { backgroundColor: theme.colors.surface },
-                                Shadows.sm,
-                            ]}>
+                    {/* Debug Section — only visible in development builds */}
+                    {__DEV__ && (
+                        <View style={styles.section}>
+                            <Text
+                                style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                                DEBUG
+                            </Text>
                             <View
                                 style={[
-                                    styles.iconContainer,
-                                    { backgroundColor: '#D69E2E20' },
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface },
+                                    Shadows.sm,
                                 ]}>
-                                <Ionicons name="moon" size={18} color="#D69E2E" />
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: '#D69E2E20' },
+                                    ]}>
+                                    <Ionicons name="moon" size={18} color="#D69E2E" />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                        Simulate Ramadan
+                                    </Text>
+                                    <Text style={[styles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                                        Test Khatma as if Ramadan is active
+                                    </Text>
+                                </View>
+                                <Switch
+                                    value={settings.debugSimulateRamadan}
+                                    onValueChange={(val) => {
+                                        updateSettings({ debugSimulateRamadan: val });
+                                    }}
+                                    color="#D69E2E"
+                                />
                             </View>
-                            <View style={styles.cardContent}>
-                                <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
-                                    Simulate Ramadan
-                                </Text>
-                                <Text style={[styles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                                    Test Khatma as if Ramadan is active
-                                </Text>
-                            </View>
-                            <Switch
-                                value={settings.debugSimulateRamadan}
-                                onValueChange={(val) => {
-                                    updateSettings({ debugSimulateRamadan: val });
-                                }}
-                                color="#D69E2E"
-                            />
                         </View>
-                    </View>
+                    )}
 
                 </ScrollView>
 

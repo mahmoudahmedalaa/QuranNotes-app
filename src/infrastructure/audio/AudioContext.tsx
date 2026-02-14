@@ -45,6 +45,20 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [currentSurahNum, setCurrentSurahNum] = useState<number | null>(null);
     const [currentIndex, setCurrentIndex] = useState<number>(-1);
 
+    // ── Refs to prevent stale closures in handleNextVerse ──
+    // These are kept in sync with state and used in callbacks
+    // so that rapid verse transitions always see latest values.
+    const playlistRef = useRef<Verse[]>([]);
+    const currentIndexRef = useRef<number>(-1);
+    const currentSurahNumRef = useRef<number | null>(null);
+    const currentSurahNameRef = useRef<string | null>(null);
+
+    // Keep refs in sync with state
+    useEffect(() => { playlistRef.current = playlist; }, [playlist]);
+    useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+    useEffect(() => { currentSurahNumRef.current = currentSurahNum; }, [currentSurahNum]);
+    useEffect(() => { currentSurahNameRef.current = currentSurahName; }, [currentSurahName]);
+
     // Ref to track previous reciter for live switching
     const prevReciterRef = useRef(settings.reciterId);
 
@@ -64,29 +78,40 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, [settings.reciterId, playingVerse, isPlaying]);
 
     // Handle next verse when current finishes
+    // Uses refs instead of state to avoid stale closures
     const handleNextVerse = useCallback(() => {
-        if (playlist.length > 0 && currentIndex < playlist.length - 1 && currentSurahNum) {
-            const nextIndex = currentIndex + 1;
-            const nextVerse = playlist[nextIndex];
-            setPlayingVerse({ surah: currentSurahNum, verse: nextVerse.number });
+        const pl = playlistRef.current;
+        const idx = currentIndexRef.current;
+        const surahNum = currentSurahNumRef.current;
+
+        if (pl.length > 0 && idx < pl.length - 1 && surahNum) {
+            const nextIndex = idx + 1;
+            const nextVerse = pl[nextIndex];
+            setPlayingVerse({ surah: surahNum, verse: nextVerse.number });
             setCurrentIndex(nextIndex);
+            currentIndexRef.current = nextIndex; // update ref immediately too
             const cdnFolder = getCdnFolder();
-            player.playVerse(currentSurahNum, nextVerse.number, cdnFolder);
+            player.playVerse(surahNum, nextVerse.number, cdnFolder);
         } else {
             // End of playlist
             setPlayingVerse(null);
             setCurrentIndex(-1);
+            currentIndexRef.current = -1;
             setPlaylist([]);
+            playlistRef.current = [];
             setCurrentSurahNum(null);
+            currentSurahNumRef.current = null;
             setCurrentSurahName(null);
+            currentSurahNameRef.current = null;
         }
-    }, [playlist, currentIndex, currentSurahNum, getCdnFolder]);
+    }, [getCdnFolder]);
 
     useEffect(() => {
         const unsubscribe = player.addListener((status: PlaybackStatus) => {
             setIsPlaying(status.isPlaying);
             if (status.didJustFinish) {
-                setTimeout(() => handleNextVerse(), 50);
+                // Minimal delay — just enough for state to settle
+                setTimeout(() => handleNextVerse(), 10);
             }
         });
         return unsubscribe;
@@ -101,14 +126,19 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const startIndex = surah.verses.findIndex(v => v.number === verseNum);
                 if (startIndex >= 0) {
                     setPlaylist(surah.verses);
+                    playlistRef.current = surah.verses;
                     setCurrentSurahNum(surah.number);
+                    currentSurahNumRef.current = surah.number;
                     setCurrentSurahName(surah.englishName || surah.name);
+                    currentSurahNameRef.current = surah.englishName || surah.name;
                     setCurrentIndex(startIndex);
+                    currentIndexRef.current = startIndex;
                 }
-            } else if (currentSurahNum === surahNum && playlist.length > 0) {
-                const startIndex = playlist.findIndex(v => v.number === verseNum);
+            } else if (currentSurahNumRef.current === surahNum && playlistRef.current.length > 0) {
+                const startIndex = playlistRef.current.findIndex(v => v.number === verseNum);
                 if (startIndex >= 0) {
                     setCurrentIndex(startIndex);
+                    currentIndexRef.current = startIndex;
                 }
             }
 
@@ -116,7 +146,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const cdnFolder = getCdnFolder();
             await player.playVerse(surahNum, verseNum, cdnFolder);
         },
-        [getCdnFolder, currentSurahNum, playlist],
+        [getCdnFolder],
     );
 
     // Play entire surah from beginning
@@ -125,9 +155,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             await player.stop();
 
             setPlaylist(surah.verses);
+            playlistRef.current = surah.verses;
             setCurrentSurahNum(surah.number);
+            currentSurahNumRef.current = surah.number;
             setCurrentSurahName(surah.englishName || surah.name);
+            currentSurahNameRef.current = surah.englishName || surah.name;
             setCurrentIndex(0);
+            currentIndexRef.current = 0;
 
             if (surah.verses.length > 0) {
                 setPlayingVerse({ surah: surah.number, verse: surah.verses[0].number });
@@ -146,9 +180,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const startIndex = surah.verses.findIndex(v => v.number === verseNum);
             if (startIndex >= 0) {
                 setPlaylist(surah.verses);
+                playlistRef.current = surah.verses;
                 setCurrentSurahNum(surah.number);
+                currentSurahNumRef.current = surah.number;
                 setCurrentSurahName(surah.englishName || surah.name);
+                currentSurahNameRef.current = surah.englishName || surah.name;
                 setCurrentIndex(startIndex);
+                currentIndexRef.current = startIndex;
                 setPlayingVerse({ surah: surah.number, verse: verseNum });
                 const cdnFolder = getCdnFolder();
                 await player.playVerse(surah.number, verseNum, cdnFolder);
@@ -172,9 +210,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setPlayingVerse(null);
         await player.stop();
         setPlaylist([]);
+        playlistRef.current = [];
         setCurrentIndex(-1);
+        currentIndexRef.current = -1;
         setCurrentSurahNum(null);
+        currentSurahNumRef.current = null;
         setCurrentSurahName(null);
+        currentSurahNameRef.current = null;
     }, []);
 
     const value: AudioContextType = {

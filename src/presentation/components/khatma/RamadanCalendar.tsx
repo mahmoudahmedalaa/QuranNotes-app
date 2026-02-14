@@ -1,6 +1,13 @@
 /**
  * RamadanCalendar — Compact collapsible calendar
  * Shows a Headspace-style weekly strip by default, expandable to full month grid
+ *
+ * Circle color legend:
+ *   ✅ Green filled     = Completed (Juz done)
+ *   🟠 Gold border      = In progress (some pages read)
+ *   🟣 Purple filled    = Today's Juz
+ *   ⬜ Light gray       = Future (not yet reached)
+ *   🔴 Red-ish tint     = Missed (past, not completed)
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
@@ -23,15 +30,19 @@ interface RamadanCalendarProps {
     onSelectDay: (day: number) => void;
 }
 
-// Colors — warm accent palette (alpha-channel for dark mode compatibility)
-const ACCENT = {
-    gold: '#F5A623',
-    goldLight: '#F5A62320',   // 20% opacity gold — works on any surface
-    green: '#10B981',
-    greenLight: '#10B98120',  // 20% opacity green
-    missed: '#F59E0B',
-    missedLight: '#F59E0B18', // subtle amber wash
-    future: '#CBD5E1',
+// Clear, semantically meaningful color palette
+const STATUS_COLORS = {
+    completed: '#10B981',       // Green — done ✓
+    completedBg: '#10B981',
+    inProgress: '#F5A623',      // Gold — started, not done
+    inProgressBg: '#F5A62318',  // Subtle gold wash
+    today: '#7C3AED',           // Vibrant purple — today
+    todayBg: '#7C3AED',
+    missed: '#EF4444',          // Red — missed/behind
+    missedBg: '#EF444412',      // Very subtle red wash
+    future: '#94A3B8',          // Slate gray — not yet
+    futureBg: '#94A3B810',      // Nearly invisible
+    selected: '#7C3AED',       // Purple ring for selection
 };
 
 const COLS = 5;
@@ -75,6 +86,35 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
 
         const circleSize = size === 'compact' ? 40 : 36;
 
+        // Determine circle appearance based on status (priority order)
+        let backgroundColor: string;
+        let borderWidth = 0;
+        let borderColor = 'transparent';
+        let textColor: string;
+
+        if (isCompleted) {
+            backgroundColor = STATUS_COLORS.completedBg;
+            textColor = '#FFFFFF';
+        } else if (isCurrent) {
+            backgroundColor = STATUS_COLORS.todayBg;
+            textColor = '#FFFFFF';
+        } else if (hasPartial) {
+            backgroundColor = STATUS_COLORS.inProgressBg;
+            borderWidth = 2;
+            borderColor = STATUS_COLORS.inProgress;
+            textColor = STATUS_COLORS.inProgress;
+        } else if (isPast) {
+            backgroundColor = STATUS_COLORS.missedBg;
+            textColor = STATUS_COLORS.missed;
+        } else {
+            // Future
+            backgroundColor = STATUS_COLORS.futureBg;
+            textColor = STATUS_COLORS.future;
+        }
+
+        // Selected state: outer ring (doesn't override status color)
+        const showSelectedRing = isSelected && !isCurrent;
+
         return (
             <Pressable
                 key={day}
@@ -82,66 +122,56 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     onSelectDay(day);
                 }}
-                style={({ pressed }) => [
-                    {
-                        alignItems: 'center',
-                        gap: 3,
-                        opacity: pressed ? 0.7 : 1,
-                    },
-                ]}
+                style={({ pressed }) => [{
+                    alignItems: 'center',
+                    gap: 3,
+                    opacity: pressed ? 0.7 : 1,
+                }]}
             >
-                <View
-                    style={[
-                        {
-                            width: circleSize,
-                            height: circleSize,
-                            borderRadius: circleSize / 2,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        },
-                        isCompleted && { backgroundColor: ACCENT.green },
-                        hasPartial && { backgroundColor: ACCENT.goldLight, borderWidth: 2, borderColor: ACCENT.gold },
-                        isCurrent && !isCompleted && !hasPartial && {
-                            backgroundColor: `${theme.colors.primary}15`,
-                            borderWidth: 2.5,
-                            borderColor: theme.colors.primary,
-                        },
-                        isSelected && !isCurrent && !isCompleted && !hasPartial && {
-                            backgroundColor: theme.colors.primaryContainer,
-                            borderWidth: 1.5,
-                            borderColor: theme.colors.primary,
-                        },
-                        isPast && !isCompleted && !hasPartial && {
-                            backgroundColor: ACCENT.missedLight,
-                        },
-                        isFuture && !isCompleted && {
-                            backgroundColor: `${ACCENT.future}30`,
-                        },
-                    ]}
-                >
-                    {isCompleted ? (
-                        <MaterialCommunityIcons name="check" size={18} color="#FFF" />
-                    ) : (
-                        <Text
-                            style={[
-                                styles.dayNumber,
-                                {
-                                    color: isCurrent
-                                        ? theme.colors.primary
-                                        : hasPartial
-                                            ? ACCENT.gold
-                                            : isPast
-                                                ? ACCENT.missed
-                                                : isFuture
-                                                    ? ACCENT.future
-                                                    : theme.colors.onSurface,
-                                    fontWeight: isCurrent || isSelected ? '800' : '600',
-                                },
-                            ]}
-                        >
-                            {day}
-                        </Text>
-                    )}
+                {/* Outer ring for selected state */}
+                <View style={[
+                    {
+                        width: circleSize + (showSelectedRing ? 6 : 0),
+                        height: circleSize + (showSelectedRing ? 6 : 0),
+                        borderRadius: (circleSize + 6) / 2,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    },
+                    showSelectedRing && {
+                        borderWidth: 2,
+                        borderColor: `${STATUS_COLORS.selected}60`,
+                    },
+                ]}>
+                    <View
+                        style={[
+                            {
+                                width: circleSize,
+                                height: circleSize,
+                                borderRadius: circleSize / 2,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor,
+                                borderWidth,
+                                borderColor,
+                            },
+                        ]}
+                    >
+                        {isCompleted ? (
+                            <MaterialCommunityIcons name="check" size={18} color="#FFF" />
+                        ) : (
+                            <Text
+                                style={[
+                                    styles.dayNumber,
+                                    {
+                                        color: textColor,
+                                        fontWeight: isCurrent || isSelected ? '800' : '600',
+                                    },
+                                ]}
+                            >
+                                {day}
+                            </Text>
+                        )}
+                    </View>
                 </View>
                 {size === 'compact' && (
                     <Text
@@ -149,7 +179,7 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                             styles.dayLabel,
                             {
                                 color: isCurrent
-                                    ? theme.colors.primary
+                                    ? STATUS_COLORS.today
                                     : theme.colors.onSurfaceVariant,
                                 fontWeight: isCurrent ? '700' : '400',
                             },
@@ -184,6 +214,28 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         return rows;
     };
 
+    // ── Legend items ──
+    const renderLegend = () => (
+        <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS.completed }]} />
+                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Done</Text>
+            </View>
+            <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS.today }]} />
+                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Today</Text>
+            </View>
+            <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: STATUS_COLORS.inProgress }]} />
+                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Started</Text>
+            </View>
+            <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS.missedBg, borderWidth: 1, borderColor: `${STATUS_COLORS.missed}30` }]} />
+                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Missed</Text>
+            </View>
+        </View>
+    );
+
     const weekDays = getWeekDays();
     const completedCount = completedJuz.length;
 
@@ -200,8 +252,8 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                         <Text style={[styles.headerTitle, { color: theme.colors.onSurface }]}>
                             Ramadan Journey
                         </Text>
-                        <View style={[styles.countBadge, { backgroundColor: ACCENT.greenLight }]}>
-                            <Text style={[styles.countText, { color: ACCENT.green }]}>
+                        <View style={[styles.countBadge, { backgroundColor: `${STATUS_COLORS.completed}18` }]}>
+                            <Text style={[styles.countText, { color: STATUS_COLORS.completed }]}>
                                 {completedCount}/30 days
                             </Text>
                         </View>
@@ -226,6 +278,9 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                         {renderFullGrid()}
                     </View>
                 )}
+
+                {/* Color Legend */}
+                {renderLegend()}
             </View>
         </MotiView>
     );
@@ -282,4 +337,29 @@ const styles = StyleSheet.create({
         justifyContent: 'space-around',
         alignItems: 'center',
     },
+    legendRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: Spacing.md,
+        marginTop: Spacing.sm,
+        paddingTop: Spacing.sm,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: '#00000010',
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    legendDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    legendText: {
+        fontSize: 10,
+        fontWeight: '500',
+    },
 });
+

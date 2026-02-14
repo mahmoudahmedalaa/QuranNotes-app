@@ -180,10 +180,7 @@ export default function LoginScreen() {
 
                     <Button
                         mode="text"
-                        onPress={() => {
-                            const router = require('expo-router').useRouter;
-                            require('expo-router').router.push('/(auth)/forgot-password');
-                        }}
+                        onPress={() => router.push('/(auth)/forgot-password')}
                         style={{ marginTop: Spacing.sm }}
                         textColor={theme.colors.primary}
                     >

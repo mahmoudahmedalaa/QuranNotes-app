@@ -99,10 +99,6 @@ export const RecordingIndicatorBar = ({
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
         borderTopLeftRadius: BorderRadius.xxl,
         borderTopRightRadius: BorderRadius.xxl,
         ...Shadows.lg,

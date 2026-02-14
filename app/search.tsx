@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
+import { View, FlatList, StyleSheet, Pressable } from 'react-native';
 import { Searchbar, Card, Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useSearch } from '../src/presentation/hooks/useSearch';
 import { Verse } from '../src/domain/entities/Quran';
+import { Spacing, BorderRadius, Shadows } from '../src/presentation/theme/DesignSystem';
 
 export default function SearchScreen() {
     const router = useRouter();
@@ -17,14 +20,14 @@ export default function SearchScreen() {
 
     const renderItem = ({ item }: { item: Verse }) => (
         <Card
-            style={styles.card}
-            onPress={() => router.push(`/surah/${item.surahNumber}`)} // TODO: Scroll to verse? Deep linking needs complexity.
+            style={[styles.card, { backgroundColor: theme.colors.surface }]}
+            onPress={() => router.push(`/surah/${item.surahNumber}?verse=${item.number}`)}
         >
             <Card.Content>
                 <Text variant="titleSmall" style={{ color: theme.colors.primary }}>
                     Surah {item.surahNumber}, Verse {item.number}
                 </Text>
-                <Text variant="bodyMedium" numberOfLines={3}>
+                <Text variant="bodyMedium" numberOfLines={3} style={{ color: theme.colors.onSurface }}>
                     {item.translation}
                 </Text>
             </Card.Content>
@@ -32,14 +35,25 @@ export default function SearchScreen() {
     );
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View style={styles.header}>
+                <Pressable
+                    onPress={() => router.back()}
+                    style={({ pressed }) => [
+                        styles.backButton,
+                        { backgroundColor: theme.colors.surfaceVariant },
+                        pressed && { opacity: 0.7 },
+                    ]}
+                >
+                    <Ionicons name="arrow-back" size={20} color={theme.colors.onSurface} />
+                </Pressable>
                 <Searchbar
                     placeholder="Search Quran (English)..."
                     onChangeText={setQuery}
                     value={query}
                     onSubmitEditing={handleSearch}
                     loading={loading}
+                    style={[styles.searchBar, { backgroundColor: theme.colors.surface }]}
                 />
             </View>
 
@@ -55,7 +69,7 @@ export default function SearchScreen() {
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
                         <View style={styles.center}>
-                            <Text style={{ marginTop: 20 }}>
+                            <Text style={{ marginTop: 20, color: theme.colors.onSurfaceVariant }}>
                                 {results.length === 0 && query
                                     ? 'No results found'
                                     : 'Enter a keyword to search'}
@@ -64,25 +78,37 @@ export default function SearchScreen() {
                     }
                 />
             )}
-        </View>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
     },
     header: {
-        padding: 16,
-        backgroundColor: '#fff',
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: Spacing.md,
+        gap: Spacing.sm,
+    },
+    backButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    searchBar: {
+        flex: 1,
+        borderRadius: BorderRadius.lg,
     },
     list: {
-        padding: 16,
+        padding: Spacing.md,
     },
     card: {
-        marginBottom: 8,
-        backgroundColor: 'white',
+        marginBottom: Spacing.sm,
+        borderRadius: BorderRadius.md,
     },
     center: {
         flex: 1,
@@ -90,3 +116,4 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
 });
+

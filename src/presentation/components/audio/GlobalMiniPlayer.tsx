@@ -9,6 +9,7 @@ import { useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { useRouter, usePathname } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useAudio } from '../../../infrastructure/audio/AudioContext';
 import { Spacing, BorderRadius } from '../../theme/DesignSystem';
@@ -17,6 +18,7 @@ export const GlobalMiniPlayer: React.FC = () => {
     const theme = useTheme();
     const router = useRouter();
     const pathname = usePathname();
+    const insets = useSafeAreaInsets();
     const { playingVerse, isPlaying, currentSurahName, currentSurahNum, pause, resume, stop } = useAudio();
 
     // Don't show if nothing is playing or paused (verse is null = fully stopped)
@@ -40,8 +42,8 @@ export const GlobalMiniPlayer: React.FC = () => {
     };
 
     const handleTap = () => {
-        if (currentSurahNum) {
-            router.push(`/surah/${currentSurahNum}` as any);
+        if (currentSurahNum && playingVerse) {
+            router.push(`/surah/${currentSurahNum}?verse=${playingVerse.verse}` as any);
         }
     };
 
@@ -49,11 +51,17 @@ export const GlobalMiniPlayer: React.FC = () => {
 
     return (
         <MotiView
-            from={{ translateY: 60, opacity: 0 }}
+            from={{ translateY: -60, opacity: 0 }}
             animate={{ translateY: 0, opacity: 1 }}
-            exit={{ translateY: 60, opacity: 0 }}
+            exit={{ translateY: -60, opacity: 0 }}
             transition={{ type: 'spring', damping: 18 }}
-            style={[styles.container, { backgroundColor: theme.colors.elevation.level4 }]}
+            style={[
+                styles.container,
+                {
+                    backgroundColor: theme.colors.elevation.level4,
+                    paddingTop: insets.top,
+                },
+            ]}
         >
             {/* Info — tappable to go to surah */}
             <Pressable
@@ -120,19 +128,22 @@ export const GlobalMiniPlayer: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 90, // Above the floating tab bar
-        left: Spacing.md,
-        right: Spacing.md,
-        borderRadius: BorderRadius.lg,
+        top: 0,
+        left: 0,
+        right: 0,
+        borderBottomLeftRadius: BorderRadius.lg,
+        borderBottomRightRadius: BorderRadius.lg,
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: Spacing.md,
         paddingVertical: Spacing.sm,
+        paddingBottom: Spacing.sm + 2,
         elevation: 6,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.12,
         shadowRadius: 8,
+        zIndex: 100,
     },
     infoArea: {
         flex: 1,

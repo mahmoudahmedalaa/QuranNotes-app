@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: BorderRadius.full,
-        alignSelf: 'flex-start',
+        alignSelf: 'center',
     },
     emoji: {
         fontSize: 14,

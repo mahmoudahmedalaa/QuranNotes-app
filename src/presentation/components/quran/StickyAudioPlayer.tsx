@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, IconButton, ProgressBar, Menu, Divider, useTheme } from 'react-native-paper';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../theme/DesignSystem';
 import { useSettings } from '../../../infrastructure/settings/SettingsContext';
@@ -25,6 +26,7 @@ export const StickyAudioPlayer = ({
 }: Props) => {
     const { settings, updateSettings } = useSettings();
     const theme = useTheme();
+    const insets = useSafeAreaInsets();
     const [visible, setVisible] = useState(false);
 
     const openMenu = () => setVisible(true);
@@ -43,10 +45,10 @@ export const StickyAudioPlayer = ({
                 styles.container,
                 {
                     backgroundColor: theme.colors.elevation.level5,
-                    borderTopColor: theme.colors.outlineVariant,
+                    borderBottomColor: theme.colors.outlineVariant,
                 },
             ]}>
-            <View style={styles.content}>
+            <View style={[styles.content, { paddingBottom: Math.max(Spacing.md, insets.bottom) }]}>
                 <View style={styles.info}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                         <Text
@@ -151,10 +153,6 @@ export const StickyAudioPlayer = ({
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
         borderTopLeftRadius: BorderRadius.xxl,
         borderTopRightRadius: BorderRadius.xxl,
         elevation: 8,
@@ -169,7 +167,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: Spacing.lg,
         paddingTop: Spacing.md,
-        paddingBottom: Spacing.xl, // Safe Area padding
+        paddingBottom: Spacing.md,
         justifyContent: 'space-between',
     },
     info: {

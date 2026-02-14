@@ -3,12 +3,13 @@
  * Uses warm accent colors for progress, unified circle checkmarks
  */
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useTheme, ProgressBar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
+import { useAudio } from '../../../infrastructure/audio/AudioContext';
 import { JuzInfo } from '../../../data/khatmaData';
 import { Spacing, BorderRadius, Shadows } from '../../theme/DesignSystem';
 
@@ -53,15 +54,21 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
 }) => {
     const theme = useTheme();
     const router = useRouter();
+    const { playingVerse, currentSurahNum } = useAudio();
 
-    const resumeSurahNumber = lastPosition?.surah || juz.startSurahNumber;
+    // Use audio's live position if audio is playing within a surah that belongs to this Juz
+    const audioIsRelevant = playingVerse && currentSurahNum &&
+        currentSurahNum >= juz.startSurahNumber && currentSurahNum <= juz.endSurahNumber;
+
+    const resumeSurahNumber = audioIsRelevant ? currentSurahNum! : (lastPosition?.surah || juz.startSurahNumber);
+    const resumeVerse = audioIsRelevant ? playingVerse!.verse : lastPosition?.verse;
 
     const handleContinueReading = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        if (lastPosition) {
-            router.push(`/surah/${resumeSurahNumber}?verse=${lastPosition.verse}`);
+        if (resumeVerse) {
+            router.push(`/surah/${resumeSurahNumber}?verse=${resumeVerse}&autoplay=true`);
         } else {
-            router.push(`/surah/${juz.startSurahNumber}`);
+            router.push(`/surah/${juz.startSurahNumber}?autoplay=true`);
         }
     };
 
@@ -209,12 +216,27 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
 
                     <Pressable
                         onPress={() => {
-                            Haptics.notificationAsync(
-                                isCompleted
-                                    ? Haptics.NotificationFeedbackType.Warning
-                                    : Haptics.NotificationFeedbackType.Success
-                            );
-                            onToggle();
+                            if (isCompleted) {
+                                // Confirm before resetting
+                                Alert.alert(
+                                    'Start Over?',
+                                    `This will reset progress for Juz ${juz.juzNumber}. You can always complete it again.`,
+                                    [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Start Over',
+                                            style: 'destructive',
+                                            onPress: () => {
+                                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                                onToggle();
+                                            },
+                                        },
+                                    ]
+                                );
+                            } else {
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                onToggle();
+                            }
                         }}
                         style={({ pressed }) => [
                             styles.toggleButton,
@@ -222,13 +244,13 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                                 backgroundColor: isCompleted
                                     ? theme.colors.surfaceVariant
                                     : ACCENT.greenLight,
-                                flex: isCompleted ? 1 : 0,
+                                flex: isCompleted ? undefined : 0,
                             },
                             pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
                         ]}
                     >
                         <MaterialCommunityIcons
-                            name={isCompleted ? 'circle-outline' : 'check-circle-outline'}
+                            name={isCompleted ? 'restart' : 'check-circle-outline'}
                             size={18}
                             color={isCompleted ? theme.colors.onSurfaceVariant : ACCENT.green}
                         />
@@ -242,7 +264,7 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                                 },
                             ]}
                         >
-                            {isCompleted ? 'Undo' : 'Mark Complete'}
+                            {isCompleted ? 'Start Over' : 'Mark Complete'}
                         </Text>
                     </Pressable>
                 </View>
