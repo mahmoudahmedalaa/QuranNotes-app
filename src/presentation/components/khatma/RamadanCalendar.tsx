@@ -1,13 +1,11 @@
 /**
  * RamadanCalendar — Compact collapsible calendar
- * Shows a Headspace-style weekly strip by default, expandable to full month grid
+ * Headspace/Calm-inspired minimal design: just 3 visual states.
  *
- * Circle color legend:
- *   ✅ Green filled     = Completed (Juz done)
- *   🟠 Gold border      = In progress (some pages read)
- *   🟣 Purple filled    = Today's Juz
- *   ⬜ Light gray       = Future (not yet reached)
- *   🔴 Red-ish tint     = Missed (past, not completed)
+ * Circle states (single-hue system):
+ *   ✅ Filled primary    = Completed (Juz done)
+ *   🟣 Bold ring         = Today (current Juz)
+ *   ⬜ Subtle neutral    = Not yet / future
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
@@ -30,23 +28,11 @@ interface RamadanCalendarProps {
     onSelectDay: (day: number) => void;
 }
 
-// Clear, semantically meaningful color palette
-const STATUS_COLORS = {
-    completed: '#10B981',       // Green — done ✓
-    completedBg: '#10B981',
-    inProgress: '#F5A623',      // Gold — started, not done
-    inProgressBg: '#F5A62318',  // Subtle gold wash
-    today: '#7C3AED',           // Vibrant purple — today
-    todayBg: '#7C3AED',
-    missed: '#EF4444',          // Red — missed/behind
-    missedBg: '#EF444412',      // Very subtle red wash
-    future: '#94A3B8',          // Slate gray — not yet
-    futureBg: '#94A3B810',      // Nearly invisible
-    selected: '#7C3AED',       // Purple ring for selection
-};
-
 const COLS = 5;
 const ROWS = 6;
+
+// Single-hue brand color (primary purple) — all states are variations of this
+const PRIMARY = '#7C3AED';
 
 export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
     currentDay,
@@ -66,10 +52,9 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
 
     // ── Week strip (days around currentDay) ──
     const getWeekDays = () => {
-        // Show 7 days centered on current day
         let start = Math.max(1, currentDay - 3);
         const end = Math.min(30, start + 6);
-        start = Math.max(1, end - 6); // Adjust start if near end
+        start = Math.max(1, end - 6);
         const days = [];
         for (let i = start; i <= end; i++) days.push(i);
         return days;
@@ -79,40 +64,32 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         const isCompleted = completedJuz.includes(day);
         const isCurrent = day === currentDay;
         const isSelected = day === selectedDay;
-        const isPast = day < currentDay;
-        const isFuture = day > currentDay;
-        const progress = getJuzProgress(day);
-        const hasPartial = progress.pagesRead > 0 && !isCompleted;
 
         const circleSize = size === 'compact' ? 40 : 36;
 
-        // Determine circle appearance based on status (priority order)
+        // ── 3 simple states ──
         let backgroundColor: string;
         let borderWidth = 0;
         let borderColor = 'transparent';
         let textColor: string;
 
         if (isCompleted) {
-            backgroundColor = STATUS_COLORS.completedBg;
+            // ✅ Done — filled primary
+            backgroundColor = PRIMARY;
             textColor = '#FFFFFF';
         } else if (isCurrent) {
-            backgroundColor = STATUS_COLORS.todayBg;
-            textColor = '#FFFFFF';
-        } else if (hasPartial) {
-            backgroundColor = STATUS_COLORS.inProgressBg;
-            borderWidth = 2;
-            borderColor = STATUS_COLORS.inProgress;
-            textColor = STATUS_COLORS.inProgress;
-        } else if (isPast) {
-            backgroundColor = STATUS_COLORS.missedBg;
-            textColor = STATUS_COLORS.missed;
+            // 🟣 Today — outlined ring
+            backgroundColor = `${PRIMARY}10`;
+            borderWidth = 2.5;
+            borderColor = PRIMARY;
+            textColor = PRIMARY;
         } else {
-            // Future
-            backgroundColor = STATUS_COLORS.futureBg;
-            textColor = STATUS_COLORS.future;
+            // ⬜ Not yet — subtle neutral
+            backgroundColor = `${theme.colors.onSurface}08`;
+            textColor = `${theme.colors.onSurface}50`;
         }
 
-        // Selected state: outer ring (doesn't override status color)
+        // Selection ring (doesn't override status appearance)
         const showSelectedRing = isSelected && !isCurrent;
 
         return (
@@ -128,7 +105,6 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                     opacity: pressed ? 0.7 : 1,
                 }]}
             >
-                {/* Outer ring for selected state */}
                 <View style={[
                     {
                         width: circleSize + (showSelectedRing ? 6 : 0),
@@ -139,22 +115,20 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                     },
                     showSelectedRing && {
                         borderWidth: 2,
-                        borderColor: `${STATUS_COLORS.selected}60`,
+                        borderColor: `${PRIMARY}40`,
                     },
                 ]}>
                     <View
-                        style={[
-                            {
-                                width: circleSize,
-                                height: circleSize,
-                                borderRadius: circleSize / 2,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                backgroundColor,
-                                borderWidth,
-                                borderColor,
-                            },
-                        ]}
+                        style={{
+                            width: circleSize,
+                            height: circleSize,
+                            borderRadius: circleSize / 2,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor,
+                            borderWidth,
+                            borderColor,
+                        }}
                     >
                         {isCompleted ? (
                             <MaterialCommunityIcons name="check" size={18} color="#FFF" />
@@ -179,13 +153,13 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                             styles.dayLabel,
                             {
                                 color: isCurrent
-                                    ? STATUS_COLORS.today
+                                    ? PRIMARY
                                     : theme.colors.onSurfaceVariant,
                                 fontWeight: isCurrent ? '700' : '400',
                             },
                         ]}
                     >
-                        {isCurrent ? 'Today' : `Day`}
+                        {isCurrent ? 'Today' : 'Day'}
                     </Text>
                 )}
             </Pressable>
@@ -214,24 +188,16 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
         return rows;
     };
 
-    // ── Legend items ──
+    // ── Minimal legend — just 2 key states ──
     const renderLegend = () => (
         <View style={styles.legendRow}>
             <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS.completed }]} />
-                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Done</Text>
+                <View style={[styles.legendDot, { backgroundColor: PRIMARY }]} />
+                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Completed</Text>
             </View>
             <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS.today }]} />
+                <View style={[styles.legendDot, { backgroundColor: 'transparent', borderWidth: 2, borderColor: PRIMARY }]} />
                 <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Today</Text>
-            </View>
-            <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: STATUS_COLORS.inProgress }]} />
-                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Started</Text>
-            </View>
-            <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS.missedBg, borderWidth: 1, borderColor: `${STATUS_COLORS.missed}30` }]} />
-                <Text style={[styles.legendText, { color: theme.colors.onSurfaceVariant }]}>Missed</Text>
             </View>
         </View>
     );
@@ -252,8 +218,8 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                         <Text style={[styles.headerTitle, { color: theme.colors.onSurface }]}>
                             Ramadan Journey
                         </Text>
-                        <View style={[styles.countBadge, { backgroundColor: `${STATUS_COLORS.completed}18` }]}>
-                            <Text style={[styles.countText, { color: STATUS_COLORS.completed }]}>
+                        <View style={[styles.countBadge, { backgroundColor: `${PRIMARY}12` }]}>
+                            <Text style={[styles.countText, { color: PRIMARY }]}>
                                 {completedCount}/30 days
                             </Text>
                         </View>
@@ -279,7 +245,7 @@ export const RamadanCalendar: React.FC<RamadanCalendarProps> = ({
                     </View>
                 )}
 
-                {/* Color Legend */}
+                {/* Minimal Legend */}
                 {renderLegend()}
             </View>
         </MotiView>
@@ -341,7 +307,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: Spacing.md,
+        gap: Spacing.lg,
         marginTop: Spacing.sm,
         paddingTop: Spacing.sm,
         borderTopWidth: StyleSheet.hairlineWidth,
@@ -350,7 +316,7 @@ const styles = StyleSheet.create({
     legendItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        gap: 5,
     },
     legendDot: {
         width: 10,
@@ -358,7 +324,7 @@ const styles = StyleSheet.create({
         borderRadius: 5,
     },
     legendText: {
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: '500',
     },
 });
