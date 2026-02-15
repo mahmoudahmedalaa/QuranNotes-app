@@ -1,0 +1,3813 @@
+{
+  "grateful": [
+    {
+      "surah": 1,
+      "verse": 2,
+      "arabicSnippet": "ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "All praise is due to Allah, Lord of the worlds.",
+      "theme": "praise"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ وَٱشْكُرُوا۟ لِى وَلَا تَكْفُرُونِ",
+      "translation": "So remember Me; I will remember you. And be grateful to Me and do not deny Me.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will surely increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 16,
+      "verse": 18,
+      "arabicSnippet": "وَإِن تَعُدُّوا۟ نِعْمَةَ ٱللَّهِ لَا تُحْصُوهَا",
+      "translation": "And if you should count the favors of Allah, you could not enumerate them.",
+      "theme": "blessings"
+    },
+    {
+      "surah": 55,
+      "verse": 13,
+      "arabicSnippet": "فَبِأَىِّ ءَالَآءِ رَبِّكُمَا تُكَذِّبَانِ",
+      "translation": "So which of the favors of your Lord would you deny?",
+      "theme": "blessings"
+    },
+    {
+      "surah": 31,
+      "verse": 12,
+      "arabicSnippet": "أَنِ ٱشْكُرْ لِلَّهِ",
+      "translation": "Be grateful to Allah.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 27,
+      "verse": 40,
+      "arabicSnippet": "هَـٰذَا مِن فَضْلِ رَبِّى لِيَبْلُوَنِىٓ ءَأَشْكُرُ أَمْ أَكْفُرُ",
+      "translation": "This is from the favor of my Lord to test me — whether I will be grateful or ungrateful.",
+      "theme": "test"
+    },
+    {
+      "surah": 34,
+      "verse": 13,
+      "arabicSnippet": "ٱعْمَلُوٓا۟ ءَالَ دَاوُۥدَ شُكْرًا",
+      "translation": "Work in gratitude, O family of David.",
+      "theme": "action"
+    },
+    {
+      "surah": 76,
+      "verse": 3,
+      "arabicSnippet": "إِنَّا هَدَيْنَـٰهُ ٱلسَّبِيلَ إِمَّا شَاكِرًا وَإِمَّا كَفُورًا",
+      "translation": "Indeed, We guided him to the way, be he grateful or be he ungrateful.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 93,
+      "verse": 11,
+      "arabicSnippet": "وَأَمَّا بِنِعْمَةِ رَبِّكَ فَحَدِّثْ",
+      "translation": "And as for the favor of your Lord, proclaim it.",
+      "theme": "sharing"
+    },
+    {
+      "surah": 2,
+      "verse": 172,
+      "arabicSnippet": "كُلُوا۟ مِن طَيِّبَـٰتِ مَا رَزَقْنَـٰكُمْ وَٱشْكُرُوا۟ لِلَّهِ",
+      "translation": "Eat from the good things We have provided for you and be grateful to Allah.",
+      "theme": "provision"
+    },
+    {
+      "surah": 7,
+      "verse": 10,
+      "arabicSnippet": "وَلَقَدْ مَكَّنَّـٰكُمْ فِى ٱلْأَرْضِ وَجَعَلْنَا لَكُمْ فِيهَا مَعَـٰيِشَ",
+      "translation": "We have established you on earth and provided for you therein.",
+      "theme": "provision"
+    },
+    {
+      "surah": 16,
+      "verse": 114,
+      "arabicSnippet": "فَكُلُوا۟ مِمَّا رَزَقَكُمُ ٱللَّهُ حَلَـٰلًا طَيِّبًا وَٱشْكُرُوا۟ نِعْمَتَ ٱللَّهِ",
+      "translation": "Eat of what Allah has provided for you, lawful and good, and be grateful for His favor.",
+      "theme": "provision"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ ٱلَّتِىٓ أَنْعَمْتَ عَلَىَّ",
+      "translation": "My Lord, enable me to be grateful for Your favor which You have bestowed upon me.",
+      "theme": "dua"
+    },
+    {
+      "surah": 3,
+      "verse": 145,
+      "arabicSnippet": "وَسَنَجْزِى ٱلشَّـٰكِرِينَ",
+      "translation": "And We will reward the grateful.",
+      "theme": "reward"
+    },
+    {
+      "surah": 4,
+      "verse": 147,
+      "arabicSnippet": "مَّا يَفْعَلُ ٱللَّهُ بِعَذَابِكُمْ إِن شَكَرْتُمْ وَءَامَنتُمْ",
+      "translation": "What would Allah do with your punishment if you are grateful and believe?",
+      "theme": "mercy"
+    },
+    {
+      "surah": 54,
+      "verse": 35,
+      "arabicSnippet": "نِّعْمَةً مِّنْ عِندِنَا كَذَٰلِكَ نَجْزِى مَن شَكَرَ",
+      "translation": "As a favor from Us. Thus do We reward he who is grateful.",
+      "theme": "reward"
+    },
+    {
+      "surah": 39,
+      "verse": 66,
+      "arabicSnippet": "بَلِ ٱللَّهَ فَٱعْبُدْ وَكُن مِّنَ ٱلشَّـٰكِرِينَ",
+      "translation": "Rather, worship Allah and be among the grateful.",
+      "theme": "worship"
+    },
+    {
+      "surah": 30,
+      "verse": 46,
+      "arabicSnippet": "وَلِتَبْتَغُوا۟ مِن فَضْلِهِۦ وَلَعَلَّكُمْ تَشْكُرُونَ",
+      "translation": "And that you may seek of His bounty, and perhaps you will be grateful.",
+      "theme": "bounty"
+    },
+    {
+      "surah": 28,
+      "verse": 73,
+      "arabicSnippet": "وَمِن رَّحْمَتِهِۦ جَعَلَ لَكُمُ ٱلَّيْلَ وَٱلنَّهَارَ",
+      "translation": "And out of His mercy He made for you the night and the day.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 16,
+      "verse": 78,
+      "arabicSnippet": "وَٱللَّهُ أَخْرَجَكُم مِّنۢ بُطُونِ أُمَّهَـٰتِكُمْ لَا تَعْلَمُونَ شَيْـًٔا وَجَعَلَ لَكُمُ ٱلسَّمْعَ وَٱلْأَبْصَـٰرَ وَٱلْأَفْـِٔدَةَ",
+      "translation": "Allah brought you out of your mothers' wombs knowing nothing, and gave you hearing, sight, and intellect.",
+      "theme": "blessings"
+    },
+    {
+      "surah": 35,
+      "verse": 3,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلنَّاسُ ٱذْكُرُوا۟ نِعْمَتَ ٱللَّهِ عَلَيْكُمْ",
+      "translation": "O mankind, remember the favor of Allah upon you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 5,
+      "verse": 6,
+      "arabicSnippet": "وَلِيُتِمَّ نِعْمَتَهُۥ عَلَيْكُمْ لَعَلَّكُمْ تَشْكُرُونَ",
+      "translation": "And that He may complete His favor upon you so that you may be grateful.",
+      "theme": "favor"
+    },
+    {
+      "surah": 14,
+      "verse": 34,
+      "arabicSnippet": "وَءَاتَىٰكُم مِّن كُلِّ مَا سَأَلْتُمُوهُ",
+      "translation": "And He gave you from all you asked of Him.",
+      "theme": "provision"
+    },
+    {
+      "surah": 17,
+      "verse": 70,
+      "arabicSnippet": "وَلَقَدْ كَرَّمْنَا بَنِىٓ ءَادَمَ",
+      "translation": "And We have certainly honored the children of Adam.",
+      "theme": "honor"
+    },
+    {
+      "surah": 40,
+      "verse": 61,
+      "arabicSnippet": "إِنَّ ٱللَّهَ لَذُو فَضْلٍ عَلَى ٱلنَّاسِ وَلَـٰكِنَّ أَكْثَرَ ٱلنَّاسِ لَا يَشْكُرُونَ",
+      "translation": "Indeed, Allah is full of bounty to people, but most people are not grateful.",
+      "theme": "bounty"
+    },
+    {
+      "surah": 2,
+      "verse": 243,
+      "arabicSnippet": "إِنَّ ٱللَّهَ لَذُو فَضْلٍ عَلَى ٱلنَّاسِ",
+      "translation": "Indeed, Allah is full of bounty to the people.",
+      "theme": "bounty"
+    },
+    {
+      "surah": 36,
+      "verse": 73,
+      "arabicSnippet": "وَلَهُمْ فِيهَا مَنَـٰفِعُ وَمَشَارِبُ أَفَلَا يَشْكُرُونَ",
+      "translation": "And for them therein are benefits and drinks — will they not be grateful?",
+      "theme": "reflection"
+    },
+    {
+      "surah": 56,
+      "verse": 70,
+      "arabicSnippet": "لَوْ نَشَآءُ جَعَلْنَـٰهُ أُجَاجًا فَلَوْلَا تَشْكُرُونَ",
+      "translation": "If We willed, We could make it bitter — so why are you not grateful?",
+      "theme": "reflection"
+    },
+    {
+      "surah": 67,
+      "verse": 23,
+      "arabicSnippet": "قُلْ هُوَ ٱلَّذِىٓ أَنشَأَكُمْ وَجَعَلَ لَكُمُ ٱلسَّمْعَ وَٱلْأَبْصَـٰرَ وَٱلْأَفْـِٔدَةَ قَلِيلًا مَّا تَشْكُرُونَ",
+      "translation": "He is the One who created you and gave you hearing, sight, and intellect — yet how little you give thanks.",
+      "theme": "reflection"
+    },
+    {
+      "surah": 23,
+      "verse": 78,
+      "arabicSnippet": "وَهُوَ ٱلَّذِىٓ أَنشَأَ لَكُمُ ٱلسَّمْعَ وَٱلْأَبْصَـٰرَ وَٱلْأَفْـِٔدَةَ قَلِيلًا مَّا تَشْكُرُونَ",
+      "translation": "And it is He who produced for you hearing and vision and hearts — little are you grateful.",
+      "theme": "reflection"
+    },
+    {
+      "surah": 45,
+      "verse": 12,
+      "arabicSnippet": "ٱللَّهُ ٱلَّذِى سَخَّرَ لَكُمُ ٱلْبَحْرَ لِتَجْرِىَ ٱلْفُلْكُ فِيهِ بِأَمْرِهِۦ",
+      "translation": "Allah is the one who subjected the sea for you so that ships may sail upon it by His command.",
+      "theme": "provision"
+    },
+    {
+      "surah": 31,
+      "verse": 31,
+      "arabicSnippet": "أَلَمْ تَرَ أَنَّ ٱلْفُلْكَ تَجْرِى فِى ٱلْبَحْرِ بِنِعْمَتِ ٱللَّهِ",
+      "translation": "Do you not see that ships sail through the sea by the favor of Allah?",
+      "theme": "provision"
+    },
+    {
+      "surah": 22,
+      "verse": 36,
+      "arabicSnippet": "كَذَٰلِكَ سَخَّرَهَا لَكُمْ لِتُكَبِّرُوا۟ ٱللَّهَ عَلَىٰ مَا هَدَىٰكُمْ",
+      "translation": "Thus has He subjected them to you that you may glorify Allah for what He has guided you.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 45,
+      "verse": 13,
+      "arabicSnippet": "وَسَخَّرَ لَكُم مَّا فِى ٱلسَّمَـٰوَاتِ وَمَا فِى ٱلْأَرْضِ جَمِيعًا مِّنْهُ",
+      "translation": "And He has subjected to you whatever is in the heavens and whatever is on the earth — all from Him.",
+      "theme": "bounty"
+    },
+    {
+      "surah": 10,
+      "verse": 58,
+      "arabicSnippet": "قُلْ بِفَضْلِ ٱللَّهِ وَبِرَحْمَتِهِۦ فَبِذَٰلِكَ فَلْيَفْرَحُوا۟",
+      "translation": "Say: In the bounty of Allah and in His mercy — in that let them rejoice.",
+      "theme": "joy"
+    },
+    {
+      "surah": 30,
+      "verse": 21,
+      "arabicSnippet": "وَمِنْ ءَايَـٰتِهِۦٓ أَنْ خَلَقَ لَكُم مِّنْ أَنفُسِكُمْ أَزْوَٰجًا لِّتَسْكُنُوٓا۟ إِلَيْهَا",
+      "translation": "And among His signs is that He created for you spouses to find peace with them.",
+      "theme": "love"
+    },
+    {
+      "surah": 25,
+      "verse": 48,
+      "arabicSnippet": "وَهُوَ ٱلَّذِىٓ أَرْسَلَ ٱلرِّيَـٰحَ بُشْرًۢا بَيْنَ يَدَىْ رَحْمَتِهِۦ",
+      "translation": "And it is He who sends the winds as good tidings before His mercy.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 6,
+      "verse": 1,
+      "arabicSnippet": "ٱلْحَمْدُ لِلَّهِ ٱلَّذِى خَلَقَ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضَ وَجَعَلَ ٱلظُّلُمَـٰتِ وَٱلنُّورَ",
+      "translation": "Praise is due to Allah, who created the heavens and the earth and made the darkness and the light.",
+      "theme": "praise"
+    },
+    {
+      "surah": 35,
+      "verse": 1,
+      "arabicSnippet": "ٱلْحَمْدُ لِلَّهِ فَاطِرِ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضِ",
+      "translation": "Praise is due to Allah, Creator of the heavens and the earth.",
+      "theme": "praise"
+    },
+    {
+      "surah": 18,
+      "verse": 1,
+      "arabicSnippet": "ٱلْحَمْدُ لِلَّهِ ٱلَّذِىٓ أَنزَلَ عَلَىٰ عَبْدِهِ ٱلْكِتَـٰبَ",
+      "translation": "Praise is due to Allah, who has sent down upon His Servant the Book.",
+      "theme": "quran"
+    },
+    {
+      "surah": 17,
+      "verse": 111,
+      "arabicSnippet": "وَقُلِ ٱلْحَمْدُ لِلَّهِ ٱلَّذِى لَمْ يَتَّخِذْ وَلَدًا",
+      "translation": "And say: Praise is due to Allah, who has not taken a son.",
+      "theme": "tawheed"
+    },
+    {
+      "surah": 37,
+      "verse": 182,
+      "arabicSnippet": "وَٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "And praise is due to Allah, Lord of the worlds.",
+      "theme": "praise"
+    },
+    {
+      "surah": 39,
+      "verse": 75,
+      "arabicSnippet": "وَقِيلَ ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "And it will be said: Praise is due to Allah, Lord of the worlds.",
+      "theme": "paradise"
+    },
+    {
+      "surah": 40,
+      "verse": 65,
+      "arabicSnippet": "هُوَ ٱلْحَىُّ لَآ إِلَـٰهَ إِلَّا هُوَ فَٱدْعُوهُ مُخْلِصِينَ لَهُ ٱلدِّينَ ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "He is the Ever-Living; there is no deity except Him, so call upon Him with sincere devotion. Praise is due to Allah, Lord of the worlds.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 27,
+      "verse": 59,
+      "arabicSnippet": "قُلِ ٱلْحَمْدُ لِلَّهِ وَسَلَـٰمٌ عَلَىٰ عِبَادِهِ ٱلَّذِينَ ٱصْطَفَىٰٓ",
+      "translation": "Say: Praise is due to Allah, and peace upon His servants whom He has chosen.",
+      "theme": "praise"
+    }
+  ],
+  "anxious": [
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "Verily, in the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 94,
+      "verse": 6,
+      "arabicSnippet": "إِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "reassurance"
+    },
+    {
+      "surah": 2,
+      "verse": 286,
+      "arabicSnippet": "لَا يُكَلِّفُ ٱللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+      "translation": "Allah does not burden a soul beyond that it can bear.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَهُوَ حَسْبُهُۥٓ",
+      "translation": "Whoever relies upon Allah — then He is sufficient for him.",
+      "theme": "trust"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah, and He is the best Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Say: Nothing will befall us except what Allah has written for us.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 2,
+      "verse": 153,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ ٱسْتَعِينُوا۟ بِٱلصَّبْرِ وَٱلصَّلَوٰةِ",
+      "translation": "O you who believe, seek help through patience and prayer.",
+      "theme": "patience"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "And be patient. Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ أُجِيبُ دَعْوَةَ ٱلدَّاعِ إِذَا دَعَانِ",
+      "translation": "Indeed I am near. I respond to the invocation of the supplicant when he calls upon Me.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ أَسْمَعُ وَأَرَىٰٓ",
+      "translation": "Fear not. Indeed, I am with you both; I hear and I see.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "And those who strive for Us — We will surely guide them to Our ways.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ وَكَفَىٰ بِٱللَّهِ وَكِيلًا",
+      "translation": "And rely upon Allah; and sufficient is Allah as Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 6,
+      "verse": 17,
+      "arabicSnippet": "وَإِن يَمْسَسْكَ ٱللَّهُ بِضُرٍّ فَلَا كَاشِفَ لَهُۥٓ إِلَّا هُوَ",
+      "translation": "If Allah touches you with harm, none can remove it but Him.",
+      "theme": "reliance"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ",
+      "translation": "Indeed, the allies of Allah — no fear will there be concerning them, nor will they grieve.",
+      "theme": "security"
+    },
+    {
+      "surah": 3,
+      "verse": 139,
+      "arabicSnippet": "وَلَا تَهِنُوا۟ وَلَا تَحْزَنُوا۟ وَأَنتُمُ ٱلْأَعْلَوْنَ إِن كُنتُم مُّؤْمِنِينَ",
+      "translation": "Do not weaken and do not grieve, and you will be superior if you are believers.",
+      "theme": "strength"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "وَلَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ إِنَّهُۥ لَا يَا۟يْـَٔسُ مِن رَّوْحِ ٱللَّهِ إِلَّا ٱلْقَوْمُ ٱلْكَـٰفِرُونَ",
+      "translation": "And despair not of relief from Allah. Indeed, no one despairs of relief from Allah except the disbelieving people.",
+      "theme": "hope"
+    },
+    {
+      "surah": 57,
+      "verse": 22,
+      "arabicSnippet": "مَآ أَصَابَ مِن مُّصِيبَةٍ فِى ٱلْأَرْضِ وَلَا فِىٓ أَنفُسِكُمْ إِلَّا فِى كِتَـٰبٍ مِّن قَبْلِ أَن نَّبْرَأَهَآ",
+      "translation": "No disaster strikes upon the earth or among yourselves except that it is in a register before We bring it into being.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 57,
+      "verse": 23,
+      "arabicSnippet": "لِّكَيْلَا تَأْسَوْا۟ عَلَىٰ مَا فَاتَكُمْ وَلَا تَفْرَحُوا۟ بِمَآ ءَاتَىٰكُمْ",
+      "translation": "In order that you not despair over what has eluded you and not exult over what He has given you.",
+      "theme": "balance"
+    },
+    {
+      "surah": 3,
+      "verse": 159,
+      "arabicSnippet": "فَإِذَا عَزَمْتَ فَتَوَكَّلْ عَلَى ٱللَّهِ إِنَّ ٱللَّهَ يُحِبُّ ٱلْمُتَوَكِّلِينَ",
+      "translation": "And when you have decided, then rely upon Allah. Indeed, Allah loves those who rely upon Him.",
+      "theme": "trust"
+    },
+    {
+      "surah": 11,
+      "verse": 56,
+      "arabicSnippet": "إِنِّى تَوَكَّلْتُ عَلَى ٱللَّهِ رَبِّى وَرَبِّكُم مَّا مِن دَآبَّةٍ إِلَّا هُوَ ءَاخِذٌۢ بِنَاصِيَتِهَآ",
+      "translation": "Indeed, I have relied upon Allah, my Lord and your Lord. There is no creature but that He holds its forelock.",
+      "theme": "trust"
+    },
+    {
+      "surah": 14,
+      "verse": 12,
+      "arabicSnippet": "وَمَا لَنَآ أَلَّا نَتَوَكَّلَ عَلَى ٱللَّهِ وَقَدْ هَدَىٰنَا سُبُلَنَا",
+      "translation": "And why should we not rely upon Allah when He has guided us to our ways?",
+      "theme": "trust"
+    },
+    {
+      "surah": 73,
+      "verse": 9,
+      "arabicSnippet": "رَّبُّ ٱلْمَشْرِقِ وَٱلْمَغْرِبِ لَآ إِلَـٰهَ إِلَّا هُوَ فَٱتَّخِذْهُ وَكِيلًا",
+      "translation": "Lord of the East and the West; there is no deity except Him, so take Him as Disposer of your affairs.",
+      "theme": "reliance"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ إِنِّى كُنتُ مِنَ ٱلظَّـٰلِمِينَ",
+      "translation": "There is no deity except You; exalted are You. Indeed, I have been of the wrongdoers.",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 88,
+      "arabicSnippet": "فَٱسْتَجَبْنَا لَهُۥ وَنَجَّيْنَـٰهُ مِنَ ٱلْغَمِّ وَكَذَٰلِكَ نُـۨجِى ٱلْمُؤْمِنِينَ",
+      "translation": "So We responded to him and saved him from the distress. And thus do We save the believers.",
+      "theme": "rescue"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ مِّنَ ٱلْمُحْسِنِينَ",
+      "translation": "Indeed, the mercy of Allah is near to the doers of good.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you, nor has He detested you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 4,
+      "arabicSnippet": "وَلَلْـَٔاخِرَةُ خَيْرٌ لَّكَ مِنَ ٱلْأُولَىٰ",
+      "translation": "And the Hereafter is better for you than the first life.",
+      "theme": "hope"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "And your Lord is going to give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 6,
+      "verse": 59,
+      "arabicSnippet": "وَعِندَهُۥ مَفَاتِحُ ٱلْغَيْبِ لَا يَعْلَمُهَآ إِلَّا هُوَ",
+      "translation": "And with Him are the keys of the unseen; none knows them except Him.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "And whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 2,
+      "verse": 214,
+      "arabicSnippet": "أَمْ حَسِبْتُمْ أَن تَدْخُلُوا۟ ٱلْجَنَّةَ وَلَمَّا يَأْتِكُم مَّثَلُ ٱلَّذِينَ خَلَوْا۟ مِن قَبْلِكُم",
+      "translation": "Or do you think you will enter Paradise without such trials as came to those who passed before you?",
+      "theme": "test"
+    },
+    {
+      "surah": 2,
+      "verse": 155,
+      "arabicSnippet": "وَلَنَبْلُوَنَّكُم بِشَىْءٍ مِّنَ ٱلْخَوْفِ وَٱلْجُوعِ وَنَقْصٍ مِّنَ ٱلْأَمْوَالِ وَٱلْأَنفُسِ وَٱلثَّمَرَاتِ",
+      "translation": "We will surely test you with fear and hunger and a loss of wealth, lives, and fruits.",
+      "theme": "test"
+    },
+    {
+      "surah": 2,
+      "verse": 156,
+      "arabicSnippet": "إِنَّا لِلَّهِ وَإِنَّآ إِلَيْهِ رَٰجِعُونَ",
+      "translation": "Indeed we belong to Allah, and indeed to Him we will return.",
+      "theme": "acceptance"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "مَآ أَصَابَ مِن مُّصِيبَةٍ إِلَّا بِإِذْنِ ٱللَّهِ وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "No disaster strikes except by permission of Allah. And whoever believes in Allah — He will guide his heart.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 5,
+      "verse": 11,
+      "arabicSnippet": "ٱذْكُرُوا۟ نِعْمَتَ ٱللَّهِ عَلَيْكُمْ",
+      "translation": "Remember the favor of Allah upon you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "قَالَ رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 20,
+      "verse": 26,
+      "arabicSnippet": "وَيَسِّرْ لِىٓ أَمْرِى",
+      "translation": "And ease for me my task.",
+      "theme": "dua"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا بَعْدَ إِذْ هَدَيْتَنَا وَهَبْ لَنَا مِن لَّدُنكَ رَحْمَةً",
+      "translation": "Our Lord, let not our hearts deviate after You have guided us, and grant us from Your mercy.",
+      "theme": "dua"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "وَقُل رَّبِّ ٱغْفِرْ وَٱرْحَمْ وَأَنتَ خَيْرُ ٱلرَّٰحِمِينَ",
+      "translation": "And say: My Lord, forgive and have mercy, for You are the best of the merciful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 7,
+      "verse": 126,
+      "arabicSnippet": "رَبَّنَآ أَفْرِغْ عَلَيْنَا صَبْرًا وَتَوَفَّنَا مُسْلِمِينَ",
+      "translation": "Our Lord, pour upon us patience and let us die as Muslims.",
+      "theme": "dua"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ وَيَكْشِفُ ٱلسُّوٓءَ",
+      "translation": "Is He not the One who responds to the distressed when he calls upon Him and removes evil?",
+      "theme": "dua"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "Indeed, the patient will be given their reward without account.",
+      "theme": "patience"
+    }
+  ],
+  "sad": [
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you, nor has He detested you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "And your Lord is going to give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 2,
+      "verse": 286,
+      "arabicSnippet": "لَا يُكَلِّفُ ٱللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+      "translation": "Allah does not burden a soul beyond that it can bear.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "And despair not of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 12,
+      "verse": 86,
+      "arabicSnippet": "إِنَّمَآ أَشْكُوا۟ بَثِّى وَحُزْنِىٓ إِلَى ٱللَّهِ",
+      "translation": "I only complain of my suffering and my grief to Allah.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 153,
+      "arabicSnippet": "ٱسْتَعِينُوا۟ بِٱلصَّبْرِ وَٱلصَّلَوٰةِ",
+      "translation": "Seek help through patience and prayer.",
+      "theme": "patience"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "Verily, in the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 3,
+      "verse": 139,
+      "arabicSnippet": "وَلَا تَهِنُوا۟ وَلَا تَحْزَنُوا۟",
+      "translation": "Do not weaken and do not grieve.",
+      "theme": "strength"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ",
+      "translation": "And will provide for him from where he does not expect.",
+      "theme": "provision"
+    },
+    {
+      "surah": 2,
+      "verse": 155,
+      "arabicSnippet": "وَبَشِّرِ ٱلصَّـٰبِرِينَ",
+      "translation": "And give good tidings to the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 2,
+      "verse": 156,
+      "arabicSnippet": "إِنَّا لِلَّهِ وَإِنَّآ إِلَيْهِ رَٰجِعُونَ",
+      "translation": "Indeed we belong to Allah, and indeed to Him we will return.",
+      "theme": "acceptance"
+    },
+    {
+      "surah": 2,
+      "verse": 157,
+      "arabicSnippet": "أُو۟لَـٰٓئِكَ عَلَيْهِمْ صَلَوَٰتٌ مِّن رَّبِّهِمْ وَرَحْمَةٌ",
+      "translation": "Those are the ones upon whom are blessings from their Lord and mercy.",
+      "theme": "reward"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ أُجِيبُ دَعْوَةَ ٱلدَّاعِ إِذَا دَعَانِ",
+      "translation": "Indeed I am near. I respond to the invocation of the supplicant when he calls upon Me.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ أَسْمَعُ وَأَرَىٰٓ",
+      "translation": "Fear not. Indeed, I am with you both; I hear and I see.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 21,
+      "verse": 83,
+      "arabicSnippet": "أَنِّى مَسَّنِىَ ٱلضُّرُّ وَأَنتَ أَرْحَمُ ٱلرَّٰحِمِينَ",
+      "translation": "Indeed, adversity has touched me, and You are the Most Merciful of the merciful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 84,
+      "arabicSnippet": "فَٱسْتَجَبْنَا لَهُۥ فَكَشَفْنَا مَا بِهِۦ مِن ضُرٍّ",
+      "translation": "So We responded to him and removed what afflicted him of adversity.",
+      "theme": "rescue"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ وَيَكْشِفُ ٱلسُّوٓءَ",
+      "translation": "Is He not the One who responds to the distressed when he calls?",
+      "theme": "dua"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "And be patient. Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "Indeed, the patient will be given their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 57,
+      "verse": 22,
+      "arabicSnippet": "مَآ أَصَابَ مِن مُّصِيبَةٍ إِلَّا فِى كِتَـٰبٍ",
+      "translation": "No disaster strikes except that it is in a register.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "And whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing will befall us except what Allah has written for us.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah, and He is the best Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ",
+      "translation": "Indeed, the allies of Allah — no fear will there be concerning them.",
+      "theme": "security"
+    },
+    {
+      "surah": 73,
+      "verse": 8,
+      "arabicSnippet": "وَٱذْكُرِ ٱسْمَ رَبِّكَ وَتَبَتَّلْ إِلَيْهِ تَبْتِيلًا",
+      "translation": "And remember the name of your Lord and devote yourself to Him.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "قَالَ رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ مِّنَ ٱلْمُحْسِنِينَ",
+      "translation": "Indeed, the mercy of Allah is near to the doers of good.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 94,
+      "verse": 1,
+      "arabicSnippet": "أَلَمْ نَشْرَحْ لَكَ صَدْرَكَ",
+      "translation": "Did We not expand for you your breast?",
+      "theme": "comfort"
+    },
+    {
+      "surah": 94,
+      "verse": 2,
+      "arabicSnippet": "وَوَضَعْنَا عَنكَ وِزْرَكَ",
+      "translation": "And We removed from you your burden.",
+      "theme": "relief"
+    },
+    {
+      "surah": 94,
+      "verse": 8,
+      "arabicSnippet": "وَإِلَىٰ رَبِّكَ فَٱرْغَب",
+      "translation": "And to your Lord turn in longing.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 6,
+      "verse": 17,
+      "arabicSnippet": "وَإِن يَمْسَسْكَ ٱللَّهُ بِضُرٍّ فَلَا كَاشِفَ لَهُۥٓ إِلَّا هُوَ",
+      "translation": "If Allah touches you with harm, none can remove it but Him.",
+      "theme": "reliance"
+    },
+    {
+      "surah": 11,
+      "verse": 88,
+      "arabicSnippet": "وَمَا تَوْفِيقِىٓ إِلَّا بِٱللَّهِ عَلَيْهِ تَوَكَّلْتُ",
+      "translation": "My success is only through Allah. Upon Him I have relied.",
+      "theme": "trust"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ وَكَفَىٰ بِٱللَّهِ وَكِيلًا",
+      "translation": "And rely upon Allah; and sufficient is Allah as Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will surely increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will surely guide them.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا بَعْدَ إِذْ هَدَيْتَنَا",
+      "translation": "Our Lord, let not our hearts deviate after You have guided us.",
+      "theme": "dua"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "وَقُل رَّبِّ ٱغْفِرْ وَٱرْحَمْ وَأَنتَ خَيْرُ ٱلرَّٰحِمِينَ",
+      "translation": "My Lord, forgive and have mercy, for You are the best of the merciful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful for Your favor.",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ إِنِّى كُنتُ مِنَ ٱلظَّـٰلِمِينَ",
+      "translation": "There is no deity except You; exalted are You. Indeed, I have been of the wrongdoers.",
+      "theme": "repentance"
+    },
+    {
+      "surah": 21,
+      "verse": 88,
+      "arabicSnippet": "فَٱسْتَجَبْنَا لَهُۥ وَنَجَّيْنَـٰهُ مِنَ ٱلْغَمِّ",
+      "translation": "So We responded to him and saved him from the distress.",
+      "theme": "rescue"
+    },
+    {
+      "surah": 28,
+      "verse": 24,
+      "arabicSnippet": "رَبِّ إِنِّى لِمَآ أَنزَلْتَ إِلَىَّ مِنْ خَيْرٍ فَقِيرٌ",
+      "translation": "My Lord, indeed I am, for whatever good You would send down to me, in need.",
+      "theme": "humility"
+    }
+  ],
+  "hopeful": [
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "And your Lord is going to give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ أُجِيبُ دَعْوَةَ ٱلدَّاعِ",
+      "translation": "Indeed I am near. I respond to the invocation of the supplicant when he calls.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ",
+      "translation": "And will provide for him from where he does not expect.",
+      "theme": "provision"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "And despair not of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will surely guide them to Our ways.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "So remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will surely increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 3,
+      "verse": 26,
+      "arabicSnippet": "تُؤْتِى ٱلْمُلْكَ مَن تَشَآءُ",
+      "translation": "You give sovereignty to whom You will.",
+      "theme": "power"
+    },
+    {
+      "surah": 2,
+      "verse": 216,
+      "arabicSnippet": "وَعَسَىٰٓ أَن تَكْرَهُوا۟ شَيْـًٔا وَهُوَ خَيْرٌ لَّكُمْ",
+      "translation": "Perhaps you hate a thing and it is good for you.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah, and He is the best Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 8,
+      "verse": 30,
+      "arabicSnippet": "وَيَمْكُرُونَ وَيَمْكُرُ ٱللَّهُ وَٱللَّهُ خَيْرُ ٱلْمَـٰكِرِينَ",
+      "translation": "They plan, and Allah plans. And Allah is the best of planners.",
+      "theme": "trust"
+    },
+    {
+      "surah": 10,
+      "verse": 58,
+      "arabicSnippet": "قُلْ بِفَضْلِ ٱللَّهِ وَبِرَحْمَتِهِۦ فَبِذَٰلِكَ فَلْيَفْرَحُوا۟",
+      "translation": "Say: In the bounty of Allah and His mercy — in that let them rejoice.",
+      "theme": "joy"
+    },
+    {
+      "surah": 3,
+      "verse": 159,
+      "arabicSnippet": "فَإِذَا عَزَمْتَ فَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "And when you have decided, then rely upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ",
+      "translation": "Is He not the One who responds to the distressed when he calls?",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 88,
+      "arabicSnippet": "وَكَذَٰلِكَ نُـۨجِى ٱلْمُؤْمِنِينَ",
+      "translation": "And thus do We save the believers.",
+      "theme": "rescue"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ مِّنَ ٱلْمُحْسِنِينَ",
+      "translation": "Indeed, the mercy of Allah is near to the doers of good.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 57,
+      "verse": 21,
+      "arabicSnippet": "سَابِقُوٓا۟ إِلَىٰ مَغْفِرَةٍ مِّن رَّبِّكُمْ",
+      "translation": "Race toward forgiveness from your Lord.",
+      "theme": "motivation"
+    },
+    {
+      "surah": 3,
+      "verse": 133,
+      "arabicSnippet": "وَسَارِعُوٓا۟ إِلَىٰ مَغْفِرَةٍ مِّن رَّبِّكُمْ وَجَنَّةٍ عَرْضُهَا ٱلسَّمَـٰوَاتُ وَٱلْأَرْضُ",
+      "translation": "And hasten to forgiveness from your Lord and a garden as wide as the heavens and earth.",
+      "theme": "paradise"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient will be given their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 41,
+      "verse": 30,
+      "arabicSnippet": "إِنَّ ٱلَّذِينَ قَالُوا۟ رَبُّنَا ٱللَّهُ ثُمَّ ٱسْتَقَـٰمُوا۟ تَتَنَزَّلُ عَلَيْهِمُ ٱلْمَلَـٰٓئِكَةُ",
+      "translation": "Those who said 'Our Lord is Allah' and then remained steadfast — the angels will descend upon them.",
+      "theme": "steadfastness"
+    },
+    {
+      "surah": 41,
+      "verse": 31,
+      "arabicSnippet": "نَحْنُ أَوْلِيَآؤُكُمْ فِى ٱلْحَيَوٰةِ ٱلدُّنْيَا وَفِى ٱلْـَٔاخِرَةِ",
+      "translation": "We are your allies in this worldly life and in the Hereafter.",
+      "theme": "support"
+    },
+    {
+      "surah": 9,
+      "verse": 40,
+      "arabicSnippet": "لَا تَحْزَنْ إِنَّ ٱللَّهَ مَعَنَا",
+      "translation": "Do not grieve; indeed Allah is with us.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ أَسْمَعُ وَأَرَىٰٓ",
+      "translation": "Fear not. Indeed, I am with you both; I hear and I see.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you, nor has He detested you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 4,
+      "arabicSnippet": "وَلَلْـَٔاخِرَةُ خَيْرٌ لَّكَ مِنَ ٱلْأُولَىٰ",
+      "translation": "And the Hereafter is better for you than the first life.",
+      "theme": "hope"
+    },
+    {
+      "surah": 28,
+      "verse": 24,
+      "arabicSnippet": "رَبِّ إِنِّى لِمَآ أَنزَلْتَ إِلَىَّ مِنْ خَيْرٍ فَقِيرٌ",
+      "translation": "My Lord, indeed I am, for whatever good You would send down to me, in need.",
+      "theme": "humility"
+    },
+    {
+      "surah": 11,
+      "verse": 56,
+      "arabicSnippet": "إِنِّى تَوَكَّلْتُ عَلَى ٱللَّهِ رَبِّى وَرَبِّكُم",
+      "translation": "Indeed, I have relied upon Allah, my Lord and your Lord.",
+      "theme": "trust"
+    },
+    {
+      "surah": 6,
+      "verse": 1,
+      "arabicSnippet": "ٱلْحَمْدُ لِلَّهِ ٱلَّذِى خَلَقَ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضَ",
+      "translation": "All praise to Allah who created the heavens and earth.",
+      "theme": "praise"
+    },
+    {
+      "surah": 55,
+      "verse": 60,
+      "arabicSnippet": "هَلْ جَزَآءُ ٱلْإِحْسَـٰنِ إِلَّا ٱلْإِحْسَـٰنُ",
+      "translation": "Is the reward for good anything but good?",
+      "theme": "reward"
+    },
+    {
+      "surah": 16,
+      "verse": 96,
+      "arabicSnippet": "مَا عِندَكُمْ يَنفَدُ وَمَا عِندَ ٱللَّهِ بَاقٍ",
+      "translation": "What is with you will end, but what is with Allah will endure.",
+      "theme": "perspective"
+    },
+    {
+      "surah": 2,
+      "verse": 214,
+      "arabicSnippet": "أَلَآ إِنَّ نَصْرَ ٱللَّهِ قَرِيبٌ",
+      "translation": "Indeed, the help of Allah is near.",
+      "theme": "hope"
+    },
+    {
+      "surah": 22,
+      "verse": 78,
+      "arabicSnippet": "فَأَقِيمُوا۟ ٱلصَّلَوٰةَ وَءَاتُوا۟ ٱلزَّكَوٰةَ وَٱعْتَصِمُوا۟ بِٱللَّهِ هُوَ مَوْلَىٰكُمْ",
+      "translation": "Establish prayer, give zakah, and hold firmly to Allah. He is your protector.",
+      "theme": "worship"
+    },
+    {
+      "surah": 35,
+      "verse": 5,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلنَّاسُ إِنَّ وَعْدَ ٱللَّهِ حَقٌّ",
+      "translation": "O mankind, indeed the promise of Allah is truth.",
+      "theme": "truth"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 73,
+      "verse": 9,
+      "arabicSnippet": "فَٱتَّخِذْهُ وَكِيلًا",
+      "translation": "So take Him as Disposer of your affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 4,
+      "verse": 19,
+      "arabicSnippet": "فَعَسَىٰٓ أَن تَكْرَهُوا۟ شَيْـًٔا وَيَجْعَلَ ٱللَّهُ فِيهِ خَيْرًا كَثِيرًا",
+      "translation": "Perhaps you dislike a thing and Allah makes therein much good.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 94,
+      "verse": 6,
+      "arabicSnippet": "إِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "reassurance"
+    },
+    {
+      "surah": 5,
+      "verse": 54,
+      "arabicSnippet": "فَسَوْفَ يَأْتِى ٱللَّهُ بِقَوْمٍ يُحِبُّهُمْ وَيُحِبُّونَهُۥٓ",
+      "translation": "Allah will bring a people whom He will love and who will love Him.",
+      "theme": "love"
+    },
+    {
+      "surah": 48,
+      "verse": 1,
+      "arabicSnippet": "إِنَّا فَتَحْنَا لَكَ فَتْحًا مُّبِينًا",
+      "translation": "Indeed, We have given you a clear conquest.",
+      "theme": "victory"
+    },
+    {
+      "surah": 110,
+      "verse": 1,
+      "arabicSnippet": "إِذَا جَآءَ نَصْرُ ٱللَّهِ وَٱلْفَتْحُ",
+      "translation": "When the victory of Allah has come and the conquest.",
+      "theme": "victory"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "وَهَبْ لَنَا مِن لَّدُنكَ رَحْمَةً",
+      "translation": "And grant us from Your mercy.",
+      "theme": "dua"
+    }
+  ],
+  "strong": [
+    {
+      "surah": 3,
+      "verse": 139,
+      "arabicSnippet": "وَلَا تَهِنُوا۟ وَلَا تَحْزَنُوا۟ وَأَنتُمُ ٱلْأَعْلَوْنَ",
+      "translation": "Do not weaken and do not grieve, and you will be superior.",
+      "theme": "strength"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "And be patient. Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 2,
+      "verse": 286,
+      "arabicSnippet": "لَا يُكَلِّفُ ٱللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+      "translation": "Allah does not burden a soul beyond that it can bear.",
+      "theme": "ability"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah, and He is the best Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 47,
+      "verse": 7,
+      "arabicSnippet": "إِن تَنصُرُوا۟ ٱللَّهَ يَنصُرْكُمْ وَيُثَبِّتْ أَقْدَامَكُمْ",
+      "translation": "If you support Allah, He will support you and plant your feet firmly.",
+      "theme": "support"
+    },
+    {
+      "surah": 22,
+      "verse": 40,
+      "arabicSnippet": "وَلَيَنصُرَنَّ ٱللَّهُ مَن يَنصُرُهُۥٓ إِنَّ ٱللَّهَ لَقَوِىٌّ عَزِيزٌ",
+      "translation": "And Allah will surely support those who support Him. Indeed, Allah is Powerful and Exalted.",
+      "theme": "power"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will surely guide them to Our ways.",
+      "theme": "striving"
+    },
+    {
+      "surah": 2,
+      "verse": 45,
+      "arabicSnippet": "وَٱسْتَعِينُوا۟ بِٱلصَّبْرِ وَٱلصَّلَوٰةِ",
+      "translation": "Seek help through patience and prayer.",
+      "theme": "patience"
+    },
+    {
+      "surah": 16,
+      "verse": 97,
+      "arabicSnippet": "مَنْ عَمِلَ صَـٰلِحًا مِّن ذَكَرٍ أَوْ أُنثَىٰ وَهُوَ مُؤْمِنٌ فَلَنُحْيِيَنَّهُۥ حَيَوٰةً طَيِّبَةً",
+      "translation": "Whoever does righteousness, male or female, while being a believer — We will surely cause them to live a good life.",
+      "theme": "reward"
+    },
+    {
+      "surah": 13,
+      "verse": 11,
+      "arabicSnippet": "إِنَّ ٱللَّهَ لَا يُغَيِّرُ مَا بِقَوْمٍ حَتَّىٰ يُغَيِّرُوا۟ مَا بِأَنفُسِهِمْ",
+      "translation": "Indeed, Allah will not change the condition of a people until they change what is in themselves.",
+      "theme": "action"
+    },
+    {
+      "surah": 41,
+      "verse": 30,
+      "arabicSnippet": "إِنَّ ٱلَّذِينَ قَالُوا۟ رَبُّنَا ٱللَّهُ ثُمَّ ٱسْتَقَـٰمُوا۟",
+      "translation": "Those who said 'Our Lord is Allah' and then remained steadfast.",
+      "theme": "steadfastness"
+    },
+    {
+      "surah": 103,
+      "verse": 3,
+      "arabicSnippet": "إِلَّا ٱلَّذِينَ ءَامَنُوا۟ وَعَمِلُوا۟ ٱلصَّـٰلِحَـٰتِ وَتَوَاصَوْا۟ بِٱلْحَقِّ وَتَوَاصَوْا۟ بِٱلصَّبْرِ",
+      "translation": "Except those who believe, do good deeds, and urge each other to truth and patience.",
+      "theme": "faith"
+    },
+    {
+      "surah": 31,
+      "verse": 17,
+      "arabicSnippet": "وَٱصْبِرْ عَلَىٰ مَآ أَصَابَكَ إِنَّ ذَٰلِكَ مِنْ عَزْمِ ٱلْأُمُورِ",
+      "translation": "And be patient over what befalls you. Indeed, that is of the matters of determination.",
+      "theme": "determination"
+    },
+    {
+      "surah": 2,
+      "verse": 153,
+      "arabicSnippet": "إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "resilience"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient will be given their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 2,
+      "verse": 214,
+      "arabicSnippet": "أَلَآ إِنَّ نَصْرَ ٱللَّهِ قَرِيبٌ",
+      "translation": "Indeed, the help of Allah is near.",
+      "theme": "hope"
+    },
+    {
+      "surah": 17,
+      "verse": 70,
+      "arabicSnippet": "وَلَقَدْ كَرَّمْنَا بَنِىٓ ءَادَمَ",
+      "translation": "And We have certainly honored the children of Adam.",
+      "theme": "honor"
+    },
+    {
+      "surah": 40,
+      "verse": 51,
+      "arabicSnippet": "إِنَّا لَنَنصُرُ رُسُلَنَا وَٱلَّذِينَ ءَامَنُوا۟ فِى ٱلْحَيَوٰةِ ٱلدُّنْيَا",
+      "translation": "Indeed, We will support Our messengers and those who believe in this worldly life.",
+      "theme": "support"
+    },
+    {
+      "surah": 48,
+      "verse": 29,
+      "arabicSnippet": "أَشِدَّآءُ عَلَى ٱلْكُفَّارِ رُحَمَآءُ بَيْنَهُمْ",
+      "translation": "Firm against the disbelievers, merciful among themselves.",
+      "theme": "character"
+    },
+    {
+      "surah": 57,
+      "verse": 25,
+      "arabicSnippet": "وَأَنزَلْنَا ٱلْحَدِيدَ فِيهِ بَأْسٌ شَدِيدٌ وَمَنَـٰفِعُ لِلنَّاسِ",
+      "translation": "We sent down iron, wherein is great power and benefits for the people.",
+      "theme": "power"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ وَكَفَىٰ بِٱللَّهِ وَكِيلًا",
+      "translation": "Rely upon Allah; and sufficient is Allah as Disposer of affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 11,
+      "verse": 88,
+      "arabicSnippet": "وَمَا تَوْفِيقِىٓ إِلَّا بِٱللَّهِ",
+      "translation": "My success is only through Allah.",
+      "theme": "humility"
+    },
+    {
+      "surah": 14,
+      "verse": 12,
+      "arabicSnippet": "وَمَا لَنَآ أَلَّا نَتَوَكَّلَ عَلَى ٱللَّهِ وَقَدْ هَدَىٰنَا سُبُلَنَا",
+      "translation": "Why should we not rely upon Allah when He has guided us?",
+      "theme": "trust"
+    },
+    {
+      "surah": 3,
+      "verse": 200,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ ٱصْبِرُوا۟ وَصَابِرُوا۟ وَرَابِطُوا۟",
+      "translation": "O you who believe, be patient and endure and remain stationed.",
+      "theme": "endurance"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ",
+      "translation": "There is no deity except You; exalted are You.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 7,
+      "verse": 128,
+      "arabicSnippet": "إِنَّ ٱلْأَرْضَ لِلَّهِ يُورِثُهَا مَن يَشَآءُ مِنْ عِبَادِهِۦ وَٱلْعَـٰقِبَةُ لِلْمُتَّقِينَ",
+      "translation": "The earth belongs to Allah. He gives it to whom He wills. And the end is for the righteous.",
+      "theme": "justice"
+    },
+    {
+      "surah": 12,
+      "verse": 90,
+      "arabicSnippet": "إِنَّهُۥ مَن يَتَّقِ وَيَصْبِرْ فَإِنَّ ٱللَّهَ لَا يُضِيعُ أَجْرَ ٱلْمُحْسِنِينَ",
+      "translation": "Whoever fears Allah and is patient — indeed, Allah does not allow the reward of the good-doers to be lost.",
+      "theme": "perseverance"
+    },
+    {
+      "surah": 46,
+      "verse": 35,
+      "arabicSnippet": "فَٱصْبِرْ كَمَا صَبَرَ أُو۟لُوا۟ ٱلْعَزْمِ مِنَ ٱلرُّسُلِ",
+      "translation": "Be patient as those of determination among the messengers were patient.",
+      "theme": "prophetic"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَهُوَ حَسْبُهُۥٓ",
+      "translation": "Whoever relies upon Allah — then He is sufficient for him.",
+      "theme": "sufficiency"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing will befall us except what Allah has written for us.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 8,
+      "verse": 10,
+      "arabicSnippet": "وَمَا ٱلنَّصْرُ إِلَّا مِنْ عِندِ ٱللَّهِ",
+      "translation": "And victory is only from Allah.",
+      "theme": "victory"
+    },
+    {
+      "surah": 22,
+      "verse": 78,
+      "arabicSnippet": "هُوَ ٱجْتَبَىٰكُمْ",
+      "translation": "He has chosen you.",
+      "theme": "chosen"
+    },
+    {
+      "surah": 6,
+      "verse": 162,
+      "arabicSnippet": "قُلْ إِنَّ صَلَاتِى وَنُسُكِى وَمَحْيَاىَ وَمَمَاتِى لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "Say: Indeed, my prayer, my sacrifice, my living and my dying are for Allah.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 3,
+      "verse": 160,
+      "arabicSnippet": "إِن يَنصُرْكُمُ ٱللَّهُ فَلَا غَالِبَ لَكُمْ",
+      "translation": "If Allah should aid you, no one can overcome you.",
+      "theme": "victory"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 66,
+      "verse": 8,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلَّذِينَ ءَامَنُوا۟ تُوبُوٓا۟ إِلَى ٱللَّهِ تَوْبَةً نَّصُوحًا",
+      "translation": "O you who believe, repent to Allah with sincere repentance.",
+      "theme": "renewal"
+    },
+    {
+      "surah": 49,
+      "verse": 13,
+      "arabicSnippet": "إِنَّ أَكْرَمَكُمْ عِندَ ٱللَّهِ أَتْقَىٰكُمْ",
+      "translation": "Indeed, the most noble of you in the sight of Allah is the most righteous.",
+      "theme": "nobility"
+    },
+    {
+      "surah": 73,
+      "verse": 20,
+      "arabicSnippet": "فَٱقْرَءُوا۟ مَا تَيَسَّرَ مِنَ ٱلْقُرْءَانِ",
+      "translation": "So recite what is easy from the Quran.",
+      "theme": "quran"
+    },
+    {
+      "surah": 59,
+      "verse": 23,
+      "arabicSnippet": "هُوَ ٱللَّهُ ٱلَّذِى لَآ إِلَـٰهَ إِلَّا هُوَ ٱلْمَلِكُ ٱلْقُدُّوسُ ٱلسَّلَـٰمُ",
+      "translation": "He is Allah, other than whom there is no deity, the Sovereign, the Pure, the Perfection.",
+      "theme": "names"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "So remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا",
+      "translation": "Our Lord, let not our hearts deviate.",
+      "theme": "dua"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ",
+      "translation": "Indeed, the allies of Allah — no fear will there be concerning them.",
+      "theme": "fearlessness"
+    }
+  ],
+  "frustrated": [
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 2,
+      "verse": 286,
+      "arabicSnippet": "لَا يُكَلِّفُ ٱللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+      "translation": "Allah does not burden a soul beyond that it can bear.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 3,
+      "verse": 139,
+      "arabicSnippet": "وَلَا تَهِنُوا۟ وَلَا تَحْزَنُوا۟",
+      "translation": "Do not weaken and do not grieve.",
+      "theme": "strength"
+    },
+    {
+      "surah": 13,
+      "verse": 11,
+      "arabicSnippet": "إِنَّ ٱللَّهَ لَا يُغَيِّرُ مَا بِقَوْمٍ حَتَّىٰ يُغَيِّرُوا۟ مَا بِأَنفُسِهِمْ",
+      "translation": "Allah will not change the condition of a people until they change what is in themselves.",
+      "theme": "action"
+    },
+    {
+      "surah": 2,
+      "verse": 153,
+      "arabicSnippet": "ٱسْتَعِينُوا۟ بِٱلصَّبْرِ وَٱلصَّلَوٰةِ",
+      "translation": "Seek help through patience and prayer.",
+      "theme": "patience"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "Be patient. Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 3,
+      "verse": 134,
+      "arabicSnippet": "وَٱلْكَـٰظِمِينَ ٱلْغَيْظَ وَٱلْعَافِينَ عَنِ ٱلنَّاسِ",
+      "translation": "Who restrain anger and pardon the people.",
+      "theme": "forgiveness"
+    },
+    {
+      "surah": 42,
+      "verse": 43,
+      "arabicSnippet": "وَلَمَن صَبَرَ وَغَفَرَ إِنَّ ذَٰلِكَ لَمِنْ عَزْمِ ٱلْأُمُورِ",
+      "translation": "Whoever is patient and forgiving — that is of the matters of determination.",
+      "theme": "determination"
+    },
+    {
+      "surah": 41,
+      "verse": 34,
+      "arabicSnippet": "ٱدْفَعْ بِٱلَّتِى هِىَ أَحْسَنُ فَإِذَا ٱلَّذِى بَيْنَكَ وَبَيْنَهُۥ عَدَٰوَةٌ كَأَنَّهُۥ وَلِىٌّ حَمِيمٌ",
+      "translation": "Repel evil with what is better, and your enemy becomes as though a devoted friend.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 3,
+      "verse": 159,
+      "arabicSnippet": "فَٱعْفُ عَنْهُمْ وَٱسْتَغْفِرْ لَهُمْ",
+      "translation": "Pardon them and ask forgiveness for them.",
+      "theme": "forgiveness"
+    },
+    {
+      "surah": 7,
+      "verse": 199,
+      "arabicSnippet": "خُذِ ٱلْعَفْوَ وَأْمُرْ بِٱلْعُرْفِ وَأَعْرِضْ عَنِ ٱلْجَـٰهِلِينَ",
+      "translation": "Take what is given freely, enjoin what is good, and turn away from the ignorant.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 31,
+      "verse": 17,
+      "arabicSnippet": "وَٱصْبِرْ عَلَىٰ مَآ أَصَابَكَ",
+      "translation": "Be patient over what befalls you.",
+      "theme": "patience"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient will be given their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 2,
+      "verse": 216,
+      "arabicSnippet": "وَعَسَىٰٓ أَن تَكْرَهُوا۟ شَيْـًٔا وَهُوَ خَيْرٌ لَّكُمْ",
+      "translation": "Perhaps you hate a thing and it is good for you.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing will befall us except what Allah has written.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 57,
+      "verse": 22,
+      "arabicSnippet": "مَآ أَصَابَ مِن مُّصِيبَةٍ إِلَّا فِى كِتَـٰبٍ",
+      "translation": "No disaster strikes except that it is in a register.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will surely guide them.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 16,
+      "verse": 126,
+      "arabicSnippet": "وَلَئِن صَبَرْتُمْ لَهُوَ خَيْرٌ لِّلصَّـٰبِرِينَ",
+      "translation": "If you are patient — it is better for those who are patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 103,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَاصَوْا۟ بِٱلصَّبْرِ",
+      "translation": "And urged each other to patience.",
+      "theme": "community"
+    },
+    {
+      "surah": 2,
+      "verse": 155,
+      "arabicSnippet": "وَبَشِّرِ ٱلصَّـٰبِرِينَ",
+      "translation": "And give good tidings to the patient.",
+      "theme": "promise"
+    },
+    {
+      "surah": 11,
+      "verse": 88,
+      "arabicSnippet": "وَمَا تَوْفِيقِىٓ إِلَّا بِٱللَّهِ",
+      "translation": "My success is only through Allah.",
+      "theme": "humility"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "Do not despair of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 94,
+      "verse": 6,
+      "arabicSnippet": "إِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "reassurance"
+    },
+    {
+      "surah": 6,
+      "verse": 17,
+      "arabicSnippet": "وَإِن يَمْسَسْكَ ٱللَّهُ بِضُرٍّ فَلَا كَاشِفَ لَهُۥٓ إِلَّا هُوَ",
+      "translation": "If Allah touches you with harm, none can remove it but Him.",
+      "theme": "reliance"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord is going to give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "And rely upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 73,
+      "verse": 9,
+      "arabicSnippet": "فَٱتَّخِذْهُ وَكِيلًا",
+      "translation": "Take Him as Disposer of your affairs.",
+      "theme": "trust"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ",
+      "translation": "Indeed I am near.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will surely increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ مِّنَ ٱلْمُحْسِنِينَ",
+      "translation": "The mercy of Allah is near to the doers of good.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 4,
+      "verse": 19,
+      "arabicSnippet": "وَيَجْعَلَ ٱللَّهُ فِيهِ خَيْرًا كَثِيرًا",
+      "translation": "And Allah makes therein much good.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 46,
+      "verse": 35,
+      "arabicSnippet": "فَٱصْبِرْ كَمَا صَبَرَ أُو۟لُوا۟ ٱلْعَزْمِ مِنَ ٱلرُّسُلِ",
+      "translation": "Be patient as those of determination among the messengers were patient.",
+      "theme": "prophetic"
+    },
+    {
+      "surah": 3,
+      "verse": 200,
+      "arabicSnippet": "ٱصْبِرُوا۟ وَصَابِرُوا۟ وَرَابِطُوا۟",
+      "translation": "Be patient, endure, and remain stationed.",
+      "theme": "endurance"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "رَّبِّ ٱغْفِرْ وَٱرْحَمْ وَأَنتَ خَيْرُ ٱلرَّٰحِمِينَ",
+      "translation": "My Lord, forgive and have mercy.",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ",
+      "translation": "There is no deity except You; exalted are You.",
+      "theme": "repentance"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ",
+      "translation": "The allies of Allah — no fear will there be concerning them.",
+      "theme": "security"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ",
+      "translation": "Is He not the One who responds to the distressed?",
+      "theme": "dua"
+    }
+  ],
+  "lost": [
+    {
+      "surah": 1,
+      "verse": 6,
+      "arabicSnippet": "ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ",
+      "translation": "Guide us to the straight path.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will surely guide them.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ أُجِيبُ دَعْوَةَ ٱلدَّاعِ",
+      "translation": "Indeed I am near. I respond to the invocation of the supplicant.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 6,
+      "verse": 122,
+      "arabicSnippet": "أَوَمَن كَانَ مَيْتًا فَأَحْيَيْنَـٰهُ وَجَعَلْنَا لَهُۥ نُورًا يَمْشِى بِهِۦ فِى ٱلنَّاسِ",
+      "translation": "Is one who was dead and We gave him life and made for him light by which to walk among the people?",
+      "theme": "light"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 93,
+      "verse": 7,
+      "arabicSnippet": "وَوَجَدَكَ ضَآلًّا فَهَدَىٰ",
+      "translation": "And He found you lost and guided you.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 20,
+      "verse": 50,
+      "arabicSnippet": "قَالَ رَبُّنَا ٱلَّذِىٓ أَعْطَىٰ كُلَّ شَىْءٍ خَلْقَهُۥ ثُمَّ هَدَىٰ",
+      "translation": "Our Lord is He who gave each thing its form and then guided it.",
+      "theme": "purpose"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا بَعْدَ إِذْ هَدَيْتَنَا",
+      "translation": "Our Lord, let not our hearts deviate after You have guided us.",
+      "theme": "dua"
+    },
+    {
+      "surah": 14,
+      "verse": 12,
+      "arabicSnippet": "وَقَدْ هَدَىٰنَا سُبُلَنَا",
+      "translation": "He has guided us to our ways.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "So remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 24,
+      "verse": 35,
+      "arabicSnippet": "ٱللَّهُ نُورُ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضِ",
+      "translation": "Allah is the Light of the heavens and the earth.",
+      "theme": "light"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 33,
+      "verse": 43,
+      "arabicSnippet": "هُوَ ٱلَّذِى يُصَلِّى عَلَيْكُمْ وَمَلَـٰٓئِكَتُهُۥ لِيُخْرِجَكُم مِّنَ ٱلظُّلُمَـٰتِ إِلَى ٱلنُّورِ",
+      "translation": "He sends blessings upon you, and His angels, to bring you out of darkness into light.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 2,
+      "verse": 257,
+      "arabicSnippet": "ٱللَّهُ وَلِىُّ ٱلَّذِينَ ءَامَنُوا۟ يُخْرِجُهُم مِّنَ ٱلظُّلُمَـٰتِ إِلَى ٱلنُّورِ",
+      "translation": "Allah is the ally of those who believe. He brings them out of darkness into the light.",
+      "theme": "salvation"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 25,
+      "verse": 1,
+      "arabicSnippet": "تَبَارَكَ ٱلَّذِى نَزَّلَ ٱلْفُرْقَانَ عَلَىٰ عَبْدِهِۦ لِيَكُونَ لِلْعَـٰلَمِينَ نَذِيرًا",
+      "translation": "Blessed is He who sent down the Criterion upon His Servant to be a warner to the worlds.",
+      "theme": "quran"
+    },
+    {
+      "surah": 17,
+      "verse": 9,
+      "arabicSnippet": "إِنَّ هَـٰذَا ٱلْقُرْءَانَ يَهْدِى لِلَّتِى هِىَ أَقْوَمُ",
+      "translation": "Indeed, this Quran guides to that which is most suitable.",
+      "theme": "quran"
+    },
+    {
+      "surah": 2,
+      "verse": 185,
+      "arabicSnippet": "هُدًى لِّلنَّاسِ وَبَيِّنَـٰتٍ مِّنَ ٱلْهُدَىٰ وَٱلْفُرْقَانِ",
+      "translation": "Guidance for the people and clear proofs of guidance and criterion.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 10,
+      "verse": 57,
+      "arabicSnippet": "قَدْ جَآءَتْكُم مَّوْعِظَةٌ مِّن رَّبِّكُمْ وَشِفَآءٌ لِّمَا فِى ٱلصُّدُورِ",
+      "translation": "There has come to you an instruction from your Lord and healing for what is in the breasts.",
+      "theme": "healing"
+    },
+    {
+      "surah": 76,
+      "verse": 3,
+      "arabicSnippet": "إِنَّا هَدَيْنَـٰهُ ٱلسَّبِيلَ",
+      "translation": "Indeed, We guided him to the way.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 42,
+      "verse": 52,
+      "arabicSnippet": "وَإِنَّكَ لَتَهْدِىٓ إِلَىٰ صِرَٰطٍ مُّسْتَقِيمٍ",
+      "translation": "Indeed, you guide to a straight path.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 6,
+      "verse": 161,
+      "arabicSnippet": "قُلْ إِنَّنِى هَدَىٰنِى رَبِّىٓ إِلَىٰ صِرَٰطٍ مُّسْتَقِيمٍ",
+      "translation": "Say: Indeed, my Lord has guided me to a straight path.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ مِّنَ ٱلْمُحْسِنِينَ",
+      "translation": "The mercy of Allah is near to the doers of good.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 73,
+      "verse": 8,
+      "arabicSnippet": "وَٱذْكُرِ ٱسْمَ رَبِّكَ وَتَبَتَّلْ إِلَيْهِ تَبْتِيلًا",
+      "translation": "Remember the name of your Lord and devote yourself to Him.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ",
+      "translation": "Fear not. Indeed, I am with you both.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ",
+      "translation": "There is no deity except You; exalted are You.",
+      "theme": "repentance"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "Do not despair of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord is going to give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 28,
+      "verse": 56,
+      "arabicSnippet": "إِنَّكَ لَا تَهْدِى مَنْ أَحْبَبْتَ وَلَـٰكِنَّ ٱللَّهَ يَهْدِى مَن يَشَآءُ",
+      "translation": "Indeed, you do not guide whom you like, but Allah guides whom He wills.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 4,
+      "verse": 175,
+      "arabicSnippet": "فَأَمَّا ٱلَّذِينَ ءَامَنُوا۟ بِٱللَّهِ وَٱعْتَصَمُوا۟ بِهِۦ فَسَيُدْخِلُهُمْ فِى رَحْمَةٍ مِّنْهُ وَفَضْلٍ",
+      "translation": "Those who believed in Allah and held firmly to Him — He will admit them to mercy and bounty from Him.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful for Your favor.",
+      "theme": "dua"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ",
+      "translation": "Is He not the One who responds to the distressed?",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 256,
+      "arabicSnippet": "لَآ إِكْرَاهَ فِى ٱلدِّينِ قَد تَّبَيَّنَ ٱلرُّشْدُ مِنَ ٱلْغَىِّ",
+      "translation": "There shall be no compulsion in religion. The right course has become clear from the wrong.",
+      "theme": "clarity"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing will befall us except what Allah has written.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "Be patient. Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَهُوَ حَسْبُهُۥٓ",
+      "translation": "Whoever relies upon Allah — He is sufficient for him.",
+      "theme": "trust"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient will be given their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "رَّبِّ ٱغْفِرْ وَٱرْحَمْ وَأَنتَ خَيْرُ ٱلرَّٰحِمِينَ",
+      "translation": "My Lord, forgive and have mercy.",
+      "theme": "dua"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will surely increase you.",
+      "theme": "gratitude"
+    }
+  ],
+  "heartbroken": [
+    {
+      "surah": 12,
+      "verse": 86,
+      "arabicSnippet": "إِنَّمَآ أَشْكُوا۟ بَثِّى وَحُزْنِىٓ إِلَى ٱللَّهِ",
+      "translation": "I only complain of my suffering and my grief to Allah.",
+      "theme": "grief"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord is going to give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 2,
+      "verse": 156,
+      "arabicSnippet": "إِنَّا لِلَّهِ وَإِنَّآ إِلَيْهِ رَٰجِعُونَ",
+      "translation": "Indeed we belong to Allah, and to Him we will return.",
+      "theme": "acceptance"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 2,
+      "verse": 286,
+      "arabicSnippet": "لَا يُكَلِّفُ ٱللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+      "translation": "Allah does not burden a soul beyond that it can bear.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 21,
+      "verse": 83,
+      "arabicSnippet": "أَنِّى مَسَّنِىَ ٱلضُّرُّ وَأَنتَ أَرْحَمُ ٱلرَّٰحِمِينَ",
+      "translation": "Adversity has touched me, and You are the Most Merciful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "Do not despair of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 2,
+      "verse": 153,
+      "arabicSnippet": "ٱسْتَعِينُوا۟ بِٱلصَّبْرِ وَٱلصَّلَوٰةِ",
+      "translation": "Seek help through patience and prayer.",
+      "theme": "patience"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ",
+      "translation": "Indeed I am near.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "Be patient. Indeed, Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 3,
+      "verse": 139,
+      "arabicSnippet": "وَلَا تَهِنُوا۟ وَلَا تَحْزَنُوا۟",
+      "translation": "Do not weaken and do not grieve.",
+      "theme": "strength"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ أَسْمَعُ وَأَرَىٰٓ",
+      "translation": "Fear not. Indeed, I am with you both; I hear and I see.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ",
+      "translation": "And will provide for him from where he does not expect.",
+      "theme": "provision"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ",
+      "translation": "Is He not the One who responds to the distressed?",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ",
+      "translation": "There is no deity except You; exalted are You.",
+      "theme": "repentance"
+    },
+    {
+      "surah": 21,
+      "verse": 88,
+      "arabicSnippet": "فَٱسْتَجَبْنَا لَهُۥ وَنَجَّيْنَـٰهُ مِنَ ٱلْغَمِّ",
+      "translation": "So We responded to him and saved him from the distress.",
+      "theme": "rescue"
+    },
+    {
+      "surah": 6,
+      "verse": 17,
+      "arabicSnippet": "وَإِن يَمْسَسْكَ ٱللَّهُ بِضُرٍّ فَلَا كَاشِفَ لَهُۥٓ إِلَّا هُوَ",
+      "translation": "If Allah touches you with harm, none can remove it but Him.",
+      "theme": "reliance"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient will be given their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 2,
+      "verse": 155,
+      "arabicSnippet": "وَبَشِّرِ ٱلصَّـٰبِرِينَ",
+      "translation": "Give good tidings to the patient.",
+      "theme": "promise"
+    },
+    {
+      "surah": 2,
+      "verse": 157,
+      "arabicSnippet": "أُو۟لَـٰٓئِكَ عَلَيْهِمْ صَلَوَٰتٌ مِّن رَّبِّهِمْ وَرَحْمَةٌ",
+      "translation": "Those are the ones upon whom are blessings from their Lord and mercy.",
+      "theme": "reward"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ",
+      "translation": "The allies of Allah — no fear will there be concerning them.",
+      "theme": "security"
+    },
+    {
+      "surah": 94,
+      "verse": 1,
+      "arabicSnippet": "أَلَمْ نَشْرَحْ لَكَ صَدْرَكَ",
+      "translation": "Did We not expand for you your breast?",
+      "theme": "comfort"
+    },
+    {
+      "surah": 94,
+      "verse": 2,
+      "arabicSnippet": "وَوَضَعْنَا عَنكَ وِزْرَكَ",
+      "translation": "And We removed from you your burden.",
+      "theme": "relief"
+    },
+    {
+      "surah": 2,
+      "verse": 214,
+      "arabicSnippet": "أَلَآ إِنَّ نَصْرَ ٱللَّهِ قَرِيبٌ",
+      "translation": "Indeed, the help of Allah is near.",
+      "theme": "hope"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ مِّنَ ٱلْمُحْسِنِينَ",
+      "translation": "The mercy of Allah is near to the doers of good.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 73,
+      "verse": 8,
+      "arabicSnippet": "وَٱذْكُرِ ٱسْمَ رَبِّكَ وَتَبَتَّلْ إِلَيْهِ تَبْتِيلًا",
+      "translation": "Remember the name of your Lord and devote yourself to Him.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 57,
+      "verse": 22,
+      "arabicSnippet": "مَآ أَصَابَ مِن مُّصِيبَةٍ إِلَّا فِى كِتَـٰبٍ",
+      "translation": "No disaster strikes except that it is in a register.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will guide them.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا",
+      "translation": "Our Lord, let not our hearts deviate.",
+      "theme": "dua"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "رَّبِّ ٱغْفِرْ وَٱرْحَمْ",
+      "translation": "My Lord, forgive and have mercy.",
+      "theme": "dua"
+    },
+    {
+      "surah": 28,
+      "verse": 24,
+      "arabicSnippet": "رَبِّ إِنِّى لِمَآ أَنزَلْتَ إِلَىَّ مِنْ خَيْرٍ فَقِيرٌ",
+      "translation": "My Lord, indeed I am in need of whatever good You would send down to me.",
+      "theme": "humility"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing will befall us except what Allah has written.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful for Your favor.",
+      "theme": "dua"
+    },
+    {
+      "surah": 30,
+      "verse": 21,
+      "arabicSnippet": "وَمِنْ ءَايَـٰتِهِۦٓ أَنْ خَلَقَ لَكُم مِّنْ أَنفُسِكُمْ أَزْوَٰجًا لِّتَسْكُنُوٓا۟ إِلَيْهَا",
+      "translation": "And among His signs is that He created for you spouses to find peace with.",
+      "theme": "love"
+    },
+    {
+      "surah": 11,
+      "verse": 88,
+      "arabicSnippet": "وَمَا تَوْفِيقِىٓ إِلَّا بِٱللَّهِ",
+      "translation": "My success is only through Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "And rely upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 93,
+      "verse": 4,
+      "arabicSnippet": "وَلَلْـَٔاخِرَةُ خَيْرٌ لَّكَ مِنَ ٱلْأُولَىٰ",
+      "translation": "And the Hereafter is better for you than the first life.",
+      "theme": "hope"
+    }
+  ],
+  "lonely": [
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ أُجِيبُ دَعْوَةَ ٱلدَّاعِ",
+      "translation": "Indeed I am near. I respond to the supplicant.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ أَسْمَعُ وَأَرَىٰٓ",
+      "translation": "Fear not. I am with you both; I hear and I see.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 9,
+      "verse": 40,
+      "arabicSnippet": "لَا تَحْزَنْ إِنَّ ٱللَّهَ مَعَنَا",
+      "translation": "Do not grieve; indeed Allah is with us.",
+      "theme": "companionship"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond.",
+      "theme": "dua"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord will give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ",
+      "translation": "The allies of Allah — no fear or grief for them.",
+      "theme": "security"
+    },
+    {
+      "surah": 41,
+      "verse": 30,
+      "arabicSnippet": "تَتَنَزَّلُ عَلَيْهِمُ ٱلْمَلَـٰٓئِكَةُ أَلَّا تَخَافُوا۟ وَلَا تَحْزَنُوا۟",
+      "translation": "Angels descend: Do not fear and do not grieve.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 41,
+      "verse": 31,
+      "arabicSnippet": "نَحْنُ أَوْلِيَآؤُكُمْ فِى ٱلْحَيَوٰةِ ٱلدُّنْيَا وَفِى ٱلْـَٔاخِرَةِ",
+      "translation": "We are your allies in this life and the Hereafter.",
+      "theme": "support"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "Remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَهُوَ حَسْبُهُۥٓ",
+      "translation": "Whoever relies upon Allah — He is sufficient.",
+      "theme": "trust"
+    },
+    {
+      "surah": 30,
+      "verse": 21,
+      "arabicSnippet": "وَجَعَلَ بَيْنَكُم مَّوَدَّةً وَرَحْمَةً",
+      "translation": "And He placed between you affection and mercy.",
+      "theme": "love"
+    },
+    {
+      "surah": 49,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا ٱلْمُؤْمِنُونَ إِخْوَةٌ",
+      "translation": "The believers are but brothers.",
+      "theme": "brotherhood"
+    },
+    {
+      "surah": 49,
+      "verse": 13,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلنَّاسُ إِنَّا خَلَقْنَـٰكُم مِّن ذَكَرٍ وَأُنثَىٰ وَجَعَلْنَـٰكُمْ شُعُوبًا وَقَبَآئِلَ لِتَعَارَفُوٓا۟",
+      "translation": "We created you from male and female and made you peoples and tribes to know one another.",
+      "theme": "community"
+    },
+    {
+      "surah": 12,
+      "verse": 86,
+      "arabicSnippet": "إِنَّمَآ أَشْكُوا۟ بَثِّى وَحُزْنِىٓ إِلَى ٱللَّهِ",
+      "translation": "I only complain of my suffering and grief to Allah.",
+      "theme": "grief"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ",
+      "translation": "Is He not the One who responds to the distressed?",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ",
+      "translation": "There is no deity except You; exalted are You.",
+      "theme": "dua"
+    },
+    {
+      "surah": 21,
+      "verse": 88,
+      "arabicSnippet": "فَٱسْتَجَبْنَا لَهُۥ وَنَجَّيْنَـٰهُ مِنَ ٱلْغَمِّ",
+      "translation": "So We responded and saved him from distress.",
+      "theme": "rescue"
+    },
+    {
+      "surah": 3,
+      "verse": 139,
+      "arabicSnippet": "وَلَا تَهِنُوا۟ وَلَا تَحْزَنُوا۟",
+      "translation": "Do not weaken and do not grieve.",
+      "theme": "strength"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "With hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of Allah's mercy.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "Do not despair of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 6,
+      "verse": 17,
+      "arabicSnippet": "فَلَا كَاشِفَ لَهُۥٓ إِلَّا هُوَ",
+      "translation": "None can remove it but Him.",
+      "theme": "reliance"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ",
+      "translation": "The mercy of Allah is near.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 73,
+      "verse": 8,
+      "arabicSnippet": "وَٱذْكُرِ ٱسْمَ رَبِّكَ وَتَبَتَّلْ إِلَيْهِ تَبْتِيلًا",
+      "translation": "Remember your Lord's name and devote yourself.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will guide them.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 28,
+      "verse": 24,
+      "arabicSnippet": "رَبِّ إِنِّى لِمَآ أَنزَلْتَ إِلَىَّ مِنْ خَيْرٍ فَقِيرٌ",
+      "translation": "My Lord, I am in need of whatever good You send.",
+      "theme": "humility"
+    },
+    {
+      "surah": 94,
+      "verse": 1,
+      "arabicSnippet": "أَلَمْ نَشْرَحْ لَكَ صَدْرَكَ",
+      "translation": "Did We not expand for you your breast?",
+      "theme": "comfort"
+    },
+    {
+      "surah": 57,
+      "verse": 22,
+      "arabicSnippet": "مَآ أَصَابَ مِن مُّصِيبَةٍ إِلَّا فِى كِتَـٰبٍ",
+      "translation": "No disaster strikes except in a register.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing befalls us except what Allah has written.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا",
+      "translation": "Our Lord, let not our hearts deviate.",
+      "theme": "dua"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "رَّبِّ ٱغْفِرْ وَٱرْحَمْ",
+      "translation": "My Lord, forgive and have mercy.",
+      "theme": "dua"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "Rely upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 11,
+      "verse": 88,
+      "arabicSnippet": "وَمَا تَوْفِيقِىٓ إِلَّا بِٱللَّهِ",
+      "translation": "My success is only through Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient get their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "Be patient. Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 48,
+      "verse": 4,
+      "arabicSnippet": "هُوَ ٱلَّذِىٓ أَنزَلَ ٱلسَّكِينَةَ فِى قُلُوبِ ٱلْمُؤْمِنِينَ",
+      "translation": "He sent tranquility into the hearts of the believers.",
+      "theme": "tranquility"
+    },
+    {
+      "surah": 10,
+      "verse": 58,
+      "arabicSnippet": "بِفَضْلِ ٱللَّهِ وَبِرَحْمَتِهِۦ فَبِذَٰلِكَ فَلْيَفْرَحُوا۟",
+      "translation": "In Allah's bounty and mercy — let them rejoice.",
+      "theme": "joy"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make a way out.",
+      "theme": "tawakkul"
+    }
+  ],
+  "inspired": [
+    {
+      "surah": 96,
+      "verse": 1,
+      "arabicSnippet": "ٱقْرَأْ بِٱسْمِ رَبِّكَ ٱلَّذِى خَلَقَ",
+      "translation": "Read in the name of your Lord who created.",
+      "theme": "knowledge"
+    },
+    {
+      "surah": 55,
+      "verse": 60,
+      "arabicSnippet": "هَلْ جَزَآءُ ٱلْإِحْسَـٰنِ إِلَّا ٱلْإِحْسَـٰنُ",
+      "translation": "Is the reward for good anything but good?",
+      "theme": "reward"
+    },
+    {
+      "surah": 13,
+      "verse": 11,
+      "arabicSnippet": "إِنَّ ٱللَّهَ لَا يُغَيِّرُ مَا بِقَوْمٍ حَتَّىٰ يُغَيِّرُوا۟ مَا بِأَنفُسِهِمْ",
+      "translation": "Allah will not change a people until they change themselves.",
+      "theme": "action"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will guide them.",
+      "theme": "striving"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "Remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 17,
+      "verse": 9,
+      "arabicSnippet": "إِنَّ هَـٰذَا ٱلْقُرْءَانَ يَهْدِى لِلَّتِى هِىَ أَقْوَمُ",
+      "translation": "This Quran guides to that which is most suitable.",
+      "theme": "quran"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "With hardship comes ease.",
+      "theme": "resilience"
+    },
+    {
+      "surah": 47,
+      "verse": 7,
+      "arabicSnippet": "إِن تَنصُرُوا۟ ٱللَّهَ يَنصُرْكُمْ",
+      "translation": "If you support Allah, He will support you.",
+      "theme": "support"
+    },
+    {
+      "surah": 6,
+      "verse": 162,
+      "arabicSnippet": "قُلْ إِنَّ صَلَاتِى وَنُسُكِى وَمَحْيَاىَ وَمَمَاتِى لِلَّهِ",
+      "translation": "My prayer, sacrifice, living, and dying are for Allah.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 3,
+      "verse": 159,
+      "arabicSnippet": "فَإِذَا عَزَمْتَ فَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "When you have decided, rely upon Allah.",
+      "theme": "action"
+    },
+    {
+      "surah": 103,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَاصَوْا۟ بِٱلْحَقِّ وَتَوَاصَوْا۟ بِٱلصَّبْرِ",
+      "translation": "Urge each other to truth and patience.",
+      "theme": "community"
+    },
+    {
+      "surah": 16,
+      "verse": 97,
+      "arabicSnippet": "مَنْ عَمِلَ صَـٰلِحًا فَلَنُحْيِيَنَّهُۥ حَيَوٰةً طَيِّبَةً",
+      "translation": "Whoever does righteousness — We will give them a good life.",
+      "theme": "reward"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord will give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond.",
+      "theme": "dua"
+    },
+    {
+      "surah": 10,
+      "verse": 58,
+      "arabicSnippet": "بِفَضْلِ ٱللَّهِ وَبِرَحْمَتِهِۦ فَبِذَٰلِكَ فَلْيَفْرَحُوا۟",
+      "translation": "In Allah's bounty and mercy, let them rejoice.",
+      "theme": "joy"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of Allah's mercy.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 17,
+      "verse": 70,
+      "arabicSnippet": "وَلَقَدْ كَرَّمْنَا بَنِىٓ ءَادَمَ",
+      "translation": "We have honored the children of Adam.",
+      "theme": "honor"
+    },
+    {
+      "surah": 49,
+      "verse": 13,
+      "arabicSnippet": "إِنَّ أَكْرَمَكُمْ عِندَ ٱللَّهِ أَتْقَىٰكُمْ",
+      "translation": "The most noble of you is the most righteous.",
+      "theme": "nobility"
+    },
+    {
+      "surah": 57,
+      "verse": 21,
+      "arabicSnippet": "سَابِقُوٓا۟ إِلَىٰ مَغْفِرَةٍ مِّن رَّبِّكُمْ",
+      "translation": "Race toward forgiveness from your Lord.",
+      "theme": "motivation"
+    },
+    {
+      "surah": 3,
+      "verse": 133,
+      "arabicSnippet": "وَسَارِعُوٓا۟ إِلَىٰ مَغْفِرَةٍ مِّن رَّبِّكُمْ",
+      "translation": "Hasten to forgiveness and a garden wide as heavens and earth.",
+      "theme": "motivation"
+    },
+    {
+      "surah": 22,
+      "verse": 78,
+      "arabicSnippet": "هُوَ ٱجْتَبَىٰكُمْ",
+      "translation": "He has chosen you.",
+      "theme": "chosen"
+    },
+    {
+      "surah": 48,
+      "verse": 1,
+      "arabicSnippet": "إِنَّا فَتَحْنَا لَكَ فَتْحًا مُّبِينًا",
+      "translation": "We have given you a clear conquest.",
+      "theme": "victory"
+    },
+    {
+      "surah": 24,
+      "verse": 35,
+      "arabicSnippet": "ٱللَّهُ نُورُ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضِ",
+      "translation": "Allah is the Light of the heavens and earth.",
+      "theme": "light"
+    },
+    {
+      "surah": 93,
+      "verse": 11,
+      "arabicSnippet": "وَأَمَّا بِنِعْمَةِ رَبِّكَ فَحَدِّثْ",
+      "translation": "As for the favor of your Lord, proclaim it.",
+      "theme": "sharing"
+    },
+    {
+      "surah": 41,
+      "verse": 30,
+      "arabicSnippet": "إِنَّ ٱلَّذِينَ قَالُوا۟ رَبُّنَا ٱللَّهُ ثُمَّ ٱسْتَقَـٰمُوا۟",
+      "translation": "Those who said 'Our Lord is Allah' and remained steadfast.",
+      "theme": "steadfastness"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ",
+      "translation": "Indeed I am near.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 73,
+      "verse": 20,
+      "arabicSnippet": "فَٱقْرَءُوا۟ مَا تَيَسَّرَ مِنَ ٱلْقُرْءَانِ",
+      "translation": "Recite what is easy from the Quran.",
+      "theme": "quran"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَهُوَ حَسْبُهُۥٓ",
+      "translation": "Whoever relies upon Allah — He is sufficient.",
+      "theme": "trust"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 76,
+      "verse": 3,
+      "arabicSnippet": "إِنَّا هَدَيْنَـٰهُ ٱلسَّبِيلَ",
+      "translation": "Indeed, We guided him to the way.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 20,
+      "verse": 114,
+      "arabicSnippet": "وَقُل رَّبِّ زِدْنِى عِلْمًا",
+      "translation": "And say: My Lord, increase me in knowledge.",
+      "theme": "knowledge"
+    },
+    {
+      "surah": 96,
+      "verse": 4,
+      "arabicSnippet": "ٱلَّذِى عَلَّمَ بِٱلْقَلَمِ",
+      "translation": "Who taught by the pen.",
+      "theme": "knowledge"
+    },
+    {
+      "surah": 96,
+      "verse": 5,
+      "arabicSnippet": "عَلَّمَ ٱلْإِنسَـٰنَ مَا لَمْ يَعْلَمْ",
+      "translation": "Taught man that which he knew not.",
+      "theme": "knowledge"
+    },
+    {
+      "surah": 31,
+      "verse": 27,
+      "arabicSnippet": "وَلَوْ أَنَّمَا فِى ٱلْأَرْضِ مِن شَجَرَةٍ أَقْلَـٰمٌ وَٱلْبَحْرُ يَمُدُّهُۥ مِنۢ بَعْدِهِۦ سَبْعَةُ أَبْحُرٍ مَّا نَفِدَتْ كَلِمَـٰتُ ٱللَّهِ",
+      "translation": "If every tree on earth were a pen and the ocean ink, the words of Allah would not be exhausted.",
+      "theme": "infinity"
+    },
+    {
+      "surah": 2,
+      "verse": 216,
+      "arabicSnippet": "وَعَسَىٰٓ أَن تَكْرَهُوا۟ شَيْـًٔا وَهُوَ خَيْرٌ لَّكُمْ",
+      "translation": "Perhaps you hate a thing and it is good for you.",
+      "theme": "wisdom"
+    },
+    {
+      "surah": 8,
+      "verse": 30,
+      "arabicSnippet": "وَيَمْكُرُونَ وَيَمْكُرُ ٱللَّهُ وَٱللَّهُ خَيْرُ ٱلْمَـٰكِرِينَ",
+      "translation": "They plan, and Allah plans. Allah is the best of planners.",
+      "theme": "trust"
+    },
+    {
+      "surah": 12,
+      "verse": 90,
+      "arabicSnippet": "إِنَّهُۥ مَن يَتَّقِ وَيَصْبِرْ فَإِنَّ ٱللَّهَ لَا يُضِيعُ أَجْرَ ٱلْمُحْسِنِينَ",
+      "translation": "Whoever fears Allah and is patient — Allah doesn't waste the good-doers' reward.",
+      "theme": "perseverance"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient get their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 11,
+      "verse": 88,
+      "arabicSnippet": "وَمَا تَوْفِيقِىٓ إِلَّا بِٱللَّهِ",
+      "translation": "My success is only through Allah.",
+      "theme": "humility"
+    },
+    {
+      "surah": 3,
+      "verse": 200,
+      "arabicSnippet": "ٱصْبِرُوا۟ وَصَابِرُوا۟ وَرَابِطُوا۟",
+      "translation": "Be patient, endure, and remain stationed.",
+      "theme": "endurance"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    }
+  ],
+  "confused": [
+    {
+      "surah": 1,
+      "verse": 6,
+      "arabicSnippet": "ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ",
+      "translation": "Guide us to the straight path.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 17,
+      "verse": 9,
+      "arabicSnippet": "إِنَّ هَـٰذَا ٱلْقُرْءَانَ يَهْدِى لِلَّتِى هِىَ أَقْوَمُ",
+      "translation": "This Quran guides to that which is most suitable.",
+      "theme": "quran"
+    },
+    {
+      "surah": 2,
+      "verse": 185,
+      "arabicSnippet": "هُدًى لِّلنَّاسِ وَبَيِّنَـٰتٍ مِّنَ ٱلْهُدَىٰ وَٱلْفُرْقَانِ",
+      "translation": "Guidance for the people and clear proofs.",
+      "theme": "quran"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "وَٱلَّذِينَ جَـٰهَدُوا۟ فِينَا لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "Those who strive for Us — We will guide them.",
+      "theme": "striving"
+    },
+    {
+      "surah": 93,
+      "verse": 7,
+      "arabicSnippet": "وَوَجَدَكَ ضَآلًّا فَهَدَىٰ",
+      "translation": "He found you lost and guided you.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond to you.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ أُجِيبُ دَعْوَةَ ٱلدَّاعِ",
+      "translation": "Indeed I am near. I respond to the supplicant.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 3,
+      "verse": 8,
+      "arabicSnippet": "رَبَّنَا لَا تُزِغْ قُلُوبَنَا بَعْدَ إِذْ هَدَيْتَنَا",
+      "translation": "Our Lord, let not our hearts deviate after You guided us.",
+      "theme": "dua"
+    },
+    {
+      "surah": 64,
+      "verse": 11,
+      "arabicSnippet": "وَمَن يُؤْمِنۢ بِٱللَّهِ يَهْدِ قَلْبَهُۥ",
+      "translation": "Whoever believes in Allah — He will guide his heart.",
+      "theme": "faith"
+    },
+    {
+      "surah": 6,
+      "verse": 161,
+      "arabicSnippet": "قُلْ إِنَّنِى هَدَىٰنِى رَبِّىٓ إِلَىٰ صِرَٰطٍ مُّسْتَقِيمٍ",
+      "translation": "My Lord has guided me to a straight path.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 76,
+      "verse": 3,
+      "arabicSnippet": "إِنَّا هَدَيْنَـٰهُ ٱلسَّبِيلَ",
+      "translation": "Indeed, We guided him to the way.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 10,
+      "verse": 57,
+      "arabicSnippet": "قَدْ جَآءَتْكُم مَّوْعِظَةٌ مِّن رَّبِّكُمْ وَشِفَآءٌ لِّمَا فِى ٱلصُّدُورِ",
+      "translation": "An instruction from your Lord and healing for the breasts.",
+      "theme": "healing"
+    },
+    {
+      "surah": 24,
+      "verse": 35,
+      "arabicSnippet": "ٱللَّهُ نُورُ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضِ",
+      "translation": "Allah is the Light of the heavens and the earth.",
+      "theme": "light"
+    },
+    {
+      "surah": 2,
+      "verse": 257,
+      "arabicSnippet": "ٱللَّهُ وَلِىُّ ٱلَّذِينَ ءَامَنُوا۟ يُخْرِجُهُم مِّنَ ٱلظُّلُمَـٰتِ إِلَى ٱلنُّورِ",
+      "translation": "Allah brings them out of darkness into light.",
+      "theme": "salvation"
+    },
+    {
+      "surah": 42,
+      "verse": 52,
+      "arabicSnippet": "وَإِنَّكَ لَتَهْدِىٓ إِلَىٰ صِرَٰطٍ مُّسْتَقِيمٍ",
+      "translation": "Indeed, you guide to a straight path.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "Remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 20,
+      "verse": 25,
+      "arabicSnippet": "رَبِّ ٱشْرَحْ لِى صَدْرِى",
+      "translation": "My Lord, expand for me my chest.",
+      "theme": "dua"
+    },
+    {
+      "surah": 20,
+      "verse": 50,
+      "arabicSnippet": "رَبُّنَا ٱلَّذِىٓ أَعْطَىٰ كُلَّ شَىْءٍ خَلْقَهُۥ ثُمَّ هَدَىٰ",
+      "translation": "Our Lord gave each thing its form and then guided it.",
+      "theme": "purpose"
+    },
+    {
+      "surah": 6,
+      "verse": 122,
+      "arabicSnippet": "أَوَمَن كَانَ مَيْتًا فَأَحْيَيْنَـٰهُ وَجَعَلْنَا لَهُۥ نُورًا",
+      "translation": "Is one who was dead and We gave him life and light?",
+      "theme": "light"
+    },
+    {
+      "surah": 39,
+      "verse": 53,
+      "arabicSnippet": "لَا تَقْنَطُوا۟ مِن رَّحْمَةِ ٱللَّهِ",
+      "translation": "Do not despair of the mercy of Allah.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 65,
+      "verse": 2,
+      "arabicSnippet": "وَمَن يَتَّقِ ٱللَّهَ يَجْعَل لَّهُۥ مَخْرَجًا",
+      "translation": "Whoever fears Allah — He will make for him a way out.",
+      "theme": "tawakkul"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 25,
+      "verse": 1,
+      "arabicSnippet": "تَبَارَكَ ٱلَّذِى نَزَّلَ ٱلْفُرْقَانَ",
+      "translation": "Blessed is He who sent down the Criterion.",
+      "theme": "quran"
+    },
+    {
+      "surah": 2,
+      "verse": 256,
+      "arabicSnippet": "قَد تَّبَيَّنَ ٱلرُّشْدُ مِنَ ٱلْغَىِّ",
+      "translation": "The right course has become clear from the wrong.",
+      "theme": "clarity"
+    },
+    {
+      "surah": 27,
+      "verse": 62,
+      "arabicSnippet": "أَمَّن يُجِيبُ ٱلْمُضْطَرَّ إِذَا دَعَاهُ",
+      "translation": "Is He not the One who responds to the distressed?",
+      "theme": "dua"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ",
+      "translation": "The mercy of Allah is near.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 33,
+      "verse": 43,
+      "arabicSnippet": "لِيُخْرِجَكُم مِّنَ ٱلظُّلُمَـٰتِ إِلَى ٱلنُّورِ",
+      "translation": "To bring you out of darkness into light.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 14,
+      "verse": 12,
+      "arabicSnippet": "وَقَدْ هَدَىٰنَا سُبُلَنَا",
+      "translation": "He has guided us to our ways.",
+      "theme": "guidance"
+    },
+    {
+      "surah": 4,
+      "verse": 175,
+      "arabicSnippet": "فَسَيُدْخِلُهُمْ فِى رَحْمَةٍ مِّنْهُ وَفَضْلٍ",
+      "translation": "He will admit them to mercy and bounty from Him.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful for Your favor.",
+      "theme": "dua"
+    },
+    {
+      "surah": 23,
+      "verse": 118,
+      "arabicSnippet": "رَّبِّ ٱغْفِرْ وَٱرْحَمْ",
+      "translation": "My Lord, forgive and have mercy.",
+      "theme": "dua"
+    },
+    {
+      "surah": 9,
+      "verse": 51,
+      "arabicSnippet": "قُل لَّن يُصِيبَنَآ إِلَّا مَا كَتَبَ ٱللَّهُ لَنَا",
+      "translation": "Nothing befalls us except what Allah has written.",
+      "theme": "qadr"
+    },
+    {
+      "surah": 20,
+      "verse": 46,
+      "arabicSnippet": "لَا تَخَافَآ إِنَّنِى مَعَكُمَآ",
+      "translation": "Fear not. Indeed, I am with you both.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 21,
+      "verse": 87,
+      "arabicSnippet": "لَّآ إِلَـٰهَ إِلَّآ أَنتَ سُبْحَـٰنَكَ",
+      "translation": "There is no deity except You; exalted are You.",
+      "theme": "repentance"
+    },
+    {
+      "surah": 73,
+      "verse": 8,
+      "arabicSnippet": "وَٱذْكُرِ ٱسْمَ رَبِّكَ",
+      "translation": "And remember the name of your Lord.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "Indeed, with hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 3,
+      "verse": 159,
+      "arabicSnippet": "فَإِذَا عَزَمْتَ فَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "When you have decided, rely upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 12,
+      "verse": 87,
+      "arabicSnippet": "لَا تَا۟يْـَٔسُوا۟ مِن رَّوْحِ ٱللَّهِ",
+      "translation": "Do not despair of relief from Allah.",
+      "theme": "hope"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient get their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 8,
+      "verse": 46,
+      "arabicSnippet": "وَٱصْبِرُوٓا۟ إِنَّ ٱللَّهَ مَعَ ٱلصَّـٰبِرِينَ",
+      "translation": "Be patient. Allah is with the patient.",
+      "theme": "patience"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord will give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 11,
+      "verse": 56,
+      "arabicSnippet": "إِنِّى تَوَكَّلْتُ عَلَى ٱللَّهِ",
+      "translation": "Indeed, I have relied upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 28,
+      "verse": 56,
+      "arabicSnippet": "وَلَـٰكِنَّ ٱللَّهَ يَهْدِى مَن يَشَآءُ",
+      "translation": "But Allah guides whom He wills.",
+      "theme": "guidance"
+    }
+  ],
+  "peaceful": [
+    {
+      "surah": 13,
+      "verse": 28,
+      "arabicSnippet": "أَلَا بِذِكْرِ ٱللَّهِ تَطْمَئِنُّ ٱلْقُلُوبُ",
+      "translation": "In the remembrance of Allah do hearts find rest.",
+      "theme": "peace"
+    },
+    {
+      "surah": 89,
+      "verse": 27,
+      "arabicSnippet": "يَـٰٓأَيَّتُهَا ٱلنَّفْسُ ٱلْمُطْمَئِنَّةُ",
+      "translation": "O reassured soul.",
+      "theme": "soul"
+    },
+    {
+      "surah": 89,
+      "verse": 28,
+      "arabicSnippet": "ٱرْجِعِىٓ إِلَىٰ رَبِّكِ رَاضِيَةً مَّرْضِيَّةً",
+      "translation": "Return to your Lord, well-pleased and pleasing.",
+      "theme": "return"
+    },
+    {
+      "surah": 89,
+      "verse": 30,
+      "arabicSnippet": "وَٱدْخُلِى جَنَّتِى",
+      "translation": "And enter My Paradise.",
+      "theme": "paradise"
+    },
+    {
+      "surah": 2,
+      "verse": 152,
+      "arabicSnippet": "فَٱذْكُرُونِىٓ أَذْكُرْكُمْ",
+      "translation": "Remember Me; I will remember you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 10,
+      "verse": 62,
+      "arabicSnippet": "أَلَآ إِنَّ أَوْلِيَآءَ ٱللَّهِ لَا خَوْفٌ عَلَيْهِمْ وَلَا هُمْ يَحْزَنُونَ",
+      "translation": "The allies of Allah — no fear or grief for them.",
+      "theme": "security"
+    },
+    {
+      "surah": 48,
+      "verse": 4,
+      "arabicSnippet": "هُوَ ٱلَّذِىٓ أَنزَلَ ٱلسَّكِينَةَ فِى قُلُوبِ ٱلْمُؤْمِنِينَ",
+      "translation": "He sent down tranquility into the hearts of the believers.",
+      "theme": "tranquility"
+    },
+    {
+      "surah": 24,
+      "verse": 35,
+      "arabicSnippet": "ٱللَّهُ نُورُ ٱلسَّمَـٰوَاتِ وَٱلْأَرْضِ",
+      "translation": "Allah is the Light of the heavens and the earth.",
+      "theme": "light"
+    },
+    {
+      "surah": 30,
+      "verse": 21,
+      "arabicSnippet": "وَمِنْ ءَايَـٰتِهِۦٓ أَنْ خَلَقَ لَكُم مِّنْ أَنفُسِكُمْ أَزْوَٰجًا لِّتَسْكُنُوٓا۟ إِلَيْهَا",
+      "translation": "He created for you spouses to find peace with them.",
+      "theme": "love"
+    },
+    {
+      "surah": 55,
+      "verse": 60,
+      "arabicSnippet": "هَلْ جَزَآءُ ٱلْإِحْسَـٰنِ إِلَّا ٱلْإِحْسَـٰنُ",
+      "translation": "Is the reward for good anything but good?",
+      "theme": "reward"
+    },
+    {
+      "surah": 16,
+      "verse": 97,
+      "arabicSnippet": "فَلَنُحْيِيَنَّهُۥ حَيَوٰةً طَيِّبَةً",
+      "translation": "We will cause them to live a good life.",
+      "theme": "life"
+    },
+    {
+      "surah": 14,
+      "verse": 7,
+      "arabicSnippet": "لَئِن شَكَرْتُمْ لَأَزِيدَنَّكُمْ",
+      "translation": "If you are grateful, I will increase you.",
+      "theme": "gratitude"
+    },
+    {
+      "surah": 93,
+      "verse": 5,
+      "arabicSnippet": "وَلَسَوْفَ يُعْطِيكَ رَبُّكَ فَتَرْضَىٰٓ",
+      "translation": "Your Lord will give you, and you will be satisfied.",
+      "theme": "promise"
+    },
+    {
+      "surah": 73,
+      "verse": 8,
+      "arabicSnippet": "وَٱذْكُرِ ٱسْمَ رَبِّكَ وَتَبَتَّلْ إِلَيْهِ تَبْتِيلًا",
+      "translation": "Remember the name of your Lord and devote yourself.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 20,
+      "verse": 14,
+      "arabicSnippet": "وَأَقِمِ ٱلصَّلَوٰةَ لِذِكْرِىٓ",
+      "translation": "And establish prayer for My remembrance.",
+      "theme": "prayer"
+    },
+    {
+      "surah": 6,
+      "verse": 162,
+      "arabicSnippet": "قُلْ إِنَّ صَلَاتِى وَنُسُكِى وَمَحْيَاىَ وَمَمَاتِى لِلَّهِ",
+      "translation": "My prayer, my sacrifice, my living and dying are for Allah.",
+      "theme": "devotion"
+    },
+    {
+      "surah": 1,
+      "verse": 2,
+      "arabicSnippet": "ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "All praise is due to Allah, Lord of the worlds.",
+      "theme": "praise"
+    },
+    {
+      "surah": 55,
+      "verse": 13,
+      "arabicSnippet": "فَبِأَىِّ ءَالَآءِ رَبِّكُمَا تُكَذِّبَانِ",
+      "translation": "Which of the favors of your Lord would you deny?",
+      "theme": "blessings"
+    },
+    {
+      "surah": 93,
+      "verse": 11,
+      "arabicSnippet": "وَأَمَّا بِنِعْمَةِ رَبِّكَ فَحَدِّثْ",
+      "translation": "And as for the favor of your Lord, proclaim it.",
+      "theme": "sharing"
+    },
+    {
+      "surah": 3,
+      "verse": 173,
+      "arabicSnippet": "حَسْبُنَا ٱللَّهُ وَنِعْمَ ٱلْوَكِيلُ",
+      "translation": "Sufficient for us is Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 65,
+      "verse": 3,
+      "arabicSnippet": "وَمَن يَتَوَكَّلْ عَلَى ٱللَّهِ فَهُوَ حَسْبُهُۥٓ",
+      "translation": "Whoever relies upon Allah — He is sufficient.",
+      "theme": "trust"
+    },
+    {
+      "surah": 10,
+      "verse": 58,
+      "arabicSnippet": "قُلْ بِفَضْلِ ٱللَّهِ وَبِرَحْمَتِهِۦ فَبِذَٰلِكَ فَلْيَفْرَحُوا۟",
+      "translation": "In the bounty of Allah and His mercy — let them rejoice.",
+      "theme": "joy"
+    },
+    {
+      "surah": 40,
+      "verse": 60,
+      "arabicSnippet": "ٱدْعُونِىٓ أَسْتَجِبْ لَكُمْ",
+      "translation": "Call upon Me; I will respond.",
+      "theme": "dua"
+    },
+    {
+      "surah": 2,
+      "verse": 186,
+      "arabicSnippet": "فَإِنِّى قَرِيبٌ",
+      "translation": "Indeed I am near.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 39,
+      "verse": 75,
+      "arabicSnippet": "وَقِيلَ ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ",
+      "translation": "Praise is due to Allah, Lord of the worlds.",
+      "theme": "paradise"
+    },
+    {
+      "surah": 56,
+      "verse": 26,
+      "arabicSnippet": "سَلَـٰمًا سَلَـٰمًا",
+      "translation": "Peace, peace.",
+      "theme": "paradise"
+    },
+    {
+      "surah": 36,
+      "verse": 58,
+      "arabicSnippet": "سَلَـٰمٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "translation": "Peace — a word from a Merciful Lord.",
+      "theme": "peace"
+    },
+    {
+      "surah": 97,
+      "verse": 5,
+      "arabicSnippet": "سَلَـٰمٌ هِىَ حَتَّىٰ مَطْلَعِ ٱلْفَجْرِ",
+      "translation": "Peace it is until the emergence of dawn.",
+      "theme": "peace"
+    },
+    {
+      "surah": 25,
+      "verse": 75,
+      "arabicSnippet": "أُو۟لَـٰٓئِكَ يُجْزَوْنَ ٱلْغُرْفَةَ بِمَا صَبَرُوا۟ وَيُلَقَّوْنَ فِيهَا تَحِيَّةً وَسَلَـٰمًا",
+      "translation": "They will be rewarded the upper chambers for their patience, and met with greetings and peace.",
+      "theme": "reward"
+    },
+    {
+      "surah": 7,
+      "verse": 56,
+      "arabicSnippet": "إِنَّ رَحْمَتَ ٱللَّهِ قَرِيبٌ",
+      "translation": "The mercy of Allah is near.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 93,
+      "verse": 3,
+      "arabicSnippet": "مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَىٰ",
+      "translation": "Your Lord has not taken leave of you.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 94,
+      "verse": 5,
+      "arabicSnippet": "فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا",
+      "translation": "With hardship comes ease.",
+      "theme": "hope"
+    },
+    {
+      "surah": 17,
+      "verse": 70,
+      "arabicSnippet": "وَلَقَدْ كَرَّمْنَا بَنِىٓ ءَادَمَ",
+      "translation": "We have honored the children of Adam.",
+      "theme": "honor"
+    },
+    {
+      "surah": 45,
+      "verse": 13,
+      "arabicSnippet": "وَسَخَّرَ لَكُم مَّا فِى ٱلسَّمَـٰوَاتِ وَمَا فِى ٱلْأَرْضِ جَمِيعًا مِّنْهُ",
+      "translation": "He subjected to you all that is in the heavens and earth.",
+      "theme": "bounty"
+    },
+    {
+      "surah": 16,
+      "verse": 18,
+      "arabicSnippet": "وَإِن تَعُدُّوا۟ نِعْمَةَ ٱللَّهِ لَا تُحْصُوهَا",
+      "translation": "If you count Allah's favors, you could not enumerate them.",
+      "theme": "blessings"
+    },
+    {
+      "surah": 35,
+      "verse": 3,
+      "arabicSnippet": "يَـٰٓأَيُّهَا ٱلنَّاسُ ٱذْكُرُوا۟ نِعْمَتَ ٱللَّهِ عَلَيْكُمْ",
+      "translation": "O mankind, remember the favor of Allah upon you.",
+      "theme": "remembrance"
+    },
+    {
+      "surah": 25,
+      "verse": 48,
+      "arabicSnippet": "وَهُوَ ٱلَّذِىٓ أَرْسَلَ ٱلرِّيَـٰحَ بُشْرًۢا بَيْنَ يَدَىْ رَحْمَتِهِۦ",
+      "translation": "He sends the winds as good tidings before His mercy.",
+      "theme": "nature"
+    },
+    {
+      "surah": 28,
+      "verse": 73,
+      "arabicSnippet": "وَمِن رَّحْمَتِهِۦ جَعَلَ لَكُمُ ٱلَّيْلَ وَٱلنَّهَارَ",
+      "translation": "Out of His mercy He made for you night and day.",
+      "theme": "mercy"
+    },
+    {
+      "surah": 59,
+      "verse": 23,
+      "arabicSnippet": "هُوَ ٱللَّهُ ٱلَّذِى لَآ إِلَـٰهَ إِلَّا هُوَ ٱلْمَلِكُ ٱلْقُدُّوسُ ٱلسَّلَـٰمُ",
+      "translation": "He is Allah — the King, the Pure, the Perfection of Peace.",
+      "theme": "names"
+    },
+    {
+      "surah": 41,
+      "verse": 30,
+      "arabicSnippet": "تَتَنَزَّلُ عَلَيْهِمُ ٱلْمَلَـٰٓئِكَةُ أَلَّا تَخَافُوا۟ وَلَا تَحْزَنُوا۟",
+      "translation": "The angels descend upon them: Do not fear and do not grieve.",
+      "theme": "comfort"
+    },
+    {
+      "surah": 9,
+      "verse": 40,
+      "arabicSnippet": "إِنَّ ٱللَّهَ مَعَنَا",
+      "translation": "Indeed Allah is with us.",
+      "theme": "closeness"
+    },
+    {
+      "surah": 33,
+      "verse": 3,
+      "arabicSnippet": "وَتَوَكَّلْ عَلَى ٱللَّهِ",
+      "translation": "Rely upon Allah.",
+      "theme": "trust"
+    },
+    {
+      "surah": 39,
+      "verse": 10,
+      "arabicSnippet": "إِنَّمَا يُوَفَّى ٱلصَّـٰبِرُونَ أَجْرَهُم بِغَيْرِ حِسَابٍ",
+      "translation": "The patient get their reward without account.",
+      "theme": "reward"
+    },
+    {
+      "surah": 46,
+      "verse": 15,
+      "arabicSnippet": "رَبِّ أَوْزِعْنِىٓ أَنْ أَشْكُرَ نِعْمَتَكَ",
+      "translation": "My Lord, enable me to be grateful.",
+      "theme": "dua"
+    },
+    {
+      "surah": 29,
+      "verse": 69,
+      "arabicSnippet": "لَنَهْدِيَنَّهُمْ سُبُلَنَا",
+      "translation": "We will surely guide them to Our ways.",
+      "theme": "guidance"
+    }
+  ]
+}

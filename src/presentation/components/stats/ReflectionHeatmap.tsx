@@ -37,8 +37,12 @@ export const ReflectionHeatmap: React.FC = () => {
     const gridData = generateGrid();
 
     const getBoxColor = (intensity: number) => {
-        // Cast to any to access custom theme properties
-        const colors = theme.colors as any;
+        const colors = theme.colors as typeof theme.colors & {
+            chartEmpty: string;
+            heatmapLow: string;
+            heatmapMedium: string;
+            heatmapHigh: string;
+        };
         if (intensity === 0) return colors.chartEmpty;
         if (intensity === 1) return colors.heatmapLow;
         if (intensity === 2) return colors.heatmapMedium;

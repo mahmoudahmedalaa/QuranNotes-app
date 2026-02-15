@@ -61,7 +61,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({ data }) => {
                         pointerLabelHeight: 90,
                         activatePointersOnLongPress: true,
                         autoAdjustPointerLabelPosition: false,
-                        pointerLabelComponent: (items: any) => {
+                        pointerLabelComponent: (items: { value: number; label: string }[]) => {
                             return (
                                 <View
                                     style={{

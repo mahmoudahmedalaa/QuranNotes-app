@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useStreaks } from '../../infrastructure/auth/StreakContext';
+import { useKhatma } from '../../infrastructure/khatma/KhatmaContext';
 import { useRepositories } from '../../infrastructure/di/RepositoryContext';
 import { Colors } from '../theme/DesignSystem';
 import { Recording } from '../../domain/entities/Recording';
@@ -28,6 +29,7 @@ export interface InsightMetrics {
 
 export const useInsightsData = (): InsightMetrics => {
     const { streak } = useStreaks();
+    const { totalPagesRead, completedJuz } = useKhatma();
     const { recordingRepo, noteRepo } = useRepositories();
     const [recordings, setRecordings] = useState<Recording[]>([]);
     const [notes, setNotes] = useState<Note[]>([]);
@@ -43,7 +45,7 @@ export const useInsightsData = (): InsightMetrics => {
             setRecordings(fetchedRecordings);
             setNotes(fetchedNotes);
         } catch (error) {
-            console.error('Failed to fetch insight data:', error);
+            if (__DEV__) console.error('Failed to fetch insight data:', error);
         } finally {
             setLoading(false);
         }
@@ -55,7 +57,7 @@ export const useInsightsData = (): InsightMetrics => {
         }, [fetchData]),
     );
 
-    // 1. Calculate Activity (Last 7 Days)
+    // 1. Calculate Activity (Last 7 Days) — includes Khatma reading estimate
     const getDailyActivity = () => {
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const activityMap = new Map<string, number>();
@@ -76,9 +78,7 @@ export const useInsightsData = (): InsightMetrics => {
         // Sum durations (Recordings) - explicit duration
         recordings.forEach(r => {
             const dateStr = new Date(r.createdAt).toISOString().split('T')[0];
-            // Only count if it falls within the last 7 days
             if (activityMap.has(dateStr)) {
-                // Duration is in seconds, convert to minutes
                 const mins = Math.round((r.duration || 0) / 60);
                 activityMap.set(dateStr, (activityMap.get(dateStr) || 0) + mins);
             }
@@ -92,6 +92,18 @@ export const useInsightsData = (): InsightMetrics => {
             }
         });
 
+        // Add Khatma reading estimate for today (~2 min/page)
+        if (totalPagesRead > 0) {
+            const todayStr = today.toISOString().split('T')[0];
+            if (activityMap.has(todayStr)) {
+                // Estimate: average pages across active days, ~2 min/page
+                const activeDays = Math.max(1, completedJuz.length);
+                const avgPagesPerDay = Math.ceil(totalPagesRead / activeDays);
+                const readingMins = avgPagesPerDay * 2;
+                activityMap.set(todayStr, (activityMap.get(todayStr) || 0) + readingMins);
+            }
+        }
+
         // Map back to result array
         return result.map(item => ({
             label: item.label,
@@ -99,27 +111,54 @@ export const useInsightsData = (): InsightMetrics => {
         }));
     };
 
-    // 2. Heatmap Data (from StreakContext)
+    // 2. Heatmap Data — merge streak activityHistory with Khatma reading days
     const getHeatmapData = () => {
-        if (!streak || !streak.activityHistory) return [];
-        return Object.entries(streak.activityHistory).map(([date, count]) => ({
+        const heatmap = new Map<string, number>();
+
+        // Add streak activity history
+        if (streak?.activityHistory) {
+            for (const [date, count] of Object.entries(streak.activityHistory)) {
+                heatmap.set(date, (heatmap.get(date) || 0) + count);
+            }
+        }
+
+        // Add Khatma reading days (each completed juz = activity on that day)
+        // Generate entries for days the user has been active this month
+        if (completedJuz.length > 0 || totalPagesRead > 0) {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth();
+            // Mark days corresponding to completed Juz as active
+            for (const juzNum of completedJuz) {
+                // Use a deterministic date for each completed Juz
+                const d = new Date(year, month, Math.min(juzNum, new Date(year, month + 1, 0).getDate()));
+                const dateStr = d.toISOString().split('T')[0];
+                if (!heatmap.has(dateStr)) {
+                    heatmap.set(dateStr, 3);
+                }
+            }
+        }
+
+        return Array.from(heatmap.entries()).map(([date, count]) => ({
             date,
             count,
         }));
     };
 
-    // 3. Topic Breakdown
+    // 3. Topic Breakdown — include Khatma reading as "Reading" category
     const getTopicBreakdown = () => {
-        // If no data, return empty state
-        const totalItems = (streak?.totalReflections || 0) + recordings.length + notes.length;
+        // Include Khatma pages read as a "reading" activity unit
+        const khatmaReadingUnits = Math.max(completedJuz.length, Math.floor(totalPagesRead / 20));
+        const totalItems = khatmaReadingUnits + (streak?.totalReflections || 0) + recordings.length + notes.length;
+
         if (totalItems === 0)
             return [
-                { value: 1, color: Colors.chartEmpty, text: '0%', label: 'None' }, // Empty state
+                { value: 1, color: Colors.chartEmpty, text: '0%', label: 'None' },
             ];
 
-        const readingPct = Math.round(((streak?.totalReflections || 0) / totalItems) * 100);
+        const readingPct = Math.round((khatmaReadingUnits / totalItems) * 100);
         const recitingPct = Math.round((recordings.length / totalItems) * 100);
-        const reflectionPct = Math.round((notes.length / totalItems) * 100);
+        const reflectionPct = Math.round(((notes.length + (streak?.totalReflections || 0)) / totalItems) * 100);
 
         return [
             {
@@ -141,14 +180,15 @@ export const useInsightsData = (): InsightMetrics => {
                 text: `${reflectionPct}%`,
                 label: 'Reflection',
             },
-        ].filter(item => item.value > 0); // Only show non-zero categories
+        ].filter(item => item.value > 0);
     };
 
-    // 4. Total Stats
+    // 4. Total Stats — include Khatma reading time
     const getTotalTime = () => {
         const recordingSeconds = recordings.reduce((acc, r) => acc + (r.duration || 0), 0);
         const noteSeconds = notes.length * 5 * 60; // 5 mins per note
-        return Math.round((recordingSeconds + noteSeconds) / 60); // Total Minutes
+        const khatmaSeconds = totalPagesRead * 2 * 60; // ~2 min per page
+        return Math.round((recordingSeconds + noteSeconds + khatmaSeconds) / 60);
     };
 
     return {
@@ -158,9 +198,9 @@ export const useInsightsData = (): InsightMetrics => {
         stats: {
             currentStreak: streak?.currentStreak || 0,
             totalTimeMinutes: getTotalTime(),
-            versesRead: streak?.totalReflections || 0,
+            versesRead: Math.max(streak?.totalReflections || 0, totalPagesRead),
             recordingsCount: recordings.length,
-            favoritesCount: 0,
+            favoritesCount: completedJuz.length,
         },
         loading,
     };
