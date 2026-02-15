@@ -24,10 +24,10 @@ const { width } = Dimensions.get('window');
 const FEATURES = [
     { icon: 'infinity', title: 'Unlimited Recordings', description: 'No 5-recording limit' },
     { icon: 'book-open-page-variant', title: 'Khatma Tracker', description: 'Full Quran completion tracking' },
+    { icon: 'meditation', title: 'Unlimited Reflections', description: 'Daily mood-based verse guidance' },
     { icon: 'chart-box', title: 'Pro Insights', description: 'Reflection heatmap & analytics' },
     { icon: 'fire', title: 'Streak Tracking', description: 'Daily consistency gamification' },
     { icon: 'cloud-sync', title: 'Cloud Sync', description: 'Backup across all devices' },
-    { icon: 'school', title: 'Smart Study Mode', description: 'Memorization helper' },
     { icon: 'file-export', title: 'Data Export', description: 'PDF & JSON downloads' },
 ];
 

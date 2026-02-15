@@ -76,13 +76,13 @@ function TabButton({ routeName, isFocused, onPress, onLongPress, activeColor, in
             <Animated.View style={[styles.tabIconContainer, animatedStyle]}>
                 {iconConfig.library === 'material' ? (
                     <MaterialCommunityIcons
-                        name={iconName as any}
+                        name={iconName as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
                         size={ICON_SIZE}
                         color={iconColor}
                     />
                 ) : (
                     <Ionicons
-                        name={iconName as any}
+                        name={iconName as React.ComponentProps<typeof Ionicons>['name']}
                         size={ICON_SIZE}
                         color={iconColor}
                     />

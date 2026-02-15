@@ -5,8 +5,35 @@ import { RemoteRecordingRepository } from '../../data/remote/RemoteRecordingRepo
 import { LocalFolderRepository } from '../../data/local/LocalFolderRepository';
 import { RemoteFolderRepository } from '../../data/remote/RemoteFolderRepository';
 
+/** Minimum shape for any syncable entity */
+interface SyncableEntity {
+    id: string;
+    createdAt: Date | string;
+    updatedAt?: Date | string;
+}
+
+/** Common interface for local repository operations */
+interface LocalRepository<T extends SyncableEntity> {
+    getAllNotes?(): Promise<T[]>;
+    getAllRecordings?(): Promise<T[]>;
+    getAllFolders?(): Promise<T[]>;
+    saveAllNotes?(items: T[]): Promise<void>;
+    saveAllRecordings?(items: T[]): Promise<void>;
+    saveAllFolders?(items: T[]): Promise<void>;
+}
+
+/** Common interface for remote repository operations */
+interface RemoteRepository<T extends SyncableEntity> {
+    getAllNotes?(): Promise<T[]>;
+    getAllRecordings?(): Promise<T[]>;
+    getAllFolders?(): Promise<T[]>;
+    saveNote?(item: T): Promise<void>;
+    saveRecording?(item: T): Promise<void>;
+    saveFolder?(item: T): Promise<void>;
+}
+
 export class SyncService {
-    constructor(private userId: string) {}
+    constructor(private userId: string) { }
 
     async syncAll(): Promise<void> {
         if (!this.userId) return;
@@ -33,11 +60,11 @@ export class SyncService {
     }
 }
 
-class EntitySyncManager {
+class EntitySyncManager<T extends SyncableEntity = SyncableEntity> {
     constructor(
-        private localRepo: any,
-        private remoteRepo: any,
-    ) {}
+        private localRepo: LocalRepository<T>,
+        private remoteRepo: RemoteRepository<T>,
+    ) { }
 
     async sync(label: string): Promise<void> {
         try {
@@ -51,10 +78,10 @@ class EntitySyncManager {
                 (await this.remoteRepo.getAllRecordings?.()) ||
                 (await this.remoteRepo.getAllFolders?.());
 
-            const merged = new Map<string, any>();
-            remoteItems.forEach((n: any) => merged.set(n.id, n));
+            const merged = new Map<string, T>();
+            remoteItems?.forEach((n: T) => merged.set(n.id, n));
 
-            for (const local of localItems) {
+            for (const local of localItems || []) {
                 const remote = merged.get(local.id);
                 // For recordings/notes where updatedAt might be missing, use createdAt
                 const localDate = new Date(local.updatedAt || local.createdAt).getTime();
@@ -64,20 +91,20 @@ class EntitySyncManager {
 
                 if (!remote || localDate > remoteDate) {
                     merged.set(local.id, local);
-                    (await this.remoteRepo.saveNote?.(local)) ||
-                        (await this.remoteRepo.saveRecording?.(local)) ||
-                        (await this.remoteRepo.saveFolder?.(local));
+                    await this.remoteRepo.saveNote?.(local);
+                    await this.remoteRepo.saveRecording?.(local);
+                    await this.remoteRepo.saveFolder?.(local);
                 }
             }
 
             // Sync back to local
             const finalItems = Array.from(merged.values());
-            (await this.localRepo.saveAllNotes?.(finalItems)) ||
-                (await this.localRepo.saveAllRecordings?.(finalItems)) ||
-                (await this.localRepo.saveAllFolders?.(finalItems));
+            await this.localRepo.saveAllNotes?.(finalItems);
+            await this.localRepo.saveAllRecordings?.(finalItems);
+            await this.localRepo.saveAllFolders?.(finalItems);
 
         } catch (e) {
-            console.error(`${label} sync error:`, e);
+            if (__DEV__) console.error(`${label} sync error:`, e);
         }
     }
 }

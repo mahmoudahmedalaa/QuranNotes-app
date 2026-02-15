@@ -54,5 +54,28 @@ export const ReadingPositionService = {
     async clear(surahId: number): Promise<void> {
         await AsyncStorage.removeItem(`${PREFIX}${surahId}`);
     },
+
+    /**
+     * Get the most recently read position across a range of surahs.
+     * Used by Khatma to detect if the user has read ANY surah in a Juz —
+     * regardless of where they read it (homepage, Quran tab, or Khatma).
+     */
+    async getMostRecentInRange(startSurah: number, endSurah: number): Promise<ReadingPosition | null> {
+        let mostRecent: ReadingPosition | null = null;
+        for (let s = startSurah; s <= endSurah; s++) {
+            try {
+                const raw = await AsyncStorage.getItem(`${PREFIX}${s}`);
+                if (raw) {
+                    const pos: ReadingPosition = JSON.parse(raw);
+                    if (!mostRecent || pos.timestamp > mostRecent.timestamp) {
+                        mostRecent = pos;
+                    }
+                }
+            } catch {
+                // skip
+            }
+        }
+        return mostRecent;
+    },
 };
 

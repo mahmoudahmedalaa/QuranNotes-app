@@ -15,13 +15,13 @@ import { isRamadanSeason } from '../../../utils/ramadanUtils';
 const { width } = Dimensions.get('window');
 
 const FEATURES = [
-    { icon: 'infinity', title: 'Unlimited Recordings', description: 'No 5-recording limit' },
-    { icon: 'note-text', title: 'Unlimited Notes', description: 'No 7-note limit' },
-    { icon: 'folder-multiple', title: 'Unlimited Folders', description: 'No 2-folder limit' },
-    { icon: 'book-open-page-variant', title: 'Khatma Tracker', description: 'Full Quran completion tracking' },
-    { icon: 'chart-box', title: 'Pro Insights', description: 'Reflection heatmap & analytics' },
-    { icon: 'fire', title: 'Streak Tracking', description: 'Daily consistency gamification' },
-    { icon: 'school', title: 'Smart Study Mode', description: 'Memorization helper' },
+    { icon: 'infinity', title: 'Unlimited Recordings', description: 'Capture every reflection' },
+    { icon: 'note-text', title: 'Unlimited Notes', description: 'Journal your Ramadan journey' },
+    { icon: 'folder-multiple', title: 'Unlimited Folders', description: 'Organize by Surah or Juz\'' },
+    { icon: 'chart-box', title: 'Pro Insights', description: 'Track your spiritual growth' },
+    { icon: 'fire', title: 'Streak Tracking', description: 'Stay consistent this Ramadan' },
+    { icon: 'book-clock', title: 'Khatma Completion Tracker', description: '30-day Quran completion' },
+    { icon: 'heart-pulse', title: 'Mood Tracking & Meditation', description: 'Daily mood-based verse guidance' },
 ];
 
 const MONTHLY_PRICE = 4.99;
@@ -199,7 +199,7 @@ export default function PaywallScreen() {
                                 ]}>
                                 <View style={styles.featureIcon}>
                                     <MaterialCommunityIcons
-                                        name={feature.icon as any}
+                                        name={feature.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
                                         size={20}
                                         color="rgba(255,255,255,0.9)"
                                     />

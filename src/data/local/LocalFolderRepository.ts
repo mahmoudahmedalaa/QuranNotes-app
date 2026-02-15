@@ -9,7 +9,7 @@ export class LocalFolderRepository {
             const data = await AsyncStorage.getItem(this.STORAGE_KEY);
             let folders: Folder[] = [];
             if (data) {
-                const parsed: any[] = JSON.parse(data);
+                const parsed: (Omit<Folder, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt?: string })[] = JSON.parse(data);
                 folders = parsed.map(f => ({
                     ...f,
                     createdAt: new Date(f.createdAt),

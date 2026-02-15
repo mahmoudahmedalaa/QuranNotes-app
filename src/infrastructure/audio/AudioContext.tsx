@@ -180,7 +180,17 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
             }
 
-            // Fallback: single verse playback
+            // Fallback: single verse playback — clear stale playlist state first
+            // to prevent conflicts when switching from surah to mood verse
+            if (playlistRef.current.length > 0) {
+                await player.stop();
+            }
+            setPlaylist([]);
+            playlistRef.current = [];
+            setCurrentSurahNum(null);
+            currentSurahNumRef.current = null;
+            setCurrentSurahName(null);
+            currentSurahNameRef.current = null;
             setPlayingVerse({ surah: surahNum, verse: verseNum });
             await player.playVerse(surahNum, verseNum, cdnFolder, name);
         },

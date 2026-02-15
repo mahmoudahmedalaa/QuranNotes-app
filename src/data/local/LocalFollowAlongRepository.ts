@@ -16,7 +16,7 @@ export class LocalFollowAlongRepository implements IFollowAlongRepository {
 
             const sessions = JSON.parse(data);
             // Parse dates back to Date objects
-            return sessions.map((s: any) => ({
+            return sessions.map((s: Omit<FollowAlongSession, 'startedAt' | 'endedAt'> & { startedAt: string; endedAt: string }) => ({
                 ...s,
                 startedAt: new Date(s.startedAt),
                 endedAt: new Date(s.endedAt),

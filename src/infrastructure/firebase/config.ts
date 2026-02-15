@@ -16,21 +16,22 @@ const firebaseConfig = {
 
 // Initialize Firebase (singleton)
 if (!firebase.apps.length) {
-    const app = firebase.initializeApp(firebaseConfig);
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
 
     // Explicitly initialize Auth with AsyncStorage persistence to fix "removeItem" error
     // We use require() to avoid TypeScript issues with the modular SDK inside compat setup
     try {
         const authModule = require('firebase/auth');
         if (authModule && authModule.getReactNativePersistence && authModule.initializeAuth) {
-            authModule.initializeAuth(app, {
+            authModule.initializeAuth(firebaseApp, {
                 persistence: authModule.getReactNativePersistence(AsyncStorage)
             });
         }
-    } catch (e: any) {
+    } catch (e: unknown) {
         // Ignore "Auth already initialized" error which can happen with hot reload
-        if (e.code !== 'auth/already-initialized') {
-            console.error('Firebase Auth initialization error:', e);
+        const err = e as { code?: string };
+        if (err.code !== 'auth/already-initialized') {
+            if (__DEV__) console.error('Firebase Auth initialization error:', e);
         }
     }
 }

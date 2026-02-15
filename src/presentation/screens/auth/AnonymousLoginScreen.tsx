@@ -17,10 +17,11 @@ export const AnonymousLoginScreen = () => {
             setIsSigningIn(true);
             await loginAnonymously();
             router.replace('/(tabs)');
-        } catch (error: any) {
-            console.error('Login failed:', error);
+        } catch (error: unknown) {
+            if (__DEV__) console.error('Login failed:', error);
             // Show specific error to help diagnosis
-            const message = error.code || error.message || 'Unknown error';
+            const err = error as { code?: string; message?: string };
+            const message = err.code || err.message || 'Unknown error';
             alert(`Sign In Failed: ${message}`);
         } finally {
             setIsSigningIn(false);

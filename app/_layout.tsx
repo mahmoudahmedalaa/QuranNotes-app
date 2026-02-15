@@ -3,6 +3,7 @@ import { SettingsProvider } from '../src/infrastructure/settings/SettingsContext
 import { FolderProvider } from '../src/infrastructure/notes/FolderContext';
 import { StreakProvider } from '../src/infrastructure/auth/StreakContext';
 import { KhatmaProvider } from '../src/infrastructure/khatma/KhatmaContext';
+import { MoodProvider } from '../src/infrastructure/mood/MoodContext';
 import { AudioProvider } from '../src/infrastructure/audio/AudioContext';
 import { AudioKhatmaBridge } from '../src/presentation/components/khatma/AudioKhatmaBridge';
 import { OnboardingProvider } from '../src/infrastructure/onboarding/OnboardingContext';
@@ -40,36 +41,38 @@ export default function RootLayout() {
                                     <AudioProvider>
                                         <KhatmaProvider>
                                             <AudioKhatmaBridge />
-                                            <NoteProvider>
-                                                <FolderProvider>
-                                                    <StatusBar style="dark" />
-                                                    <Stack
-                                                        screenOptions={{
-                                                            headerShown: false,
-                                                            contentStyle: {
-                                                                backgroundColor: PremiumTheme.colors.background,
-                                                            },
-                                                        }}>
-                                                        <Stack.Screen name="index" />
-                                                        <Stack.Screen name="welcome" options={{ headerShown: false }} />
-                                                        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-                                                        <Stack.Screen name="search" />
-                                                        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                                                        <Stack.Screen
-                                                            name="note/edit"
-                                                            options={{ presentation: 'modal' }}
-                                                        />
-                                                        <Stack.Screen
-                                                            name="paywall"
-                                                            options={{ presentation: 'modal', headerShown: false }}
-                                                        />
-                                                        <Stack.Screen
-                                                            name="ramadan-paywall"
-                                                            options={{ presentation: 'modal', headerShown: false }}
-                                                        />
-                                                    </Stack>
-                                                </FolderProvider>
-                                            </NoteProvider>
+                                            <MoodProvider>
+                                                <NoteProvider>
+                                                    <FolderProvider>
+                                                        <StatusBar style="dark" />
+                                                        <Stack
+                                                            screenOptions={{
+                                                                headerShown: false,
+                                                                contentStyle: {
+                                                                    backgroundColor: PremiumTheme.colors.background,
+                                                                },
+                                                            }}>
+                                                            <Stack.Screen name="index" />
+                                                            <Stack.Screen name="welcome" options={{ headerShown: false }} />
+                                                            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+                                                            <Stack.Screen name="search" />
+                                                            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                                                            <Stack.Screen
+                                                                name="note/edit"
+                                                                options={{ presentation: 'modal' }}
+                                                            />
+                                                            <Stack.Screen
+                                                                name="paywall"
+                                                                options={{ presentation: 'modal', headerShown: false }}
+                                                            />
+                                                            <Stack.Screen
+                                                                name="ramadan-paywall"
+                                                                options={{ presentation: 'modal', headerShown: false }}
+                                                            />
+                                                        </Stack>
+                                                    </FolderProvider>
+                                                </NoteProvider>
+                                            </MoodProvider>
                                         </KhatmaProvider>
                                     </AudioProvider>
                                 </SettingsProvider>

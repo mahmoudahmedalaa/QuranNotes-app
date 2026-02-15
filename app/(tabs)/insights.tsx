@@ -8,6 +8,7 @@ import { ConsistencyHeatmap } from '../../src/presentation/components/stats/Cons
 import { ActivityChart } from '../../src/presentation/components/stats/ActivityChart';
 import { TopicBreakdown } from '../../src/presentation/components/stats/TopicBreakdown';
 import { StatsWidgetGrid } from '../../src/presentation/components/stats/StatsWidgetGrid';
+import MoodInsightWidget from '../../src/presentation/components/mood/MoodInsightWidget';
 import { useStreaks } from '../../src/infrastructure/auth/StreakContext';
 
 const { width } = Dimensions.get('window');
@@ -88,6 +89,8 @@ export default function InsightsScreen() {
                         data={topicBreakdown}
                         totalTime={`${stats.totalTimeMinutes}m`}
                     />
+
+                    <MoodInsightWidget />
 
                     <View style={{ height: Spacing.xl }} />
                 </ScrollView>

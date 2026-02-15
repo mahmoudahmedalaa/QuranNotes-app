@@ -113,7 +113,7 @@ export class AlQuranCloudAPI {
 
             if (json.code !== 200) return [];
 
-            return json.data.matches.map((match: any) => ({
+            return json.data.matches.map((match: { numberInSurah: number; text: string; surah: { number: number } }) => ({
                 number: match.numberInSurah,
                 text: match.text,
                 translation: match.text,

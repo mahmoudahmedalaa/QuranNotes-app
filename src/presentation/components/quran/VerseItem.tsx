@@ -8,7 +8,8 @@ import * as Haptics from 'expo-haptics';
 
 const ACCENT = {
     gold: '#F5A623',
-    goldBg: '#F5A62315',
+    goldBgLight: '#F5A62315',
+    goldBgDark: '#3D2A0E',
     goldBorder: '#F5A62350',
 };
 
@@ -76,7 +77,9 @@ export const VerseItem = ({
                     isPlaying && [
                         styles.playingContainer,
                         {
-                            backgroundColor: ACCENT.goldBg,
+                            backgroundColor: theme.dark
+                                ? ACCENT.goldBgDark
+                                : ACCENT.goldBgLight,
                             borderLeftColor: ACCENT.gold,
                         },
                     ],
@@ -84,8 +87,12 @@ export const VerseItem = ({
                     isHighlighted && [
                         styles.highlightedContainer,
                         {
-                            backgroundColor: theme.colors.tertiaryContainer,
-                            borderColor: theme.colors.tertiary,
+                            backgroundColor: theme.dark
+                                ? '#2A2040'
+                                : theme.colors.tertiaryContainer,
+                            borderColor: theme.dark
+                                ? '#7B5FFF80'
+                                : theme.colors.tertiary,
                         },
                     ],
                     pressed && { opacity: 0.95 },

@@ -33,7 +33,8 @@ const FEATURES = [
     { icon: 'folder-multiple', title: 'Unlimited Folders', description: 'Organize by Surah or Juz\'' },
     { icon: 'chart-box', title: 'Pro Insights', description: 'Track your spiritual growth' },
     { icon: 'fire', title: 'Streak Tracking', description: 'Stay consistent this Ramadan' },
-    { icon: 'school', title: 'Smart Study Mode', description: 'Memorize with purpose' },
+    { icon: 'book-clock', title: 'Khatma Completion Tracker', description: '30-day Quran completion' },
+    { icon: 'heart-pulse', title: 'Mood Tracking & Meditation', description: 'Daily mood-based verse guidance' },
 ];
 
 interface RamadanPaywallProps {
@@ -279,7 +280,7 @@ export default function RamadanPaywallScreen({ onPurchaseSuccess, onDismiss }: R
                                 style={styles.featureRow}>
                                 <View style={styles.featureIcon}>
                                     <MaterialCommunityIcons
-                                        name={feature.icon as any}
+                                        name={feature.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
                                         size={18}
                                         color="#D4AF37"
                                     />

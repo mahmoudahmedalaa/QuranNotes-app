@@ -1,7 +1,37 @@
 import { Surah, Verse } from '../../domain/entities/Quran';
 
+/** Shape of a single Ayah returned by Al-Quran Cloud API */
+interface ApiAyah {
+    number: number;
+    numberInSurah: number;
+    text: string;
+    juz: number;
+    page: number;
+}
+
+/** Shape of a single edition (Arabic or English) for a Surah detail call */
+interface ApiEdition {
+    number: number;
+    name: string;
+    englishName: string;
+    englishNameTranslation: string;
+    numberOfAyahs: number;
+    revelationType: string;
+    ayahs: ApiAyah[];
+}
+
+/** Shape of a Surah list item */
+interface ApiSurahListItem {
+    number: number;
+    name: string;
+    englishName: string;
+    englishNameTranslation: string;
+    numberOfAyahs: number;
+    revelationType: string;
+}
+
 export class QuranMapper {
-    static toDomain(apiResponse: any): Surah {
+    static toDomain(apiResponse: { data: ApiEdition[] }): Surah {
         // Al-Quran Cloud API returns data in "data" object
         // We expect a response with edits (uthmani + translation)
 
@@ -10,7 +40,7 @@ export class QuranMapper {
         const ArabicEdition = apiResponse.data[0];
         const EnglishEdition = apiResponse.data[1];
 
-        const verses: Verse[] = ArabicEdition.ayahs.map((ayah: any, index: number) => ({
+        const verses: Verse[] = ArabicEdition.ayahs.map((ayah: ApiAyah, index: number) => ({
             number: ayah.numberInSurah,
             text: ayah.text,
             translation: EnglishEdition.ayahs[index].text,
@@ -25,20 +55,20 @@ export class QuranMapper {
             englishName: ArabicEdition.englishName,
             englishNameTranslation: ArabicEdition.englishNameTranslation,
             numberOfAyahs: ArabicEdition.numberOfAyahs,
-            revelationType: ArabicEdition.revelationType,
+            revelationType: ArabicEdition.revelationType as 'Meccan' | 'Medinan',
             verses: verses,
         };
     }
 
-    static toDomainList(apiResponse: any): Surah[] {
+    static toDomainList(apiResponse: { data: ApiSurahListItem[] }): Surah[] {
         // For the surah list endpoint
-        return apiResponse.data.map((surah: any) => ({
+        return apiResponse.data.map((surah: ApiSurahListItem) => ({
             number: surah.number,
             name: surah.name,
             englishName: surah.englishName,
             englishNameTranslation: surah.englishNameTranslation,
             numberOfAyahs: surah.numberOfAyahs,
-            revelationType: surah.revelationType,
+            revelationType: surah.revelationType as 'Meccan' | 'Medinan',
             verses: [], // List view doesn't need verses
         }));
     }

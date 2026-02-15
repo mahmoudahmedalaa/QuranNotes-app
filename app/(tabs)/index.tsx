@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { StreakCounter } from '../../src/presentation/components/stats/StreakCounter';
+import MoodCheckInCard from '../../src/presentation/components/mood/MoodCheckInCard';
 import { ReadingPositionService, ReadingPosition } from '../../src/infrastructure/reading/ReadingPositionService';
 import { useAudio } from '../../src/infrastructure/audio/AudioContext';
 
@@ -201,6 +202,8 @@ export default function Index() {
                     </MotiView>
 
                     <StreakCounter />
+
+                    <MoodCheckInCard />
 
                     {/* Continue Reading Card */}
                     {globalPosition && (

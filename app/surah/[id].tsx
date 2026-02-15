@@ -19,9 +19,12 @@ import { RecordingSaveModal } from '../../src/presentation/components/recording/
 import { VoiceFollowAlongOverlay } from '../../src/presentation/components/voice/VoiceFollowAlongOverlay';
 import { FollowAlongSaveModal } from '../../src/presentation/components/voice/FollowAlongSaveModal';
 import { FollowAlongSession } from '../../src/domain/entities/FollowAlongSession';
-import { useKhatma } from '../../src/infrastructure/khatma/KhatmaContext';
+
 import { Verse } from '../../src/domain/entities/Quran';
 import { ReadingPositionService, ReadingPosition } from '../../src/infrastructure/reading/ReadingPositionService';
+import { KhatmaReadingPosition } from '../../src/infrastructure/khatma/KhatmaReadingPosition';
+import { useKhatma } from '../../src/infrastructure/khatma/KhatmaContext';
+import { getJuzForSurah, JUZ_DATA } from '../../src/data/khatmaData';
 
 import {
     Spacing,
@@ -34,7 +37,7 @@ import * as Haptics from 'expo-haptics';
 const ACCENT_GOLD = '#D4A853';
 
 export default function SurahDetail() {
-    const { id, verse: verseParam, autoplay } = useLocalSearchParams<{ id: string; verse?: string; autoplay?: string }>();
+    const { id, verse: verseParam, autoplay, page: pageParam } = useLocalSearchParams<{ id: string; verse?: string; autoplay?: string; page?: string }>();
     const router = useRouter();
     const theme = useTheme();
     const insets = useSafeAreaInsets();
@@ -44,6 +47,7 @@ export default function SurahDetail() {
     const { playingVerse, isPlaying, playFromVerse, pause, resume, stop, lastCompletedPlayback } = useAudio();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder();
     const { notes } = useNotes();
+    const { markJuzComplete, completedJuz } = useKhatma();
     const followAlong = useVoiceFollowAlong(surah?.verses || [], surah?.number, surah?.englishName, surah?.name);
 
     const [saveModalVisible, setSaveModalVisible] = useState(false);
@@ -54,12 +58,13 @@ export default function SurahDetail() {
     const [followAlongModalVisible, setFollowAlongModalVisible] = useState(false);
     const [completedFollowAlongSession, setCompletedFollowAlongSession] = useState<FollowAlongSession | null>(null);
     const flatListRef = useRef<any>(null);
-    const { recordPageRead } = useKhatma();
     const layoutReadyRef = useRef(false);
     const autoplayTriggeredRef = useRef(false);
     // Single scroll controller — all scroll requests go through scrollToVerse()
     const scrollLockRef = useRef(false);
     const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Track previous playing verse to detect sequential auto-advance vs manual play
+    const prevPlayingVerseRef = useRef<{ surah: number; verse: number } | null>(null);
     // Stable ref for surah used inside viewability callback (avoids stale closure)
     const surahRef = useRef(surah);
     useEffect(() => { surahRef.current = surah; }, [surah]);
@@ -75,9 +80,21 @@ export default function SurahDetail() {
         if (id) loadSurah(Number(id));
     }, [id]);
 
+    // ── Compute whether we have a page-based Khatma navigation target ──
+    // Used to boost initialNumToRender so the target verse is already measured
+    // when the scroll effect fires (prevents the "random start" bug).
+    const hasKhatmaTarget = useMemo(() => {
+        if (!pageParam || verseParam || !surah?.verses) return false;
+        const targetPage = Number(pageParam);
+        return !!targetPage;
+    }, [pageParam, verseParam, surah]);
+
     // ── Load saved reading position on mount ──
+    // Skip when navigating to a specific verse/page (e.g. from Khatma)
+    // so the saved position doesn't override the intended scroll target
     useEffect(() => {
         if (!id) return;
+        if (verseParam || pageParam) return; // Don't load saved position when explicit nav params exist
         const surahId = Number(id);
         ReadingPositionService.get(surahId).then(pos => {
             if (pos) {
@@ -85,14 +102,14 @@ export default function SurahDetail() {
                 lastVisibleVerseRef.current = pos.verse;
                 // Show resume banner only if user has real progress (past verse 1),
                 // didn't navigate to a specific verse, and isn't auto-playing
-                if (!verseParam && !autoplay && pos.verse > 1) {
+                if (!autoplay && pos.verse > 1) {
                     setShowResumeBanner(true);
                 }
             }
         });
-    }, [id, verseParam]);
+    }, [id, verseParam, pageParam]);
 
-    // ── Auto-save reading position on exit ──
+    // ── Auto-save reading position on exit + end khatma session ──
     useEffect(() => {
         const surahRef = surah;
         return () => {
@@ -104,6 +121,9 @@ export default function SurahDetail() {
                     surahRef.englishName
                 );
             }
+            // End any active khatma session so general browsing
+            // doesn't continue saving khatma positions
+            KhatmaReadingPosition.endSession();
         };
     }, [surah]);
 
@@ -142,7 +162,7 @@ export default function SurahDetail() {
         flatListRef.current.scrollToIndex({
             index,
             animated,
-            viewPosition: 0.5,
+            viewPosition: 0.3, // Upper third — less estimation error than centering
         });
     }, [surah]);
 
@@ -177,18 +197,61 @@ export default function SurahDetail() {
 
     // ── Autoplay from verse 1 when no specific verse is given ──
     useEffect(() => {
-        if (autoplay === 'true' && !verseParam && surah && !autoplayTriggeredRef.current) {
+        if (autoplay === 'true' && !verseParam && !pageParam && surah && !autoplayTriggeredRef.current) {
             autoplayTriggeredRef.current = true;
             setTimeout(() => playFromVerse(surah, 1), 500);
         }
-    }, [autoplay, verseParam, surah, playFromVerse]);
+    }, [autoplay, verseParam, pageParam, surah, playFromVerse]);
+
+    // ── Page-based navigation: jump to first verse on the given page (Khatma Juz start) ──
+    // Uses aggressive retries to handle the case where FlatList hasn't measured
+    // all items yet (long surahs like Al-Baqarah with 286 verses).
+    useEffect(() => {
+        if (!pageParam || verseParam || !surah?.verses) return;
+        const targetPage = Number(pageParam);
+        if (!targetPage) return;
+        const firstVerseOnPage = surah.verses.find((v: Verse) => v.page >= targetPage);
+        if (!firstVerseOnPage) return;
+        const verseNum = firstVerseOnPage.number;
+        let attempts = 0;
+        const tryScroll = () => {
+            if (layoutReadyRef.current) {
+                scrollToVerse(verseNum, attempts === 0); // animated after first attempt
+                if (autoplay === 'true' && !autoplayTriggeredRef.current) {
+                    autoplayTriggeredRef.current = true;
+                    setTimeout(() => playFromVerse(surah, verseNum), 700);
+                }
+                // Retry once more after items have been measured to ensure accuracy
+                if (attempts < 2) {
+                    attempts++;
+                    setTimeout(tryScroll, 500);
+                }
+            } else {
+                attempts++;
+                if (attempts < 10) setTimeout(tryScroll, 200);
+            }
+        };
+        setTimeout(tryScroll, 300);
+    }, [pageParam, verseParam, surah]);
 
     // ── Auto-scroll to currently playing verse ──
-    // ONLY fires when scroll lock is NOT active (no intentional scroll in progress)
+    // ONLY fires on sequential auto-advance (verse N → N+1), NOT on manual play.
+    // This prevents the jarring scroll jump when user taps play on a different verse.
     useEffect(() => {
         if (!surah?.verses || !playingVerse || !flatListRef.current) return;
         if (playingVerse.surah !== surah.number) return;
         if (scrollLockRef.current) return; // Another scroll is in progress
+
+        const prev = prevPlayingVerseRef.current;
+        prevPlayingVerseRef.current = playingVerse;
+
+        // Only auto-scroll if this is sequential advance (same surah, next verse)
+        const isSequentialAdvance = prev &&
+            prev.surah === playingVerse.surah &&
+            playingVerse.verse === prev.verse + 1;
+
+        if (!isSequentialAdvance) return; // Manual play — don't scroll
+
         if (!autoScrollEnabledRef.current) {
             setShowReturnToAudio(true);
             return;
@@ -197,11 +260,10 @@ export default function SurahDetail() {
         setShowReturnToAudio(false);
         const index = surah.verses.findIndex((v: Verse) => v.number === playingVerse.verse);
         if (index >= 0 && layoutReadyRef.current) {
-            // Use scrollToIndex directly here — no lock needed since this IS the auto-scroll
             flatListRef.current.scrollToIndex({
                 index,
                 animated: true,
-                viewPosition: 0.5,
+                viewPosition: 0.3,
             });
         }
     }, [playingVerse, surah]);
@@ -232,17 +294,85 @@ export default function SurahDetail() {
     }, [playingVerse, scrollToVerse]);
 
     // ── FlatList scroll error recovery ──
+    // Jump to estimated offset instantly (no animation), then do ONE smooth
+    // animated scroll to the exact position. This eliminates the double-hop.
     const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
         const offset = info.averageItemLength * info.index;
-        flatListRef.current?.scrollToOffset({ offset, animated: true });
+        // Instant jump — no visible animation
+        flatListRef.current?.scrollToOffset({ offset, animated: false });
+        // Then settle smoothly into exact position after items are measured
         setTimeout(() => {
             flatListRef.current?.scrollToIndex({
                 index: info.index,
                 animated: true,
-                viewPosition: 0.5,
+                viewPosition: 0.3,
             });
-        }, 300);
+        }, 100);
     }, []);
+
+    // (Khatma page tracking removed — completion is now auto-detected + manual toggle)
+
+    // ── Auto-complete Juz when user reaches the last verse of the last surah in a Juz ──
+    const autoCompletedRef = useRef<Set<number>>(new Set());
+    const checkAutoCompleteJuz = useCallback((visibleVerseNum: number) => {
+        const currentSurah = surahRef.current;
+        if (!currentSurah) return;
+        const totalVerses = currentSurah.numberOfAyahs;
+        if (visibleVerseNum < totalVerses) return; // Haven't reached the end
+
+        const surahNumber = currentSurah.number;
+        const juzNumbers = getJuzForSurah(surahNumber);
+        for (const juzNum of juzNumbers) {
+            if (autoCompletedRef.current.has(juzNum)) continue;
+            if (completedJuz.includes(juzNum)) continue;
+            const juzInfo = JUZ_DATA.find(j => j.juzNumber === juzNum);
+            if (!juzInfo) continue;
+            if (surahNumber === juzInfo.endSurahNumber) {
+                autoCompletedRef.current.add(juzNum);
+                markJuzComplete(juzNum);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        }
+    }, [completedJuz, markJuzComplete]);
+
+    // ── Auto-continue to next surah in Khatma + auto-complete ──
+    // When audio finishes the last verse of a surah during a Khatma session,
+    // automatically navigate to the next surah in the Juz if it's not the last one.
+    useEffect(() => {
+        if (!lastCompletedPlayback || !surah) return;
+        if (lastCompletedPlayback.surah !== surah.number) return;
+
+        const lastVerseNum = lastCompletedPlayback.verses[lastCompletedPlayback.verses.length - 1]?.number;
+        if (!lastVerseNum) return;
+
+        // Check auto-complete first (works regardless of Khatma session)
+        checkAutoCompleteJuz(lastVerseNum);
+
+        // Auto-continue to next surah if in a Khatma session
+        const activeJuz = KhatmaReadingPosition.getActiveJuz();
+        if (!activeJuz) return; // Not in a Khatma session
+
+        const juzInfo = JUZ_DATA.find(j => j.juzNumber === activeJuz);
+        if (!juzInfo) return;
+
+        const currentSurahNum = surah.number;
+
+        // If current surah is NOT the last surah in the Juz, auto-continue
+        if (currentSurahNum < juzInfo.endSurahNumber) {
+            const nextSurahNum = currentSurahNum + 1;
+            // Small delay for smooth transition
+            setTimeout(() => {
+                // Save position before navigating away
+                ReadingPositionService.save(
+                    surah.number,
+                    lastVerseNum,
+                    surah.englishName,
+                );
+                // Navigate to next surah (replace so back button goes to Khatma, not previous surah)
+                router.replace(`/surah/${nextSurahNum}?verse=1&autoplay=true`);
+            }, 800);
+        }
+    }, [lastCompletedPlayback, surah, checkAutoCompleteJuz, router]);
 
     // ── Khatma auto-tracking: record pages as verses become visible ──
     // Using viewabilityConfigCallbackPairs ref for stable tracking with Animated.FlatList
@@ -255,58 +385,17 @@ export default function SurahDetail() {
             onViewableItemsChanged: ({ viewableItems }: { viewableItems: ViewToken[] }) => {
                 const currentSurah = surahRef.current;
                 if (!currentSurah) return;
-                for (const { item } of viewableItems) {
-                    const verse = item as Verse;
-                    if (verse.page) {
-                        recordPageRead(verse.page, currentSurah.number, verse.number, currentSurah.englishName);
-                    }
-                }
-                // Track the last visible verse for auto-save
+                // Track the last visible verse for auto-save + auto-complete
                 if (viewableItems.length > 0) {
                     const lastVisible = viewableItems[viewableItems.length - 1];
                     if (lastVisible?.item?.number) {
                         lastVisibleVerseRef.current = lastVisible.item.number;
+                        checkAutoCompleteJuz(lastVisible.item.number); // Trigger auto-complete
                     }
                 }
             },
         },
     ]);
-
-    // ── Khatma: record first verse on surah load as a baseline ──
-    useEffect(() => {
-        if (!surah || surah.verses.length === 0) return;
-        const firstVerse = surah.verses[0];
-        if (firstVerse.page) {
-            console.log(`[Khatma] Initial tracking: Surah ${surah.number} loaded, recording page ${firstVerse.page}`);
-            recordPageRead(firstVerse.page, surah.number, firstVerse.number, surah.englishName);
-        }
-    }, [surah?.number]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Khatma auto-tracking: record page when audio plays a verse ──
-    useEffect(() => {
-        if (!surah || !playingVerse) return;
-        if (playingVerse.surah !== surah.number) return;
-        const verse = surah.verses.find((v: Verse) => v.number === playingVerse.verse);
-        if (verse?.page) {
-            recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
-        }
-        // Update lastVisibleVerse if auto-scroll is active (user is following audio)
-        if (autoScrollEnabledRef.current) {
-            lastVisibleVerseRef.current = playingVerse.verse;
-        }
-    }, [surah, playingVerse, recordPageRead]);
-
-    // ── Khatma BATCH tracking: when audio playback completes, record ALL pages ──
-    useEffect(() => {
-        if (!lastCompletedPlayback || !surah) return;
-        if (lastCompletedPlayback.surah !== surah.number) return;
-        // Batch-record every verse page from the completed playlist
-        for (const verse of lastCompletedPlayback.verses) {
-            if (verse.page) {
-                recordPageRead(verse.page, surah.number, verse.number, surah.englishName);
-            }
-        }
-    }, [lastCompletedPlayback, surah, recordPageRead]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -421,6 +510,10 @@ export default function SurahDetail() {
                 onLayout={() => { layoutReadyRef.current = true; }}
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
+                windowSize={10}
+                maxToRenderPerBatch={hasKhatmaTarget ? 20 : 8}
+                initialNumToRender={hasKhatmaTarget ? 50 : 15}
+                removeClippedSubviews={true}
                 viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs.current}
                 renderItem={({ item, index }: { item: any; index: number }) => (
                     <VerseItem

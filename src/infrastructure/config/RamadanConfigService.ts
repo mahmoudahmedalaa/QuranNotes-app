@@ -47,7 +47,7 @@ export const RamadanConfigService = {
                 }
             }
         } catch (e) {
-            console.log('[RamadanConfig] Firestore fetch failed, using cache');
+            if (__DEV__) console.log('[RamadanConfig] Firestore fetch failed, using cache');
         }
 
         // Try cache
@@ -57,7 +57,7 @@ export const RamadanConfigService = {
                 return JSON.parse(cached) as RamadanDates;
             }
         } catch (e) {
-            console.log('[RamadanConfig] Cache read failed');
+            if (__DEV__) console.log('[RamadanConfig] Cache read failed');
         }
 
         return DEFAULTS;
@@ -79,12 +79,12 @@ export const RamadanConfigService = {
                         if (onDatesChanged) {
                             onDatesChanged(data);
                         }
-                        console.log(`[RamadanConfig] Live update: ${data.startDate} → ${data.endDate}`);
+                        if (__DEV__) console.log(`[RamadanConfig] Live update: ${data.startDate} → ${data.endDate}`);
                     }
                 }
             },
             (error) => {
-                console.log('[RamadanConfig] Listener error:', error.message);
+                if (__DEV__) console.log('[RamadanConfig] Listener error:', error.message);
             }
         );
         return unsubscribe;

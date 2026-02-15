@@ -54,8 +54,9 @@ class RevenueCatService {
                 console.warn('[RevenueCat] No current offering found. Check RevenueCat dashboard.');
             }
             return offerings.current;
-        } catch (e: any) {
-            console.error('[RevenueCat] Error fetching offerings:', e.message, e.code, e.userInfo);
+        } catch (e: unknown) {
+            const err = e as { message?: string; code?: string; userInfo?: unknown };
+            if (__DEV__) console.error('[RevenueCat] Error fetching offerings:', err.message, err.code, err.userInfo);
             return null;
         }
     }
@@ -65,12 +66,13 @@ class RevenueCatService {
             const { customerInfo } = await Purchases.purchasePackage(pack);
             const isPro = this.isPro(customerInfo);
             return { success: isPro };
-        } catch (e: any) {
+        } catch (e: unknown) {
             // Log full error for debugging
 
             // Robust Cancellation Detection
             // Code 1 = UserCancelled
-            const isCancelled = e.userCancelled === true || e.code === '1' || e.code === 1 || (e.message && e.message.includes('cancelled'));
+            const err = e as { userCancelled?: boolean; code?: string | number; message?: string };
+            const isCancelled = err.userCancelled === true || err.code === '1' || err.code === 1 || (err.message && err.message.includes('cancelled'));
 
             if (isCancelled) {
                 return { success: false, userCancelled: true };
@@ -78,20 +80,20 @@ class RevenueCatService {
 
             // Sanitize Error Message
             let cleanMessage = 'Could not complete purchase.';
-            if (e.message) {
+            if (err.message) {
                 // Remove RevenueCat prefixes like "[RevenueCat] 🍎‼️"
-                cleanMessage = e.message.replace(/\[RevenueCat\]|🍎|‼️/g, '').trim();
+                cleanMessage = err.message.replace(/\[RevenueCat\]|🍎|‼️/g, '').trim();
                 // Fix capitalization
                 cleanMessage = cleanMessage.charAt(0).toUpperCase() + cleanMessage.slice(1);
             }
 
             // Map common error codes to friendly messages
-            if (e.code === 2) cleanMessage = 'Store problem. Please try again later.'; // StoreProblemError
-            if (e.code === 3) cleanMessage = 'Purchase not allowed on this device.'; // PurchaseNotAllowedError
-            if (e.code === 4) cleanMessage = 'Invalid purchase configuration.'; // InvalidPurchaseError
-            if (e.code === 10) cleanMessage = 'Network error. Please check your connection.'; // NetworkError
+            if (err.code === 2) cleanMessage = 'Store problem. Please try again later.'; // StoreProblemError
+            if (err.code === 3) cleanMessage = 'Purchase not allowed on this device.'; // PurchaseNotAllowedError
+            if (err.code === 4) cleanMessage = 'Invalid purchase configuration.'; // InvalidPurchaseError
+            if (err.code === 10) cleanMessage = 'Network error. Please check your connection.'; // NetworkError
 
-            console.error('[RevenueCat] Return user-friendly error:', cleanMessage);
+            if (__DEV__) console.error('[RevenueCat] Return user-friendly error:', cleanMessage);
             return { success: false, userCancelled: false, error: cleanMessage };
         }
     }
