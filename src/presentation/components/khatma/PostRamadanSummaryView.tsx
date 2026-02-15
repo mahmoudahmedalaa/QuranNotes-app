@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useTheme, Surface } from 'react-native-paper';
+import { useTheme, Surface, MD3Theme } from 'react-native-paper';
 import { MotiView } from 'moti';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -153,13 +153,13 @@ interface StatItemProps {
     value: string;
     icon: string;
     color: string;
-    theme: any;
+    theme: MD3Theme;
 }
 
 function StatItem({ label, value, icon, color, theme }: StatItemProps) {
     return (
         <View style={[styles.statItem, { backgroundColor: theme.colors.surface }]}>
-            <MaterialCommunityIcons name={icon as any} size={22} color={color} />
+            <MaterialCommunityIcons name={icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']} size={22} color={color} />
             <Text style={[styles.statValue, { color: theme.colors.onBackground }]}>{value}</Text>
             <Text style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>{label}</Text>
         </View>

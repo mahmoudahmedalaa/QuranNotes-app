@@ -1,6 +1,6 @@
 /**
- * CatchUpBanner — Lightweight status text for Khatma progress
- * No heavy container, no checkmark icon. Just clean text.
+ * CatchUpBanner — Simple progress message for Khatma
+ * No schedule/catch-up logic — just shows completion progress.
  */
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
@@ -8,56 +8,39 @@ import { useTheme } from 'react-native-paper';
 import { MotiView } from 'moti';
 import { Spacing } from '../../theme/DesignSystem';
 
-// Warm accent colors
 const ACCENT = {
     gold: '#F5A623',
     green: '#10B981',
-    amber: '#F59E0B',
 };
 
 interface CatchUpBannerProps {
-    isAhead: boolean;
-    isBehind: boolean;
     isComplete: boolean;
-    message: string;
-    todayPagesRead?: number;
-    todayTotalPages?: number;
-    /** Total number of completed Juz for milestone messaging */
-    completedCount?: number;
+    completedCount: number;
 }
 
 export const CatchUpBanner: React.FC<CatchUpBannerProps> = ({
-    isAhead,
-    isBehind,
     isComplete,
-    message,
-    todayPagesRead,
-    todayTotalPages,
     completedCount,
 }) => {
     const theme = useTheme();
 
-    // Build contextual message with milestone support
-    const displayMessage = (() => {
+    const getMessage = () => {
         if (isComplete) return 'Alhamdulillah! You\'ve completed the Khatma 🎉';
-        // Milestone celebrations
-        if (completedCount === 10) return '🎉 10 Juz complete! A third of the way there!';
-        if (completedCount === 20) return '🎉 Two-thirds complete! Almost there!';
-        if (todayPagesRead !== undefined && todayTotalPages !== undefined) {
-            const remaining = todayTotalPages - todayPagesRead;
-            if (remaining > 0 && todayPagesRead > 0) {
-                return `${remaining} pages left today`;
-            }
-        }
-        return message;
-    })();
+        if (completedCount === 0) return 'Read at your own pace. Tap a Juz to begin.';
+        if (completedCount <= 5) return `Great start! ${completedCount} of 30 Juz complete`;
+        if (completedCount === 10) return '🎉 10 Juz complete! A third of the way!';
+        if (completedCount === 15) return '🎉 Halfway there! 15 of 30 Juz';
+        if (completedCount === 20) return '🎉 Two-thirds done! Keep going!';
+        if (completedCount >= 25) return `Almost there! ${completedCount} of 30 Juz`;
+        return `${completedCount} of 30 Juz complete`;
+    };
 
     const textColor = isComplete
         ? ACCENT.green
-        : isBehind
-            ? ACCENT.amber
-            : isAhead
-                ? ACCENT.green
+        : completedCount >= 25
+            ? ACCENT.green
+            : completedCount >= 15
+                ? ACCENT.gold
                 : theme.colors.onSurfaceVariant;
 
     return (
@@ -67,7 +50,7 @@ export const CatchUpBanner: React.FC<CatchUpBannerProps> = ({
             transition={{ type: 'timing', duration: 400, delay: 250 }}
         >
             <Text style={[styles.message, { color: textColor }]}>
-                {displayMessage}
+                {getMessage()}
             </Text>
         </MotiView>
     );

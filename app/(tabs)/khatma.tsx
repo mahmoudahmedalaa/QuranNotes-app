@@ -1,29 +1,24 @@
 /**
- * Khatma Tab Screen
- * Shows the full completion tracker with calendar and progress.
- * Uses warm accent colors (gold, green) for progress/achievement, purple for primary actions.
+ * Khatma Tab Screen — Self-paced Juz tracker
+ * "Read the Quran at your own pace. Track which Juz you've finished."
  */
-import React, { useState, useMemo, useEffect, useRef, Suspense } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Pressable } from 'react-native';
-import { Text, Surface, Card, ProgressBar, useTheme } from 'react-native-paper';
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { useKhatma } from '../../src/infrastructure/khatma/KhatmaContext';
-import { getJuzForDay } from '../../src/data/khatmaData';
+import { getJuzInfo } from '../../src/data/khatmaData';
 import { ProgressRing } from '../../src/presentation/components/khatma/ProgressRing';
-import { RamadanCalendar } from '../../src/presentation/components/khatma/RamadanCalendar';
+import { JuzGrid } from '../../src/presentation/components/khatma/JuzGrid';
 import { TodayReadingCard } from '../../src/presentation/components/khatma/TodayReadingCard';
 import { CatchUpBanner } from '../../src/presentation/components/khatma/CatchUpBanner';
 import { StreakBadge } from '../../src/presentation/components/khatma/StreakBadge';
-
-// Lazy-load celebration modal
-const KhatmaCelebrationModal = React.lazy(() =>
-    import('../../src/presentation/components/khatma/KhatmaCelebrationModal').then(m => ({
-        default: m.KhatmaCelebrationModal,
-    }))
-);
 import {
     Spacing,
     Gradients,
@@ -31,15 +26,20 @@ import {
     BorderRadius,
 } from '../../src/presentation/theme/DesignSystem';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const KhatmaCelebrationModal = React.lazy(() =>
+    import('../../src/presentation/components/khatma/KhatmaCelebrationModal').then(m => ({
+        default: m.KhatmaCelebrationModal,
+    }))
+);
 
-// Warm accent palette — alpha-channel for dark mode compatibility
 const ACCENT = {
     gold: '#F5A623',
     goldLight: '#F5A62320',
     green: '#10B981',
     greenLight: '#10B98120',
 };
+
+const CELEBRATION_SHOWN_KEY = 'khatma_celebration_shown_round';
 
 // ─── Active Khatma Tracker View ───────────────────────────────────────────
 
@@ -49,43 +49,58 @@ function ActiveTrackerView() {
         completedJuz,
         isComplete,
         totalPagesRead,
-        currentDay,
-        catchUp,
-        todayReading,
-        getJuzProgress,
         toggleJuz,
         streakDays,
         currentRound,
         completedRounds,
         startNextRound,
-        khatmaDay,
         isTrialExpired,
+        loading,
     } = useKhatma();
 
-    const [selectedDay, setSelectedDay] = useState(khatmaDay || 1);
+    const [selectedJuz, setSelectedJuz] = useState(1);
     const [showCelebration, setShowCelebration] = useState(false);
-    const celebrationDismissedRef = useRef(false);
-    const prevCompletedCountRef = useRef(completedJuz.length);
-    const selectedJuz = useMemo(() => getJuzForDay(selectedDay), [selectedDay]);
-    const selectedProgress = useMemo(() => getJuzProgress(selectedDay), [selectedDay, getJuzProgress]);
-    const daysAhead = Math.max(0, completedJuz.length - (khatmaDay || 0));
+    const selectedJuzInfo = useMemo(() => getJuzInfo(selectedJuz), [selectedJuz]);
 
-    // Get current month name
-    const monthName = new Date().toLocaleString('en-US', { month: 'long' });
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const daysRemaining = daysInMonth - currentDay;
+    // Refresh key — incremented on tab focus so JuzGrid + TodayReadingCard re-check positions
+    const [refreshKey, setRefreshKey] = useState(0);
+    useFocusEffect(
+        useCallback(() => {
+            setRefreshKey(k => k + 1);
+        }, []),
+    );
 
-    // Trigger celebration every time completed count transitions to 30
-    useEffect(() => {
-        const wasComplete = prevCompletedCountRef.current >= 30;
-        const nowComplete = completedJuz.length >= 30;
-        prevCompletedCountRef.current = completedJuz.length;
-
-        if (nowComplete && !wasComplete) {
-            celebrationDismissedRef.current = false;
+    // ── Celebration trigger ──
+    const triggerCelebrationIfNeeded = useCallback(async () => {
+        if (!isComplete || loading) return;
+        try {
+            const shownForRound = await AsyncStorage.getItem(CELEBRATION_SHOWN_KEY);
+            if (shownForRound !== String(currentRound)) {
+                setShowCelebration(true);
+            }
+        } catch {
             setShowCelebration(true);
         }
-    }, [completedJuz.length]);
+    }, [isComplete, currentRound, loading]);
+
+    // Detect in-session completion
+    const prevCompletedCountRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (loading) return;
+        const prev = prevCompletedCountRef.current;
+        prevCompletedCountRef.current = completedJuz.length;
+        if (prev === null) return;
+        if (completedJuz.length >= 30 && prev < 30) {
+            setShowCelebration(true);
+        }
+    }, [completedJuz.length, loading]);
+
+    // Fallback: check on tab focus
+    useFocusEffect(
+        useCallback(() => {
+            triggerCelebrationIfNeeded();
+        }, [triggerCelebrationIfNeeded]),
+    );
 
     return (
         <ScrollView
@@ -93,7 +108,7 @@ function ActiveTrackerView() {
             contentContainerStyle={styles.activeContent}
             showsVerticalScrollIndicator={false}
         >
-            {/* ── Header — single compact row ── */}
+            {/* ── Header ── */}
             <MotiView
                 from={{ opacity: 0, translateY: -10 }}
                 animate={{ opacity: 1, translateY: 0 }}
@@ -108,29 +123,11 @@ function ActiveTrackerView() {
                             {streakDays > 0 && (
                                 <StreakBadge streakDays={streakDays} />
                             )}
-                            {isComplete && (
-                                <Pressable
-                                    onPress={() => {
-                                        celebrationDismissedRef.current = false;
-                                        setShowCelebration(true);
-                                    }}
-                                    style={({ pressed }) => [
-                                        styles.khatmaCountBadge,
-                                        { backgroundColor: `${ACCENT.gold}18` },
-                                        pressed && { opacity: 0.7 },
-                                    ]}
-                                >
-                                    <MaterialCommunityIcons name="trophy" size={14} color={ACCENT.gold} />
-                                    <Text style={[styles.khatmaCountText, { color: ACCENT.gold }]}>
-                                        {currentRound}×
-                                    </Text>
-                                </Pressable>
-                            )}
                         </View>
-                        <View style={[styles.dayBadge, { backgroundColor: theme.colors.primaryContainer }]}>
-                            <MaterialCommunityIcons name="calendar-month" size={14} color={theme.colors.primary} />
-                            <Text style={[styles.dayBadgeText, { color: theme.colors.primary }]}>
-                                {monthName} · {daysRemaining}d left
+                        <View style={[styles.progressBadge, { backgroundColor: theme.colors.primaryContainer }]}>
+                            <MaterialCommunityIcons name="book-open-variant" size={14} color={theme.colors.primary} />
+                            <Text style={[styles.progressBadgeText, { color: theme.colors.primary }]}>
+                                {completedJuz.length} of 30 Juz
                             </Text>
                         </View>
                     </View>
@@ -144,41 +141,62 @@ function ActiveTrackerView() {
                 transition={{ type: 'spring', damping: 18, delay: 100 }}
             >
                 <View style={[styles.progressSection, { backgroundColor: theme.colors.surface }, Shadows.sm]}>
-                    <ProgressRing completed={completedJuz.length} />
+                    {/* Trophy badge — shows when user has completed at least one full Khatma */}
+                    {(isComplete || completedRounds.length > 0) && (
+                        <MotiView
+                            from={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: 'spring', damping: 12, delay: 400 }}
+                            style={styles.trophyBadgeCorner}
+                        >
+                            <Pressable
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    setShowCelebration(true);
+                                }}
+                                style={({ pressed }) => [
+                                    styles.trophyBadge,
+                                    {
+                                        backgroundColor: ACCENT.gold,
+                                        ...Shadows.md,
+                                    },
+                                    pressed && { transform: [{ scale: 0.9 }] },
+                                ]}
+                            >
+                                <MaterialCommunityIcons name="trophy" size={16} color="#FFF" />
+                                <Text style={styles.trophyText}>
+                                    {completedRounds.length + (isComplete ? 1 : 0)}×
+                                </Text>
+                            </Pressable>
+                        </MotiView>
+                    )}
+                    <View style={styles.ringWrapper}>
+                        <ProgressRing completed={completedJuz.length} totalPagesRead={totalPagesRead} />
+                    </View>
                     <CatchUpBanner
-                        isAhead={catchUp.isAhead}
-                        isBehind={catchUp.isBehind}
                         isComplete={isComplete}
-                        message={catchUp.message}
-                        todayPagesRead={todayReading?.pagesRead}
-                        todayTotalPages={todayReading?.totalPages}
                         completedCount={completedJuz.length}
                     />
                 </View>
             </MotiView>
 
-            {/* ── Collapsible Calendar ── */}
-            <RamadanCalendar
-                currentDay={currentDay}
+            {/* ── Juz Grid ── */}
+            <JuzGrid
                 completedJuz={completedJuz}
-                getJuzProgress={getJuzProgress}
-                selectedDay={selectedDay}
-                onSelectDay={setSelectedDay}
-                monthName={monthName}
+                selectedJuz={selectedJuz}
+                onSelectJuz={setSelectedJuz}
+                refreshKey={refreshKey}
             />
 
-            {/* ── Today's / Selected Day Reading Card ── */}
-            {selectedJuz && (
+            {/* ── Selected Juz Reading Card ── */}
+            {selectedJuzInfo && (
                 <TodayReadingCard
-                    juz={selectedJuz}
-                    pagesRead={selectedProgress.pagesRead}
-                    totalPages={selectedProgress.totalPages}
-                    percent={selectedProgress.percent}
-                    lastPosition={selectedProgress.lastPosition}
-                    isCompleted={completedJuz.includes(selectedJuz.juzNumber)}
-                    isToday={selectedDay === khatmaDay}
-                    onToggle={() => toggleJuz(selectedJuz.juzNumber)}
+                    juz={selectedJuzInfo}
+                    isCompleted={completedJuz.includes(selectedJuzInfo.juzNumber)}
+                    isToday={false}
+                    onToggle={() => toggleJuz(selectedJuzInfo.juzNumber)}
                     isTrialExpired={isTrialExpired}
+                    refreshKey={refreshKey}
                 />
             )}
 
@@ -189,18 +207,17 @@ function ActiveTrackerView() {
                         visible={showCelebration}
                         onDismiss={() => {
                             setShowCelebration(false);
-                            celebrationDismissedRef.current = true;
+                            AsyncStorage.setItem(CELEBRATION_SHOWN_KEY, String(currentRound));
                         }}
                         onStartNextRound={() => {
                             startNextRound();
                             setShowCelebration(false);
-                            celebrationDismissedRef.current = true;
+                            AsyncStorage.setItem(CELEBRATION_SHOWN_KEY, String(currentRound));
                         }}
                         currentRound={currentRound}
-                        daysAhead={daysAhead}
-                        ramadanDay={currentDay}
                         totalPagesRead={totalPagesRead}
                         completedJuzCount={completedJuz.length}
+                        streakDays={streakDays}
                     />
                 </Suspense>
             )}
@@ -212,7 +229,6 @@ function ActiveTrackerView() {
 
 export default function KhatmaScreen() {
     const theme = useTheme();
-
     const isDark = theme.dark;
     const gradientColors: [string, string] = isDark
         ? [Gradients.nightSky[0], Gradients.nightSky[1]]
@@ -233,9 +249,6 @@ const styles = StyleSheet.create({
     gradient: { flex: 1 },
     safeArea: { flex: 1 },
     scrollView: { flex: 1 },
-
-
-    // ── Active Tracker ──
     activeContent: {
         padding: Spacing.md,
         paddingBottom: 120,
@@ -270,7 +283,7 @@ const styles = StyleSheet.create({
         fontSize: 28,
         fontWeight: '800',
     },
-    dayBadge: {
+    progressBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
@@ -278,7 +291,7 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: BorderRadius.full,
     },
-    dayBadgeText: {
+    progressBadgeText: {
         fontSize: 13,
         fontWeight: '600',
     },
@@ -287,19 +300,29 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.md,
         borderRadius: BorderRadius.lg,
         marginHorizontal: Spacing.xs,
+        position: 'relative' as const,
     },
-    completionBadge: {
+    ringWrapper: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    trophyBadgeCorner: {
+        position: 'absolute' as const,
+        top: Spacing.sm,
+        right: Spacing.sm,
+        zIndex: 10,
+    },
+    trophyBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: BorderRadius.lg,
-        marginTop: Spacing.xs,
+        gap: 3,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: BorderRadius.full,
     },
-    completionBadgeText: {
-        flex: 1,
-        fontSize: 14,
-        fontWeight: '600',
+    trophyText: {
+        color: '#FFF',
+        fontSize: 13,
+        fontWeight: '800',
     },
 });

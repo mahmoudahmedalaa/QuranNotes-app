@@ -18,6 +18,7 @@ const ACCENT = {
 interface ProgressRingProps {
     completed: number;
     total?: number;
+    totalPagesRead?: number;
     size?: number;
     strokeWidth?: number;
 }
@@ -25,16 +26,31 @@ interface ProgressRingProps {
 export const ProgressRing: React.FC<ProgressRingProps> = ({
     completed,
     total = 30,
+    totalPagesRead = 0,
     size = 140,
     strokeWidth = 10,
 }) => {
     const theme = useTheme();
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
-    const progress = Math.min(completed / total, 1);
+
+    // Use page-based fractional progress for the arc (more granular than Juz count)
+    // Each Juz averages ~20 pages, total Quran = 604 pages
+    const fractionalJuz = totalPagesRead > 0
+        ? Math.min(totalPagesRead / (604 / 30), 30) // Convert pages to fractional Juz
+        : completed;
+    const displayProgress = Math.max(completed, fractionalJuz); // Show whichever is higher
+    const progress = Math.min(displayProgress / total, 1);
     const strokeDashoffset = circumference * (1 - progress);
 
     const isComplete = completed >= total;
+
+    // Show fractional display: e.g. "4.2" if there's partial progress beyond completed Juz
+    const displayValue = isComplete
+        ? completed
+        : fractionalJuz > completed
+            ? fractionalJuz.toFixed(1).replace(/\.0$/, '') // "4.2" or "5"
+            : String(completed);
 
     return (
         <MotiView
@@ -75,11 +91,16 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
                             { color: isComplete ? ACCENT.green : ACCENT.gold },
                         ]}
                     >
-                        {completed}
+                        {displayValue}
                     </Text>
                     <Text style={[styles.labelText, { color: theme.colors.onSurfaceVariant }]}>
                         of {total} Juz
                     </Text>
+                    {totalPagesRead > 0 && !isComplete && (
+                        <Text style={[styles.pagesLabel, { color: theme.colors.onSurfaceVariant }]}>
+                            {totalPagesRead} pages
+                        </Text>
+                    )}
                     {isComplete && (
                         <Text style={styles.completeEmoji}>🎉</Text>
                     )}
@@ -109,6 +130,12 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '500',
         marginTop: 2,
+    },
+    pagesLabel: {
+        fontSize: 11,
+        fontWeight: '400',
+        marginTop: 1,
+        opacity: 0.7,
     },
     completeEmoji: {
         fontSize: 20,

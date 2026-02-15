@@ -12,6 +12,7 @@ import {
     Modal,
     Platform,
     Alert,
+    DimensionValue,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, AnimatePresence } from 'moti';
@@ -74,10 +75,9 @@ interface KhatmaCelebrationModalProps {
     onDismiss: () => void;
     onStartNextRound?: () => void;
     currentRound: number;
-    daysAhead: number;
-    ramadanDay: number;
     totalPagesRead?: number;
     completedJuzCount?: number;
+    streakDays?: number;
 }
 
 export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
@@ -85,13 +85,11 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
     onDismiss,
     onStartNextRound,
     currentRound,
-    daysAhead,
-    ramadanDay,
     totalPagesRead = 604,
     completedJuzCount = 30,
+    streakDays = 0,
 }) => {
     const viewShotRef = useRef<ViewShot>(null);
-    const hasRemainingDays = ramadanDay < 30;
 
     const getEnglishHeadline = () => {
         if (currentRound > 1) return `${currentRound} Khatmas Complete!`;
@@ -100,10 +98,8 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
 
     const getSubtitle = () => {
         if (currentRound > 1)
-            return `Masha'Allah! You've completed ${currentRound} full readings of the Quran this Ramadan!`;
-        if (daysAhead > 0)
-            return `You finished ${daysAhead} day${daysAhead === 1 ? '' : 's'} ahead of schedule!`;
-        return 'You completed the entire Quran during Ramadan!';
+            return `Masha'Allah! You've completed ${currentRound} full readings of the Quran!`;
+        return 'You completed the entire Quran. Masha\'Allah!';
     };
 
     const getArabicText = () => {
@@ -170,9 +166,9 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                         style={[
                             styles.sparkle,
                             {
-                                top: sparkle.top as any,
-                                left: sparkle.left as any,
-                                right: sparkle.right as any,
+                                top: sparkle.top as DimensionValue,
+                                left: sparkle.left as DimensionValue,
+                                right: sparkle.right as DimensionValue,
                                 width: sparkle.size,
                                 height: sparkle.size,
                                 borderRadius: sparkle.size / 2,
@@ -200,9 +196,9 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                                 style={[
                                     styles.sparkleStatic,
                                     {
-                                        top: sparkle.top as any,
-                                        left: sparkle.left as any,
-                                        right: sparkle.right as any,
+                                        top: sparkle.top as DimensionValue,
+                                        left: sparkle.left as DimensionValue,
+                                        right: sparkle.right as DimensionValue,
                                         width: sparkle.size,
                                         height: sparkle.size,
                                         borderRadius: sparkle.size / 2,
@@ -243,8 +239,8 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                             </View>
                             <View style={styles.statDivider} />
                             <View style={styles.statItem}>
-                                <Text style={styles.statNumber}>{ramadanDay}</Text>
-                                <Text style={styles.statLabel}>Days</Text>
+                                <Text style={styles.statNumber}>{streakDays}</Text>
+                                <Text style={styles.statLabel}>Streak</Text>
                             </View>
                         </View>
 
@@ -291,7 +287,7 @@ export const KhatmaCelebrationModal: React.FC<KhatmaCelebrationModalProps> = ({
                     </MotiView>
 
                     {/* Start Next Round */}
-                    {hasRemainingDays && onStartNextRound && (
+                    {onStartNextRound && (
                         <MotiView
                             from={{ opacity: 0, translateY: 20 }}
                             animate={{ opacity: 1, translateY: 0 }}

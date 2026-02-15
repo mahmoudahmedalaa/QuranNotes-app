@@ -1,104 +1,89 @@
 /**
- * TodayReadingCard — Smart reading card with page-level progress
- * Uses warm accent colors for progress, unified circle checkmarks
+ * TodayReadingCard — Reading card for Khatma.
+ * Shows Juz info, surah range, total pages, and action buttons.
+ * Uses Juz-specific KhatmaReadingPosition for "Continue Reading" detection
+ * to avoid confusion when surahs span multiple Juzs.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
-import { useTheme, ProgressBar } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
-import { useAudio } from '../../../infrastructure/audio/AudioContext';
 import { JuzInfo } from '../../../data/khatmaData';
+import { KhatmaReadingPosition, KhatmaPosition } from '../../../infrastructure/khatma/KhatmaReadingPosition';
 import { Spacing, BorderRadius, Shadows } from '../../theme/DesignSystem';
 
-// Warm accent palette (alpha-channel for dark mode compatibility)
 const ACCENT = {
     gold: '#F5A623',
     goldLight: '#F5A62320',
     green: '#10B981',
     greenLight: '#10B98120',
-    progressGradientStart: '#F5A623',
-    progressGradientEnd: '#F97316',
 };
-
-interface LastReadPosition {
-    surah: number;
-    surahName?: string;
-    verse: number;
-    page: number;
-    timestamp: number;
-}
 
 interface TodayReadingCardProps {
     juz: JuzInfo;
-    pagesRead: number;
-    totalPages: number;
-    percent: number;
-    lastPosition?: LastReadPosition;
     isCompleted: boolean;
     isToday: boolean;
     onToggle: () => void;
     isTrialExpired?: boolean;
+    /** Increment this to force a refresh (e.g. on tab focus) */
+    refreshKey?: number;
 }
 
 export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
     juz,
-    pagesRead,
-    totalPages,
-    percent,
-    lastPosition,
     isCompleted,
     isToday,
     onToggle,
     isTrialExpired,
+    refreshKey,
 }) => {
     const theme = useTheme();
     const router = useRouter();
-    const { playingVerse, currentSurahNum } = useAudio();
 
-    // Use audio's live position if audio is playing within a surah that belongs to this Juz
-    const audioIsRelevant = playingVerse && currentSurahNum &&
-        currentSurahNum >= juz.startSurahNumber && currentSurahNum <= juz.endSurahNumber;
+    // Use Juz-specific KhatmaReadingPosition for "Continue Reading" detection.
+    // This avoids the overlap bug where surahs span multiple Juzs
+    // (e.g., Al-Baqarah is in Juz 1, 2, and 3).
+    const [savedPos, setSavedPos] = useState<KhatmaPosition | null>(null);
 
-    const resumeSurahNumber = audioIsRelevant ? currentSurahNum! : (lastPosition?.surah || juz.startSurahNumber);
-    const resumeVerse = audioIsRelevant ? playingVerse!.verse : lastPosition?.verse;
+    useEffect(() => {
+        KhatmaReadingPosition.get(juz.juzNumber).then(pos => {
+            setSavedPos(pos);
+        });
+    }, [juz.juzNumber, refreshKey]);
 
-    const handleContinueReading = () => {
-        // Premium gate: trial expired → show paywall
+    // "Continue" only if user previously read THIS specific Juz from Khatma
+    const hasStartedReading = savedPos !== null;
+
+    const handleStartReading = () => {
         if (isTrialExpired) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             router.push('/paywall?reason=khatma');
             return;
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        if (resumeVerse) {
-            router.push(`/surah/${resumeSurahNumber}?verse=${resumeVerse}&autoplay=true`);
+
+        // Start a khatma session so AudioKhatmaBridge saves khatma-specific positions
+        KhatmaReadingPosition.startSession(juz.juzNumber);
+
+        if (hasStartedReading && savedPos) {
+            // Resume from Juz-specific saved position
+            router.push(`/surah/${savedPos.surah}?verse=${savedPos.verse}&autoplay=true`);
         } else {
-            router.push(`/surah/${juz.startSurahNumber}?autoplay=true`);
+            // First time reading this Juz — navigate to the Juz's start page
+            // This ensures we land at the correct starting verse, even when
+            // a surah spans multiple Juzs (e.g., Al-Baqarah starts in Juz 1)
+            router.push(`/surah/${juz.startSurahNumber}?page=${juz.startPage}&autoplay=true`);
         }
     };
 
     const getHeaderText = () => {
         if (isCompleted) return 'Completed';
-        if (!isToday) return `Juz ${juz.juzNumber}`;
-        if (lastPosition) return 'Pick up where you left off';
-        return "Today's Reading";
+        if (isToday) return "Today's Reading";
+        return `Juz ${juz.juzNumber}`;
     };
-
-    const getCtaText = () => {
-        if (lastPosition && pagesRead > 0) return 'Continue Reading';
-        return 'Start Reading';
-    };
-
-    const getResumeText = () => {
-        if (!lastPosition) return null;
-        const surahName = lastPosition.surahName || `Surah ${lastPosition.surah}`;
-        return `${surahName}, Verse ${lastPosition.verse} — Page ${lastPosition.page}`;
-    };
-
-    const resumeText = getResumeText();
 
     return (
         <MotiView
@@ -134,7 +119,7 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                                 </Text>
                             )}
                         </View>
-                        <View>
+                        <View style={styles.headerInfo}>
                             <Text style={[styles.headerText, { color: theme.colors.onSurface }]}>
                                 {getHeaderText()}
                             </Text>
@@ -145,44 +130,11 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                     </View>
                 </View>
 
-                {/* Progress Section — warm accent bar */}
-                {!isCompleted && (
-                    <View style={styles.progressSection}>
-                        <View style={styles.progressHeader}>
-                            <Text style={[styles.progressLabel, { color: theme.colors.onSurfaceVariant }]}>
-                                Progress
-                            </Text>
-                            <Text style={[styles.progressCount, { color: ACCENT.gold }]}>
-                                {pagesRead} of {totalPages} pages
-                            </Text>
-                        </View>
-                        <ProgressBar
-                            progress={percent}
-                            color={ACCENT.gold}
-                            style={[styles.progressBar, { backgroundColor: ACCENT.goldLight }]}
-                        />
-                    </View>
-                )}
-
-                {/* Resume Context */}
-                {resumeText && !isCompleted && (
-                    <View style={styles.resumeContext}>
-                        <MaterialCommunityIcons
-                            name="bookmark-outline"
-                            size={14}
-                            color={ACCENT.gold}
-                        />
-                        <Text style={[styles.resumeText, { color: theme.colors.onSurfaceVariant }]}>
-                            {resumeText}
-                        </Text>
-                    </View>
-                )}
-
                 {/* Action Buttons */}
                 <View style={styles.actionRow}>
                     {!isCompleted && (
                         <Pressable
-                            onPress={handleContinueReading}
+                            onPress={handleStartReading}
                             style={({ pressed }) => [
                                 styles.continueButton,
                                 { backgroundColor: theme.colors.primary },
@@ -191,12 +143,12 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                             ]}
                         >
                             <MaterialCommunityIcons
-                                name="book-open-page-variant"
+                                name={hasStartedReading ? 'book-open-page-variant' : 'book-open-variant'}
                                 size={18}
                                 color="#FFF"
                             />
                             <Text style={styles.continueButtonText}>
-                                {getCtaText()}
+                                {hasStartedReading ? 'Continue Reading' : 'Start Reading'}
                             </Text>
                         </Pressable>
                     )}
@@ -204,7 +156,6 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                     <Pressable
                         onPress={() => {
                             if (isCompleted) {
-                                // Confirm before resetting
                                 Alert.alert(
                                     'Start Over?',
                                     `This will reset progress for Juz ${juz.juzNumber}. You can always complete it again.`,
@@ -215,6 +166,8 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                                             style: 'destructive',
                                             onPress: () => {
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                                // Clear khatma position when starting over
+                                                KhatmaReadingPosition.clear(juz.juzNumber);
                                                 onToggle();
                                             },
                                         },
@@ -275,6 +228,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.sm,
+        flex: 1,
+    },
+    headerInfo: {
+        flex: 1,
     },
     juzBadge: {
         width: 40,
@@ -293,38 +250,6 @@ const styles = StyleSheet.create({
     },
     juzLabel: {
         fontSize: 13,
-    },
-    progressSection: {
-        marginTop: Spacing.md,
-    },
-    progressHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 6,
-    },
-    progressLabel: {
-        fontSize: 13,
-        fontWeight: '500',
-    },
-    progressCount: {
-        fontSize: 13,
-        fontWeight: '700',
-    },
-    progressBar: {
-        height: 8,
-        borderRadius: 4,
-    },
-    resumeContext: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginTop: Spacing.sm,
-    },
-    resumeText: {
-        fontSize: 12,
-        fontWeight: '500',
-        flex: 1,
     },
     actionRow: {
         flexDirection: 'row',
