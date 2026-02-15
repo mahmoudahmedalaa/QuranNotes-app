@@ -85,10 +85,21 @@ When the Khatma feature had too many bugs, doing a full rewrite with proper stat
 
 ## ➕ Add Your Lessons Here
 
-### [Session Date] — [Topic]
+### 2026-02-15 — Khatma, Audio, Mood Fixes
 
 **What went wrong**:
+- Khatma past-day navigation started reading from a random verse in the middle because it used `?verse=` param instead of `?page=`
+- Auto-scroll fired when user manually tapped a different verse during playback, causing a jarring jump
+- Mood illustrations were too small at 44px — not visible enough in the grid
+- Verse recommendation sheets used `playFromVerse()` which queued the entire surah instead of playing just the single recommended verse
 
 **What went right**:
+- Using `playVerse()` for single-verse playback in sheets — clean, no side effects
+- Checking `isSequentialAdvance` flag before auto-scrolling — only scrolls on N→N+1 transitions
+- The 4-level verification protocol (added today) would have caught the wired→functional gap earlier
 
-**Rule to add**:
+**Rules added**:
+- Never navigate Khatma with `?verse=` param — always `?page=` to land at top of Juz
+- Never auto-scroll on manual verse play — only on sequential advance (N → N+1)
+- Mood illustrations must be 56px+ for grid, 60px+ for today summary
+- Use `playVerse()` (not `playFromVerse()`) for single-verse playback in sheets/modals

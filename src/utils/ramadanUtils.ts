@@ -18,7 +18,7 @@ let ramadanEnd = new Date('2026-03-19T23:59:59');
 function applyDates(startDate: string, endDate: string) {
     ramadanStart = new Date(`${startDate}T00:00:00`);
     ramadanEnd = new Date(`${endDate}T23:59:59`);
-    console.log(`[Ramadan] Dates applied: ${startDate} → ${endDate}`);
+    if (__DEV__) console.log(`[Ramadan] Dates applied: ${startDate} → ${endDate}`);
 }
 
 /**
@@ -36,7 +36,7 @@ export async function initRamadanDates(): Promise<() => void> {
         const dates = await RamadanConfigService.fetch();
         applyDates(dates.startDate, dates.endDate);
     } catch (e) {
-        console.log('[Ramadan] Using hardcoded defaults');
+        if (__DEV__) console.log('[Ramadan] Using hardcoded defaults');
     }
 
     // Start real-time listener — updates propagate instantly
