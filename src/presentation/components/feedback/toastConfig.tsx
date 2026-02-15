@@ -1,15 +1,37 @@
+/**
+ * Premium toast notifications — Headspace-inspired minimal design.
+ * Soft pill-shaped, theme-adaptive, with subtle icons and clean typography.
+ */
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { BorderRadius, Shadows, Spacing } from '../../theme/DesignSystem';
+import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-const TOAST_ICONS: Record<string, { name: string; bg: string; color: string }> = {
-    success: { name: 'checkmark-circle', bg: '#ECFDF5', color: '#059669' },
-    error: { name: 'alert-circle', bg: '#FEF2F2', color: '#DC2626' },
-    info: { name: 'information-circle', bg: '#EFF6FF', color: '#3B82F6' },
+const TOAST_VARIANTS: Record<string, {
+    icon: string;
+    iconColor: string;
+    bgColor: string;
+    borderColor: string;
+}> = {
+    success: {
+        icon: 'check-circle',
+        iconColor: '#22C55E',
+        bgColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: 'rgba(34, 197, 94, 0.15)',
+    },
+    error: {
+        icon: 'alert-circle',
+        iconColor: '#EF4444',
+        bgColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: 'rgba(239, 68, 68, 0.15)',
+    },
+    info: {
+        icon: 'information',
+        iconColor: '#6366F1',
+        bgColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: 'rgba(99, 102, 241, 0.15)',
+    },
 };
 
 interface ToastProps {
@@ -19,84 +41,89 @@ interface ToastProps {
 }
 
 const CustomToast = ({ text1, text2, type = 'success' }: ToastProps) => {
-    const icon = TOAST_ICONS[type] || TOAST_ICONS.info;
+    const variant = TOAST_VARIANTS[type] || TOAST_VARIANTS.info;
 
     return (
-        <View style={[styles.container, Shadows.lg]}>
-            <BlurView intensity={92} tint="light" style={styles.blur}>
-                <View style={styles.content}>
-                    <View style={[styles.iconCircle, { backgroundColor: icon.bg }]}>
-                        <Ionicons
-                            name={icon.name as any}
-                            size={22}
-                            color={icon.color}
-                        />
-                    </View>
-                    <View style={styles.textCol}>
-                        {text1 ? (
-                            <Text style={styles.title} numberOfLines={1}>
-                                {text1}
-                            </Text>
-                        ) : null}
-                        {text2 ? (
-                            <Text style={styles.subtitle} numberOfLines={2}>
-                                {text2}
-                            </Text>
-                        ) : null}
-                    </View>
+        <View style={styles.wrapper}>
+            <View style={[
+                styles.container,
+                {
+                    backgroundColor: variant.bgColor,
+                    borderColor: variant.borderColor,
+                },
+            ]}>
+                {/* Icon — small and clean */}
+                <MaterialCommunityIcons
+                    name={variant.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
+                    size={20}
+                    color={variant.iconColor}
+                />
+
+                {/* Text content */}
+                <View style={styles.textCol}>
+                    {text1 ? (
+                        <Text style={styles.title} numberOfLines={1}>
+                            {text1}
+                        </Text>
+                    ) : null}
+                    {text2 ? (
+                        <Text style={styles.subtitle} numberOfLines={2}>
+                            {text2}
+                        </Text>
+                    ) : null}
                 </View>
-            </BlurView>
+            </View>
         </View>
     );
 };
 
 export const toastConfig = {
-    success: (props: any) => <CustomToast {...props} type="success" />,
-    error: (props: any) => <CustomToast {...props} type="error" />,
-    info: (props: any) => <CustomToast {...props} type="info" />,
+    success: (props: ToastProps) => <CustomToast {...props} type="success" />,
+    error: (props: ToastProps) => <CustomToast {...props} type="error" />,
+    info: (props: ToastProps) => <CustomToast {...props} type="info" />,
 };
 
 const styles = StyleSheet.create({
+    wrapper: {
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
     container: {
-        width: width - Spacing.lg * 2,
-        borderRadius: BorderRadius.xl,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.6)',
-    },
-    blur: {
-        overflow: 'hidden',
-        borderRadius: BorderRadius.xl,
-    },
-    content: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 14,
-        paddingHorizontal: 16,
-        gap: 14,
-        backgroundColor: 'rgba(255,255,255,0.75)',
-    },
-    iconCircle: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
+        paddingHorizontal: 18,
+        gap: 12,
+        borderRadius: 50,
+        borderWidth: 1,
+        // Soft shadow — Headspace-style
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.08,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 4,
+            },
+        }),
+        maxWidth: width - 48,
     },
     textCol: {
         flex: 1,
-        gap: 2,
+        gap: 1,
     },
     title: {
         fontSize: 15,
-        fontWeight: '700',
-        color: '#1A1D21',
-        letterSpacing: -0.2,
+        fontWeight: '600',
+        color: '#1A1A2E',
+        letterSpacing: -0.3,
     },
     subtitle: {
         fontSize: 13,
-        fontWeight: '500',
-        color: '#6B7C93',
-        lineHeight: 18,
+        fontWeight: '400',
+        color: '#6B7280',
+        lineHeight: 17,
     },
 });
