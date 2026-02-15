@@ -210,9 +210,12 @@ function ActiveTrackerView() {
                             AsyncStorage.setItem(CELEBRATION_SHOWN_KEY, String(currentRound));
                         }}
                         onStartNextRound={() => {
+                            // Save celebration_shown for the NEXT round (currentRound + 1)
+                            // because startNextRound() increments currentRound
+                            const nextRound = currentRound + 1;
                             startNextRound();
                             setShowCelebration(false);
-                            AsyncStorage.setItem(CELEBRATION_SHOWN_KEY, String(currentRound));
+                            AsyncStorage.setItem(CELEBRATION_SHOWN_KEY, String(nextRound));
                         }}
                         currentRound={currentRound}
                         totalPagesRead={totalPagesRead}

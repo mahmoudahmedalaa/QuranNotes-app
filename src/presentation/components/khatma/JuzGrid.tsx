@@ -1,7 +1,10 @@
 /**
  * JuzGrid — 5×6 grid of Juz 1-30 for self-paced Khatma tracking.
  * Shows states: completed (green), in-progress (gold), not started (gray).
- * Uses global ReadingPositionService so reading from ANY tab counts.
+ *
+ * Uses KhatmaReadingPosition (per-Juz) instead of ReadingPositionService (per-surah)
+ * to detect "in progress" state. This avoids false positives when multiple Juz
+ * share the same surah (e.g. Juz 1, 2, 3 all share Al-Baqarah).
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
@@ -9,8 +12,7 @@ import { useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
-import { ReadingPositionService } from '../../../infrastructure/reading/ReadingPositionService';
-import { getJuzInfo } from '../../../data/khatmaData';
+import { KhatmaReadingPosition } from '../../../infrastructure/khatma/KhatmaReadingPosition';
 import { Spacing, BorderRadius, Shadows } from '../../theme/DesignSystem';
 
 // Enable LayoutAnimation on Android
@@ -46,19 +48,16 @@ export const JuzGrid: React.FC<JuzGridProps> = ({
     const theme = useTheme();
     const [collapsed, setCollapsed] = useState(false);
 
-    // Detect which Juz have any reading positions (from any tab)
+    // Detect which Juz have a saved reading position (from KhatmaReadingPosition, NOT global)
+    // This is per-Juz, so Juz 1 and Juz 2 are tracked independently even though
+    // they both involve Al-Baqarah. Prevents the "3 Juz always yellow" bug.
     const [inProgressJuzSet, setInProgressJuzSet] = useState<Set<number>>(new Set());
 
     const checkInProgress = useCallback(async () => {
         const inProgress = new Set<number>();
         for (let j = 1; j <= 30; j++) {
             if (completedJuz.includes(j)) continue;
-            const juzInfo = getJuzInfo(j);
-            if (!juzInfo) continue;
-            const pos = await ReadingPositionService.getMostRecentInRange(
-                juzInfo.startSurahNumber,
-                juzInfo.endSurahNumber,
-            );
+            const pos = await KhatmaReadingPosition.get(j);
             if (pos) inProgress.add(j);
         }
         setInProgressJuzSet(inProgress);

@@ -6,6 +6,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getJuzInfo, JuzInfo } from '../../data/khatmaData';
 import { useAuth } from '../auth/AuthContext';
+import { KhatmaReadingPosition } from './KhatmaReadingPosition';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -191,9 +192,14 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const newState = INITIAL_STATE(currentYear);
         setState(newState);
         await saveProgress(newState);
+        // Clear all Juz-specific reading positions so nothing shows as "in progress"
+        await KhatmaReadingPosition.clearAll();
     }, [currentYear]);
 
     const startNextRound = useCallback(async () => {
+        // Clear all Juz-specific reading positions FIRST
+        // so JuzGrid won't show stale "in progress" state
+        await KhatmaReadingPosition.clearAll();
         setState(prev => {
             const newState: KhatmaState = {
                 completedJuz: [],
