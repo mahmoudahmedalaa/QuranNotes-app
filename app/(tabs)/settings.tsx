@@ -18,6 +18,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { usePro } from '../../src/infrastructure/auth/ProContext';
 import { useAuth } from '../../src/infrastructure/auth/AuthContext';
+import { useMood } from '../../src/infrastructure/mood/MoodContext';
 import { NotificationService } from '../../src/infrastructure/notifications/NotificationService';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
@@ -40,6 +41,7 @@ export default function SettingsScreen() {
     const { settings, updateSettings, resetSettings } = useSettings();
 
     const { toggleDebugPro, isPro } = usePro();
+    const { debugResetAll, debugUseOneCredit, freeUsesRemaining } = useMood();
     const { user, loading, logout, deleteAccount, deleteAccountWithPassword } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
 
@@ -120,7 +122,8 @@ export default function SettingsScreen() {
                 onPress: async () => {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                     await logout();
-                    Alert.alert('Signed Out', 'You have been signed out.');
+                    // Navigate to index — it detects user=null and redirects to login
+                    router.replace('/');
                 },
             },
         ]);
@@ -148,13 +151,17 @@ export default function SettingsScreen() {
                                         try {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                             await deleteAccount();
-                                            // Navigate to welcome screen with clean stack
-                                            router.dismissAll();
+                                            // Navigate to index — it detects user=null and redirects to login
                                             router.replace('/');
                                         } catch (error: any) {
                                             if (error.code === 'auth/needs-password') {
                                                 // Email/password user — prompt for password
                                                 promptForPasswordAndDelete();
+                                            } else if (error.code === 'auth/invalid-login-credentials' || error.code === 'auth/requires-recent-login') {
+                                                // Session expired — just sign out and redirect
+                                                await logout();
+                                                router.replace('/');
+                                                Alert.alert('Account Removed', 'Your session had expired. You have been signed out.');
                                             } else {
                                                 Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
                                             }
@@ -187,7 +194,6 @@ export default function SettingsScreen() {
                         try {
                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                             await deleteAccountWithPassword(password);
-                            router.dismissAll();
                             router.replace('/');
                         } catch (error: any) {
                             if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -808,7 +814,7 @@ export default function SettingsScreen() {
                         </View>
                     )}
 
-                    {/* Debug Section — Ramadan simulator */}
+                    {/* Debug Section — TODO: gate behind __DEV__ before App Store submission */}
                     {(
                         <View style={styles.section}>
                             <Text
@@ -842,6 +848,95 @@ export default function SettingsScreen() {
                                         updateSettings({ debugSimulateRamadan: val });
                                     }}
                                     color="#D69E2E"
+                                />
+                            </View>
+
+                            {/* Debug: Simulate Mood Check-in (use 1 credit) */}
+                            <Pressable
+                                onPress={() => {
+                                    debugUseOneCredit();
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                }}
+                                style={({ pressed }) => [
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                    Shadows.sm,
+                                    pressed && { opacity: 0.7 },
+                                ]}
+                            >
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: '#F59E0B20' },
+                                    ]}>
+                                    <Ionicons name="remove-circle" size={18} color="#F59E0B" />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                        Simulate Check-in
+                                    </Text>
+                                    <Text style={[styles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                                        {freeUsesRemaining}/5 free uses left · Tap to use 1
+                                    </Text>
+                                </View>
+                            </Pressable>
+
+                            {/* Debug: Reset All Mood Data */}
+                            <Pressable
+                                onPress={() => {
+                                    debugResetAll();
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                }}
+                                style={({ pressed }) => [
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                    Shadows.sm,
+                                    pressed && { opacity: 0.7 },
+                                ]}
+                            >
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: '#8B5CF620' },
+                                    ]}>
+                                    <Ionicons name="refresh" size={18} color="#8B5CF6" />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                        Reset All Mood Data
+                                    </Text>
+                                    <Text style={[styles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                                        Wipe history & restore 5 free uses
+                                    </Text>
+                                </View>
+                            </Pressable>
+
+                            {/* Debug: Toggle Pro */}
+                            <View
+                                style={[
+                                    styles.card,
+                                    { backgroundColor: theme.colors.surface, marginTop: Spacing.sm },
+                                    Shadows.sm,
+                                ]}>
+                                <View
+                                    style={[
+                                        styles.iconContainer,
+                                        { backgroundColor: isPro ? '#10B98120' : '#EF444420' },
+                                    ]}>
+                                    <Ionicons name={isPro ? 'diamond' : 'diamond-outline'} size={18} color={isPro ? '#10B981' : '#EF4444'} />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={[styles.cardTitle, { color: theme.colors.onSurface }]}>
+                                        Simulate Pro
+                                    </Text>
+                                    <Text style={[styles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                                        {isPro ? 'Pro active' : 'Free user'} · Toggle to test
+                                    </Text>
+                                </View>
+                                <Switch
+                                    value={isPro}
+                                    onValueChange={() => toggleDebugPro()}
+                                    color="#10B981"
                                 />
                             </View>
                         </View>
