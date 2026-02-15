@@ -31,14 +31,14 @@ function isSpeechModuleAvailable(): boolean {
     if (moduleAvailable) {
         speechEmitter = new NativeEventEmitter(NativeModules.ExpoSpeechRecognition);
     } else {
-        console.warn('Speech recognition native module not available');
+        if (__DEV__) console.warn('Speech recognition native module not available');
     }
 
     return moduleAvailable;
 }
 
-function getSpeechModule(): any {
-    return NativeModules.ExpoSpeechRecognition;
+function getSpeechModule(): Record<string, (...args: unknown[]) => unknown> {
+    return NativeModules.ExpoSpeechRecognition as Record<string, (...args: unknown[]) => unknown>;
 }
 
 class VoiceRecognitionServiceImpl {
@@ -49,15 +49,15 @@ class VoiceRecognitionServiceImpl {
 
     async requestPermissions(): Promise<boolean> {
         if (!isSpeechModuleAvailable()) {
-            console.warn('Speech recognition module not available');
+            if (__DEV__) console.warn('Speech recognition module not available');
             return false;
         }
 
         try {
-            const result = await getSpeechModule().requestPermissionsAsync();
+            const result = await getSpeechModule().requestPermissionsAsync() as { granted: boolean };
             return result.granted;
         } catch (error) {
-            console.error('Failed to request speech permissions:', error);
+            if (__DEV__) console.error('Failed to request speech permissions:', error);
             return false;
         }
     }
@@ -68,7 +68,7 @@ class VoiceRecognitionServiceImpl {
     ): Promise<boolean> {
         if (!isSpeechModuleAvailable()) {
             const errorMsg = 'Speech recognition is not available on this device';
-            console.warn(errorMsg);
+            if (__DEV__) console.warn(errorMsg);
             onError?.(errorMsg);
             return false;
         }
@@ -91,19 +91,19 @@ class VoiceRecognitionServiceImpl {
             // Set up listeners before starting
             // Use NativeEventEmitter to listen for speech events
             if (speechEmitter) {
-                const resultSub = speechEmitter.addListener('result', (event: any) => {
+                const resultSub = speechEmitter.addListener('result', (event: { results?: { transcript: string; confidence?: number }[]; isFinal?: boolean }) => {
                     if (event.results && event.results.length > 0) {
                         const result = event.results[0];
                         this.onResultCallback?.({
                             transcript: result.transcript,
-                            isFinal: event.isFinal,
+                            isFinal: event.isFinal ?? false,
                             confidence: result.confidence || 0.8,
                         });
                     }
                 });
 
-                const errorSub = speechEmitter.addListener('error', (event: any) => {
-                    console.error('Speech recognition error:', event.error, event.message);
+                const errorSub = speechEmitter.addListener('error', (event: { error?: string; message?: string }) => {
+                    if (__DEV__) console.error('Speech recognition error:', event.error, event.message);
                     this.onErrorCallback?.(event.message || event.error || 'Recognition error');
                 });
 
@@ -129,7 +129,7 @@ class VoiceRecognitionServiceImpl {
             this.isListening = true;
             return true;
         } catch (error) {
-            console.error('Failed to start listening:', error);
+            if (__DEV__) console.error('Failed to start listening:', error);
             onError?.(error instanceof Error ? error.message : 'Unknown error');
             return false;
         }
@@ -145,7 +145,7 @@ class VoiceRecognitionServiceImpl {
                 addsPunctuation: false,
             });
         } catch (error) {
-            console.error('Failed to restart recognition:', error);
+            if (__DEV__) console.error('Failed to restart recognition:', error);
         }
     }
 
@@ -165,7 +165,7 @@ class VoiceRecognitionServiceImpl {
         try {
             getSpeechModule().stop();
         } catch (error) {
-            console.error('Failed to stop listening:', error);
+            if (__DEV__) console.error('Failed to stop listening:', error);
         }
 
     }

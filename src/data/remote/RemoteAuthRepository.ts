@@ -59,9 +59,10 @@ export class RemoteAuthRepository implements IAuthRepository {
 
 
             return this.mapUser(credential.user)!;
-        } catch (error: any) {
-            console.error('[Google Sign-In] Error:', error.code, error.message, error);
-            throw new Error('Google Sign-In failed: ' + (error.message || 'Unknown error'));
+        } catch (error: unknown) {
+            const err = error as { code?: string; message?: string };
+            if (__DEV__) console.error('[Google Sign-In] Error:', err.code, err.message, error);
+            throw new Error('Google Sign-In failed: ' + (err.message || 'Unknown error'));
         }
     }
 
@@ -94,12 +95,13 @@ export class RemoteAuthRepository implements IAuthRepository {
 
 
             return this.mapUser(firebaseCredential.user)!;
-        } catch (error: any) {
-            console.error('[Apple Sign-In] Error:', error.code, error.message, error);
-            if (error.code === 'ERR_CANCELED') {
+        } catch (error: unknown) {
+            const err = error as { code?: string; message?: string };
+            if (__DEV__) console.error('[Apple Sign-In] Error:', err.code, err.message, error);
+            if (err.code === 'ERR_CANCELED') {
                 throw new Error('Apple Sign-In was cancelled');
             }
-            throw new Error('Apple Sign-In failed: ' + (error.message || 'Unknown error'));
+            throw new Error('Apple Sign-In failed: ' + (err.message || 'Unknown error'));
         }
     }
 
@@ -146,7 +148,7 @@ export class RemoteAuthRepository implements IAuthRepository {
         const currentUser = auth.currentUser;
         if (!currentUser) return null;
         if (currentUser.isAnonymous) return 'anonymous';
-        const providers = currentUser.providerData.map(p => p?.providerId).filter(Boolean);
+        const providers = currentUser.providerData.map((p: firebase.UserInfo | null) => p?.providerId).filter(Boolean);
         if (providers.includes('google.com')) return 'google.com';
         if (providers.includes('apple.com')) return 'apple.com';
         if (providers.includes('password')) return 'password';
@@ -189,14 +191,15 @@ export class RemoteAuthRepository implements IAuthRepository {
                 const snapshot = await getDocs(q);
                 const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, col, d.id)));
                 await Promise.all(deletePromises);
-            } catch (error: any) {
-                console.warn(`[DeleteAccount] Failed to delete ${col}:`, error.message);
+            } catch (error: unknown) {
+                const errMsg = error instanceof Error ? error.message : String(error);
+                if (__DEV__) console.warn(`[DeleteAccount] Failed to delete ${col}:`, errMsg);
             }
         }
 
         // Step 2: Delete the Firebase Auth account (re-auth already done)
         await currentUser.delete();
-        console.log('[DeleteAccount] Account and data deleted successfully');
+        if (__DEV__) console.log('[DeleteAccount] Account and data deleted successfully');
     }
 
     async deleteAccount(): Promise<void> {
@@ -219,9 +222,19 @@ export class RemoteAuthRepository implements IAuthRepository {
                     const snapshot = await getDocs(q);
                     const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, col, d.id)));
                     await Promise.all(deletePromises);
-                } catch (error: any) {
-                    console.warn(`[DeleteAccount] Failed to delete ${col}:`, error.message);
+                } catch (error: unknown) {
+                    const errMsg = error instanceof Error ? error.message : String(error);
+                    if (__DEV__) console.warn(`[DeleteAccount] Failed to delete ${col}:`, errMsg);
+                    // If credential expired, just skip data cleanup — sign out will still work
                 }
+            }
+            // Try to delete the auth account directly; if token is expired, just sign out
+            try {
+                await currentUser.delete();
+            } catch (deleteErr: unknown) {
+                const errCode = (deleteErr as { code?: string })?.code;
+                if (__DEV__) console.warn('[DeleteAccount] Anonymous delete failed, signing out:', errCode);
+                // auth/requires-recent-login or auth/invalid-login-credentials — just sign out
             }
             await auth.signOut();
             return;
@@ -239,8 +252,8 @@ export class RemoteAuthRepository implements IAuthRepository {
                 if (!idToken) throw new Error('Google re-authentication failed.');
                 const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
                 await currentUser.reauthenticateWithCredential(credential);
-            } catch (error: any) {
-                console.error('[DeleteAccount] Google re-auth failed:', error);
+            } catch (error: unknown) {
+                if (__DEV__) console.error('[DeleteAccount] Google re-auth failed:', error);
                 throw new Error('Google re-authentication failed. Please try again.');
             }
         } else if (provider === 'apple.com') {
@@ -255,15 +268,15 @@ export class RemoteAuthRepository implements IAuthRepository {
                     idToken: appleCredential.identityToken,
                 });
                 await currentUser.reauthenticateWithCredential(credential);
-            } catch (error: any) {
-                console.error('[DeleteAccount] Apple re-auth failed:', error);
+            } catch (error: unknown) {
+                if (__DEV__) console.error('[DeleteAccount] Apple re-auth failed:', error);
                 throw new Error('Apple re-authentication failed. Please try again.');
             }
         } else if (provider === 'password') {
             // Email/password users need to provide their password.
             // Throw a specific error that the UI layer can handle.
-            const err = new Error('Password required for re-authentication.');
-            (err as any).code = 'auth/needs-password';
+            const err: Error & { code?: string } = new Error('Password required for re-authentication.');
+            err.code = 'auth/needs-password';
             throw err;
         }
 
@@ -276,7 +289,7 @@ export class RemoteAuthRepository implements IAuthRepository {
     }
 
     onAuthStateChanged(callback: (user: User | null) => void): () => void {
-        return auth.onAuthStateChanged(user => {
+        return auth.onAuthStateChanged((user: firebase.User | null) => {
             callback(this.mapUser(user));
         });
     }
