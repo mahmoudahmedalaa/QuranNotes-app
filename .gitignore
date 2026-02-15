@@ -43,3 +43,5 @@ secrets/
 
 # Testing
 coverage/
+# Build output
+dist/
