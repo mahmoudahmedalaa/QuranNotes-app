@@ -37,7 +37,7 @@ import * as Haptics from 'expo-haptics';
 const ACCENT_GOLD = '#D4A853';
 
 export default function SurahDetail() {
-    const { id, verse: verseParam, autoplay, page: pageParam } = useLocalSearchParams<{ id: string; verse?: string; autoplay?: string; page?: string }>();
+    const { id, verse: verseParam, autoplay, page: pageParam, khatmaJuz: khatmaJuzParam } = useLocalSearchParams<{ id: string; verse?: string; autoplay?: string; page?: string; khatmaJuz?: string }>();
     const router = useRouter();
     const theme = useTheme();
     const insets = useSafeAreaInsets();
@@ -80,14 +80,21 @@ export default function SurahDetail() {
         if (id) loadSurah(Number(id));
     }, [id]);
 
-    // ── Compute whether we have a page-based Khatma navigation target ──
-    // Used to boost initialNumToRender so the target verse is already measured
-    // when the scroll effect fires (prevents the "random start" bug).
+    // ── Compute whether we need boosted rendering for a Khatma target ──
+    // When navigating to a high verse number (e.g. verse 253 in Baqarah for Juz 3),
+    // we need to render more items initially so the FlatList can scroll to it.
     const hasKhatmaTarget = useMemo(() => {
-        if (!pageParam || verseParam || !surah?.verses) return false;
-        const targetPage = Number(pageParam);
-        return !!targetPage;
-    }, [pageParam, verseParam, surah]);
+        if (!surah?.verses) return false;
+        // Boost if we have a khatmaJuz param with a verse target > 20
+        if (khatmaJuzParam && verseParam) {
+            return Number(verseParam) > 20;
+        }
+        // Also boost for page-based navigation (legacy)
+        if (pageParam && !verseParam) {
+            return !!Number(pageParam);
+        }
+        return false;
+    }, [pageParam, verseParam, khatmaJuzParam, surah]);
 
     // ── Load saved reading position on mount ──
     // Skip when navigating to a specific verse/page (e.g. from Khatma)
@@ -109,7 +116,22 @@ export default function SurahDetail() {
         });
     }, [id, verseParam, pageParam]);
 
-    // ── Auto-save reading position on exit + end khatma session ──
+    // ── Start khatma session if khatmaJuz param is present ──
+    // This ensures AudioKhatmaBridge saves positions for this Juz.
+    // Using URL param instead of volatile in-memory session prevents losing
+    // the session when navigating between surahs within a Juz.
+    useEffect(() => {
+        if (khatmaJuzParam) {
+            const juzNum = Number(khatmaJuzParam);
+            if (juzNum > 0) KhatmaReadingPosition.startSession(juzNum);
+        }
+        return () => {
+            // End session when leaving the surah screen completely
+            KhatmaReadingPosition.endSession();
+        };
+    }, [khatmaJuzParam]);
+
+    // ── Auto-save reading position on exit ──
     useEffect(() => {
         const surahRef = surah;
         return () => {
@@ -121,9 +143,6 @@ export default function SurahDetail() {
                     surahRef.englishName
                 );
             }
-            // End any active khatma session so general browsing
-            // doesn't continue saving khatma positions
-            KhatmaReadingPosition.endSession();
         };
     }, [surah]);
 
@@ -312,13 +331,13 @@ export default function SurahDetail() {
 
     // (Khatma page tracking removed — completion is now auto-detected + manual toggle)
 
-    // ── Auto-complete Juz when user reaches the last verse of the last surah in a Juz ──
+    // ── Auto-complete Juz when user reaches the last verse of the Juz's end surah ──
+    // Uses endVerseNumber from JuzInfo for precise boundary detection.
+    // For example, Juz 1 ends at Baqarah:141, not at Baqarah:286.
     const autoCompletedRef = useRef<Set<number>>(new Set());
     const checkAutoCompleteJuz = useCallback((visibleVerseNum: number) => {
         const currentSurah = surahRef.current;
         if (!currentSurah) return;
-        const totalVerses = currentSurah.numberOfAyahs;
-        if (visibleVerseNum < totalVerses) return; // Haven't reached the end
 
         const surahNumber = currentSurah.number;
         const juzNumbers = getJuzForSurah(surahNumber);
@@ -327,7 +346,9 @@ export default function SurahDetail() {
             if (completedJuz.includes(juzNum)) continue;
             const juzInfo = JUZ_DATA.find(j => j.juzNumber === juzNum);
             if (!juzInfo) continue;
-            if (surahNumber === juzInfo.endSurahNumber) {
+            // Check if current surah is the END surah of this Juz
+            // AND the visible verse is >= the Juz's end verse
+            if (surahNumber === juzInfo.endSurahNumber && visibleVerseNum >= juzInfo.endVerseNumber) {
                 autoCompletedRef.current.add(juzNum);
                 markJuzComplete(juzNum);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -337,7 +358,9 @@ export default function SurahDetail() {
 
     // ── Auto-continue to next surah in Khatma + auto-complete ──
     // When audio finishes the last verse of a surah during a Khatma session,
-    // automatically navigate to the next surah in the Juz if it's not the last one.
+    // automatically navigate to the next surah in the Juz.
+    // Uses the URL-based khatmaJuz param (not volatile in-memory session)
+    // so it survives across surah navigations.
     useEffect(() => {
         if (!lastCompletedPlayback || !surah) return;
         if (lastCompletedPlayback.surah !== surah.number) return;
@@ -345,14 +368,14 @@ export default function SurahDetail() {
         const lastVerseNum = lastCompletedPlayback.verses[lastCompletedPlayback.verses.length - 1]?.number;
         if (!lastVerseNum) return;
 
-        // Check auto-complete first (works regardless of Khatma session)
+        // Check auto-complete (works regardless of Khatma session)
         checkAutoCompleteJuz(lastVerseNum);
 
-        // Auto-continue to next surah if in a Khatma session
-        const activeJuz = KhatmaReadingPosition.getActiveJuz();
-        if (!activeJuz) return; // Not in a Khatma session
+        // Auto-continue to next surah if in a Khatma session (URL param)
+        const activeJuzNum = khatmaJuzParam ? Number(khatmaJuzParam) : null;
+        if (!activeJuzNum) return;
 
-        const juzInfo = JUZ_DATA.find(j => j.juzNumber === activeJuz);
+        const juzInfo = JUZ_DATA.find(j => j.juzNumber === activeJuzNum);
         if (!juzInfo) return;
 
         const currentSurahNum = surah.number;
@@ -360,19 +383,17 @@ export default function SurahDetail() {
         // If current surah is NOT the last surah in the Juz, auto-continue
         if (currentSurahNum < juzInfo.endSurahNumber) {
             const nextSurahNum = currentSurahNum + 1;
-            // Small delay for smooth transition
             setTimeout(() => {
-                // Save position before navigating away
                 ReadingPositionService.save(
                     surah.number,
                     lastVerseNum,
                     surah.englishName,
                 );
-                // Navigate to next surah (replace so back button goes to Khatma, not previous surah)
-                router.replace(`/surah/${nextSurahNum}?verse=1&autoplay=true`);
+                // Pass khatmaJuz through so the next surah also knows about the session
+                router.replace(`/surah/${nextSurahNum}?verse=1&autoplay=true&khatmaJuz=${activeJuzNum}`);
             }, 800);
         }
-    }, [lastCompletedPlayback, surah, checkAutoCompleteJuz, router]);
+    }, [lastCompletedPlayback, surah, checkAutoCompleteJuz, router, khatmaJuzParam]);
 
     // ── Khatma auto-tracking: record pages as verses become visible ──
     // Using viewabilityConfigCallbackPairs ref for stable tracking with Animated.FlatList

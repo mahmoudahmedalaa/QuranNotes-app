@@ -1,8 +1,15 @@
 /**
  * TodayReadingCard — Reading card for Khatma.
  * Shows Juz info, surah range, total pages, and action buttons.
- * Uses Juz-specific KhatmaReadingPosition for "Continue Reading" detection
- * to avoid confusion when surahs span multiple Juzs.
+ *
+ * Uses VERSE-BASED navigation (not page-based) for reliable Juz start.
+ * Passes `khatmaJuz` as a URL param so the surah screen can:
+ *   1. Auto-continue to the next surah within the Juz when a surah finishes
+ *   2. Auto-complete the Juz when the last verse is reached
+ *   3. Save khatma-specific reading positions
+ *
+ * "Continue Reading" detection: uses KhatmaReadingPosition (Juz-specific)
+ * to track exactly where the user left off within each Juz.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
@@ -43,9 +50,7 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
     const theme = useTheme();
     const router = useRouter();
 
-    // Use Juz-specific KhatmaReadingPosition for "Continue Reading" detection.
-    // This avoids the overlap bug where surahs span multiple Juzs
-    // (e.g., Al-Baqarah is in Juz 1, 2, and 3).
+    // Track Juz-specific reading position for "Continue Reading"
     const [savedPos, setSavedPos] = useState<KhatmaPosition | null>(null);
 
     useEffect(() => {
@@ -54,7 +59,6 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
         });
     }, [juz.juzNumber, refreshKey]);
 
-    // "Continue" only if user previously read THIS specific Juz from Khatma
     const hasStartedReading = savedPos !== null;
 
     const handleStartReading = () => {
@@ -65,17 +69,16 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-        // Start a khatma session so AudioKhatmaBridge saves khatma-specific positions
+        // Set active session so AudioKhatmaBridge saves positions for this Juz
         KhatmaReadingPosition.startSession(juz.juzNumber);
 
         if (hasStartedReading && savedPos) {
-            // Resume from Juz-specific saved position
-            router.push(`/surah/${savedPos.surah}?verse=${savedPos.verse}&autoplay=true`);
+            // Resume from saved position within this Juz
+            router.push(`/surah/${savedPos.surah}?verse=${savedPos.verse}&autoplay=true&khatmaJuz=${juz.juzNumber}`);
         } else {
-            // First time reading this Juz — navigate to the Juz's start page
-            // This ensures we land at the correct starting verse, even when
-            // a surah spans multiple Juzs (e.g., Al-Baqarah starts in Juz 1)
-            router.push(`/surah/${juz.startSurahNumber}?page=${juz.startPage}&autoplay=true`);
+            // First time: navigate to the Juz's start verse using VERSE-BASED navigation
+            // This is reliable — no page-guessing, exact verse number
+            router.push(`/surah/${juz.startSurahNumber}?verse=${juz.startVerseNumber}&autoplay=true&khatmaJuz=${juz.juzNumber}`);
         }
     };
 
@@ -166,7 +169,6 @@ export const TodayReadingCard: React.FC<TodayReadingCardProps> = ({
                                             style: 'destructive',
                                             onPress: () => {
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                                                // Clear khatma position when starting over
                                                 KhatmaReadingPosition.clear(juz.juzNumber);
                                                 onToggle();
                                             },

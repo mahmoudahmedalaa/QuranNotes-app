@@ -8,9 +8,11 @@ export interface JuzInfo {
     startSurah: string;
     startSurahArabic: string;
     startSurahNumber: number;
+    startVerseNumber: number;  // First verse of this Juz within startSurah
     endSurah: string;
     endSurahArabic: string;
     endSurahNumber: number;
+    endVerseNumber: number;    // Last verse of this Juz within endSurah
     startPage: number;
     endPage: number;
     totalPages: number;
@@ -21,36 +23,36 @@ export interface JuzInfo {
  * Based on the standard Mushaf (Medina print)
  */
 export const JUZ_DATA: JuzInfo[] = [
-    { juzNumber: 1, startSurah: 'Al-Fatiha', startSurahArabic: 'الفاتحة', startSurahNumber: 1, endSurah: 'Al-Baqarah', endSurahArabic: 'البقرة', endSurahNumber: 2, startPage: 1, endPage: 21, totalPages: 21 },
-    { juzNumber: 2, startSurah: 'Al-Baqarah', startSurahArabic: 'البقرة', startSurahNumber: 2, endSurah: 'Al-Baqarah', endSurahArabic: 'البقرة', endSurahNumber: 2, startPage: 22, endPage: 41, totalPages: 20 },
-    { juzNumber: 3, startSurah: 'Al-Baqarah', startSurahArabic: 'البقرة', startSurahNumber: 2, endSurah: 'Al-Imran', endSurahArabic: 'آل عمران', endSurahNumber: 3, startPage: 42, endPage: 61, totalPages: 20 },
-    { juzNumber: 4, startSurah: 'Al-Imran', startSurahArabic: 'آل عمران', startSurahNumber: 3, endSurah: 'An-Nisa', endSurahArabic: 'النساء', endSurahNumber: 4, startPage: 62, endPage: 81, totalPages: 20 },
-    { juzNumber: 5, startSurah: 'An-Nisa', startSurahArabic: 'النساء', startSurahNumber: 4, endSurah: 'An-Nisa', endSurahArabic: 'النساء', endSurahNumber: 4, startPage: 82, endPage: 101, totalPages: 20 },
-    { juzNumber: 6, startSurah: 'An-Nisa', startSurahArabic: 'النساء', startSurahNumber: 4, endSurah: "Al-Ma'idah", endSurahArabic: 'المائدة', endSurahNumber: 5, startPage: 102, endPage: 121, totalPages: 20 },
-    { juzNumber: 7, startSurah: "Al-Ma'idah", startSurahArabic: 'المائدة', startSurahNumber: 5, endSurah: "Al-An'am", endSurahArabic: 'الأنعام', endSurahNumber: 6, startPage: 122, endPage: 141, totalPages: 20 },
-    { juzNumber: 8, startSurah: "Al-An'am", startSurahArabic: 'الأنعام', startSurahNumber: 6, endSurah: "Al-A'raf", endSurahArabic: 'الأعراف', endSurahNumber: 7, startPage: 142, endPage: 161, totalPages: 20 },
-    { juzNumber: 9, startSurah: "Al-A'raf", startSurahArabic: 'الأعراف', startSurahNumber: 7, endSurah: 'Al-Anfal', endSurahArabic: 'الأنفال', endSurahNumber: 8, startPage: 162, endPage: 181, totalPages: 20 },
-    { juzNumber: 10, startSurah: 'Al-Anfal', startSurahArabic: 'الأنفال', startSurahNumber: 8, endSurah: 'At-Tawbah', endSurahArabic: 'التوبة', endSurahNumber: 9, startPage: 182, endPage: 201, totalPages: 20 },
-    { juzNumber: 11, startSurah: 'At-Tawbah', startSurahArabic: 'التوبة', startSurahNumber: 9, endSurah: 'Hud', endSurahArabic: 'هود', endSurahNumber: 11, startPage: 202, endPage: 221, totalPages: 20 },
-    { juzNumber: 12, startSurah: 'Hud', startSurahArabic: 'هود', startSurahNumber: 11, endSurah: 'Yusuf', endSurahArabic: 'يوسف', endSurahNumber: 12, startPage: 222, endPage: 241, totalPages: 20 },
-    { juzNumber: 13, startSurah: 'Yusuf', startSurahArabic: 'يوسف', startSurahNumber: 12, endSurah: 'Ibrahim', endSurahArabic: 'إبراهيم', endSurahNumber: 14, startPage: 242, endPage: 261, totalPages: 20 },
-    { juzNumber: 14, startSurah: 'Al-Hijr', startSurahArabic: 'الحجر', startSurahNumber: 15, endSurah: 'An-Nahl', endSurahArabic: 'النحل', endSurahNumber: 16, startPage: 262, endPage: 281, totalPages: 20 },
-    { juzNumber: 15, startSurah: 'Al-Isra', startSurahArabic: 'الإسراء', startSurahNumber: 17, endSurah: 'Al-Kahf', endSurahArabic: 'الكهف', endSurahNumber: 18, startPage: 282, endPage: 301, totalPages: 20 },
-    { juzNumber: 16, startSurah: 'Al-Kahf', startSurahArabic: 'الكهف', startSurahNumber: 18, endSurah: 'Ta-Ha', endSurahArabic: 'طه', endSurahNumber: 20, startPage: 302, endPage: 321, totalPages: 20 },
-    { juzNumber: 17, startSurah: 'Al-Anbiya', startSurahArabic: 'الأنبياء', startSurahNumber: 21, endSurah: 'Al-Hajj', endSurahArabic: 'الحج', endSurahNumber: 22, startPage: 322, endPage: 341, totalPages: 20 },
-    { juzNumber: 18, startSurah: "Al-Mu'minun", startSurahArabic: 'المؤمنون', startSurahNumber: 23, endSurah: 'Al-Furqan', endSurahArabic: 'الفرقان', endSurahNumber: 25, startPage: 342, endPage: 361, totalPages: 20 },
-    { juzNumber: 19, startSurah: 'Al-Furqan', startSurahArabic: 'الفرقان', startSurahNumber: 25, endSurah: 'An-Naml', endSurahArabic: 'النمل', endSurahNumber: 27, startPage: 362, endPage: 381, totalPages: 20 },
-    { juzNumber: 20, startSurah: 'An-Naml', startSurahArabic: 'النمل', startSurahNumber: 27, endSurah: 'Al-Ankabut', endSurahArabic: 'العنكبوت', endSurahNumber: 29, startPage: 382, endPage: 401, totalPages: 20 },
-    { juzNumber: 21, startSurah: 'Al-Ankabut', startSurahArabic: 'العنكبوت', startSurahNumber: 29, endSurah: 'Al-Ahzab', endSurahArabic: 'الأحزاب', endSurahNumber: 33, startPage: 402, endPage: 421, totalPages: 20 },
-    { juzNumber: 22, startSurah: 'Al-Ahzab', startSurahArabic: 'الأحزاب', startSurahNumber: 33, endSurah: 'Ya-Sin', endSurahArabic: 'يس', endSurahNumber: 36, startPage: 422, endPage: 441, totalPages: 20 },
-    { juzNumber: 23, startSurah: 'Ya-Sin', startSurahArabic: 'يس', startSurahNumber: 36, endSurah: 'Az-Zumar', endSurahArabic: 'الزمر', endSurahNumber: 39, startPage: 442, endPage: 461, totalPages: 20 },
-    { juzNumber: 24, startSurah: 'Az-Zumar', startSurahArabic: 'الزمر', startSurahNumber: 39, endSurah: 'Fussilat', endSurahArabic: 'فصلت', endSurahNumber: 41, startPage: 462, endPage: 481, totalPages: 20 },
-    { juzNumber: 25, startSurah: 'Fussilat', startSurahArabic: 'فصلت', startSurahNumber: 41, endSurah: 'Al-Jathiyah', endSurahArabic: 'الجاثية', endSurahNumber: 45, startPage: 482, endPage: 501, totalPages: 20 },
-    { juzNumber: 26, startSurah: 'Al-Ahqaf', startSurahArabic: 'الأحقاف', startSurahNumber: 46, endSurah: 'Adh-Dhariyat', endSurahArabic: 'الذاريات', endSurahNumber: 51, startPage: 502, endPage: 521, totalPages: 20 },
-    { juzNumber: 27, startSurah: 'Adh-Dhariyat', startSurahArabic: 'الذاريات', startSurahNumber: 51, endSurah: 'Al-Hadid', endSurahArabic: 'الحديد', endSurahNumber: 57, startPage: 522, endPage: 541, totalPages: 20 },
-    { juzNumber: 28, startSurah: 'Al-Mujadila', startSurahArabic: 'المجادلة', startSurahNumber: 58, endSurah: 'At-Tahrim', endSurahArabic: 'التحريم', endSurahNumber: 66, startPage: 542, endPage: 561, totalPages: 20 },
-    { juzNumber: 29, startSurah: 'Al-Mulk', startSurahArabic: 'الملك', startSurahNumber: 67, endSurah: 'Al-Mursalat', endSurahArabic: 'المرسلات', endSurahNumber: 77, startPage: 562, endPage: 581, totalPages: 20 },
-    { juzNumber: 30, startSurah: 'An-Naba', startSurahArabic: 'النبأ', startSurahNumber: 78, endSurah: 'An-Nas', endSurahArabic: 'الناس', endSurahNumber: 114, startPage: 582, endPage: 604, totalPages: 23 },
+    { juzNumber: 1, startSurah: 'Al-Fatiha', startSurahArabic: 'الفاتحة', startSurahNumber: 1, startVerseNumber: 1, endSurah: 'Al-Baqarah', endSurahArabic: 'البقرة', endSurahNumber: 2, endVerseNumber: 141, startPage: 1, endPage: 21, totalPages: 21 },
+    { juzNumber: 2, startSurah: 'Al-Baqarah', startSurahArabic: 'البقرة', startSurahNumber: 2, startVerseNumber: 142, endSurah: 'Al-Baqarah', endSurahArabic: 'البقرة', endSurahNumber: 2, endVerseNumber: 252, startPage: 22, endPage: 41, totalPages: 20 },
+    { juzNumber: 3, startSurah: 'Al-Baqarah', startSurahArabic: 'البقرة', startSurahNumber: 2, startVerseNumber: 253, endSurah: 'Al-Imran', endSurahArabic: 'آل عمران', endSurahNumber: 3, endVerseNumber: 92, startPage: 42, endPage: 61, totalPages: 20 },
+    { juzNumber: 4, startSurah: 'Al-Imran', startSurahArabic: 'آل عمران', startSurahNumber: 3, startVerseNumber: 93, endSurah: 'An-Nisa', endSurahArabic: 'النساء', endSurahNumber: 4, endVerseNumber: 23, startPage: 62, endPage: 81, totalPages: 20 },
+    { juzNumber: 5, startSurah: 'An-Nisa', startSurahArabic: 'النساء', startSurahNumber: 4, startVerseNumber: 24, endSurah: 'An-Nisa', endSurahArabic: 'النساء', endSurahNumber: 4, endVerseNumber: 147, startPage: 82, endPage: 101, totalPages: 20 },
+    { juzNumber: 6, startSurah: 'An-Nisa', startSurahArabic: 'النساء', startSurahNumber: 4, startVerseNumber: 148, endSurah: "Al-Ma'idah", endSurahArabic: 'المائدة', endSurahNumber: 5, endVerseNumber: 81, startPage: 102, endPage: 121, totalPages: 20 },
+    { juzNumber: 7, startSurah: "Al-Ma'idah", startSurahArabic: 'المائدة', startSurahNumber: 5, startVerseNumber: 82, endSurah: "Al-An'am", endSurahArabic: 'الأنعام', endSurahNumber: 6, endVerseNumber: 110, startPage: 122, endPage: 141, totalPages: 20 },
+    { juzNumber: 8, startSurah: "Al-An'am", startSurahArabic: 'الأنعام', startSurahNumber: 6, startVerseNumber: 111, endSurah: "Al-A'raf", endSurahArabic: 'الأعراف', endSurahNumber: 7, endVerseNumber: 87, startPage: 142, endPage: 161, totalPages: 20 },
+    { juzNumber: 9, startSurah: "Al-A'raf", startSurahArabic: 'الأعراف', startSurahNumber: 7, startVerseNumber: 88, endSurah: 'Al-Anfal', endSurahArabic: 'الأنفال', endSurahNumber: 8, endVerseNumber: 40, startPage: 162, endPage: 181, totalPages: 20 },
+    { juzNumber: 10, startSurah: 'Al-Anfal', startSurahArabic: 'الأنفال', startSurahNumber: 8, startVerseNumber: 41, endSurah: 'At-Tawbah', endSurahArabic: 'التوبة', endSurahNumber: 9, endVerseNumber: 92, startPage: 182, endPage: 201, totalPages: 20 },
+    { juzNumber: 11, startSurah: 'At-Tawbah', startSurahArabic: 'التوبة', startSurahNumber: 9, startVerseNumber: 93, endSurah: 'Hud', endSurahArabic: 'هود', endSurahNumber: 11, endVerseNumber: 5, startPage: 202, endPage: 221, totalPages: 20 },
+    { juzNumber: 12, startSurah: 'Hud', startSurahArabic: 'هود', startSurahNumber: 11, startVerseNumber: 6, endSurah: 'Yusuf', endSurahArabic: 'يوسف', endSurahNumber: 12, endVerseNumber: 52, startPage: 222, endPage: 241, totalPages: 20 },
+    { juzNumber: 13, startSurah: 'Yusuf', startSurahArabic: 'يوسف', startSurahNumber: 12, startVerseNumber: 53, endSurah: 'Ibrahim', endSurahArabic: 'إبراهيم', endSurahNumber: 14, endVerseNumber: 52, startPage: 242, endPage: 261, totalPages: 20 },
+    { juzNumber: 14, startSurah: 'Al-Hijr', startSurahArabic: 'الحجر', startSurahNumber: 15, startVerseNumber: 1, endSurah: 'An-Nahl', endSurahArabic: 'النحل', endSurahNumber: 16, endVerseNumber: 128, startPage: 262, endPage: 281, totalPages: 20 },
+    { juzNumber: 15, startSurah: 'Al-Isra', startSurahArabic: 'الإسراء', startSurahNumber: 17, startVerseNumber: 1, endSurah: 'Al-Kahf', endSurahArabic: 'الكهف', endSurahNumber: 18, endVerseNumber: 74, startPage: 282, endPage: 301, totalPages: 20 },
+    { juzNumber: 16, startSurah: 'Al-Kahf', startSurahArabic: 'الكهف', startSurahNumber: 18, startVerseNumber: 75, endSurah: 'Ta-Ha', endSurahArabic: 'طه', endSurahNumber: 20, endVerseNumber: 135, startPage: 302, endPage: 321, totalPages: 20 },
+    { juzNumber: 17, startSurah: 'Al-Anbiya', startSurahArabic: 'الأنبياء', startSurahNumber: 21, startVerseNumber: 1, endSurah: 'Al-Hajj', endSurahArabic: 'الحج', endSurahNumber: 22, endVerseNumber: 78, startPage: 322, endPage: 341, totalPages: 20 },
+    { juzNumber: 18, startSurah: "Al-Mu'minun", startSurahArabic: 'المؤمنون', startSurahNumber: 23, startVerseNumber: 1, endSurah: 'Al-Furqan', endSurahArabic: 'الفرقان', endSurahNumber: 25, endVerseNumber: 20, startPage: 342, endPage: 361, totalPages: 20 },
+    { juzNumber: 19, startSurah: 'Al-Furqan', startSurahArabic: 'الفرقان', startSurahNumber: 25, startVerseNumber: 21, endSurah: 'An-Naml', endSurahArabic: 'النمل', endSurahNumber: 27, endVerseNumber: 55, startPage: 362, endPage: 381, totalPages: 20 },
+    { juzNumber: 20, startSurah: 'An-Naml', startSurahArabic: 'النمل', startSurahNumber: 27, startVerseNumber: 56, endSurah: 'Al-Ankabut', endSurahArabic: 'العنكبوت', endSurahNumber: 29, endVerseNumber: 45, startPage: 382, endPage: 401, totalPages: 20 },
+    { juzNumber: 21, startSurah: 'Al-Ankabut', startSurahArabic: 'العنكبوت', startSurahNumber: 29, startVerseNumber: 46, endSurah: 'Al-Ahzab', endSurahArabic: 'الأحزاب', endSurahNumber: 33, endVerseNumber: 30, startPage: 402, endPage: 421, totalPages: 20 },
+    { juzNumber: 22, startSurah: 'Al-Ahzab', startSurahArabic: 'الأحزاب', startSurahNumber: 33, startVerseNumber: 31, endSurah: 'Ya-Sin', endSurahArabic: 'يس', endSurahNumber: 36, endVerseNumber: 27, startPage: 422, endPage: 441, totalPages: 20 },
+    { juzNumber: 23, startSurah: 'Ya-Sin', startSurahArabic: 'يس', startSurahNumber: 36, startVerseNumber: 28, endSurah: 'Az-Zumar', endSurahArabic: 'الزمر', endSurahNumber: 39, endVerseNumber: 31, startPage: 442, endPage: 461, totalPages: 20 },
+    { juzNumber: 24, startSurah: 'Az-Zumar', startSurahArabic: 'الزمر', startSurahNumber: 39, startVerseNumber: 32, endSurah: 'Fussilat', endSurahArabic: 'فصلت', endSurahNumber: 41, endVerseNumber: 46, startPage: 462, endPage: 481, totalPages: 20 },
+    { juzNumber: 25, startSurah: 'Fussilat', startSurahArabic: 'فصلت', startSurahNumber: 41, startVerseNumber: 47, endSurah: 'Al-Jathiyah', endSurahArabic: 'الجاثية', endSurahNumber: 45, endVerseNumber: 37, startPage: 482, endPage: 501, totalPages: 20 },
+    { juzNumber: 26, startSurah: 'Al-Ahqaf', startSurahArabic: 'الأحقاف', startSurahNumber: 46, startVerseNumber: 1, endSurah: 'Adh-Dhariyat', endSurahArabic: 'الذاريات', endSurahNumber: 51, endVerseNumber: 30, startPage: 502, endPage: 521, totalPages: 20 },
+    { juzNumber: 27, startSurah: 'Adh-Dhariyat', startSurahArabic: 'الذاريات', startSurahNumber: 51, startVerseNumber: 31, endSurah: 'Al-Hadid', endSurahArabic: 'الحديد', endSurahNumber: 57, endVerseNumber: 29, startPage: 522, endPage: 541, totalPages: 20 },
+    { juzNumber: 28, startSurah: 'Al-Mujadila', startSurahArabic: 'المجادلة', startSurahNumber: 58, startVerseNumber: 1, endSurah: 'At-Tahrim', endSurahArabic: 'التحريم', endSurahNumber: 66, endVerseNumber: 12, startPage: 542, endPage: 561, totalPages: 20 },
+    { juzNumber: 29, startSurah: 'Al-Mulk', startSurahArabic: 'الملك', startSurahNumber: 67, startVerseNumber: 1, endSurah: 'Al-Mursalat', endSurahArabic: 'المرسلات', endSurahNumber: 77, endVerseNumber: 50, startPage: 562, endPage: 581, totalPages: 20 },
+    { juzNumber: 30, startSurah: 'An-Naba', startSurahArabic: 'النبأ', startSurahNumber: 78, startVerseNumber: 1, endSurah: 'An-Nas', endSurahArabic: 'الناس', endSurahNumber: 114, endVerseNumber: 6, startPage: 582, endPage: 604, totalPages: 23 },
 ];
 
 /**
