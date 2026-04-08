@@ -10,7 +10,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'noor_ai_usage_v1';
-const FREE_DAILY_LIMIT = 5;
+const FREE_DAILY_LIMIT = 3;
 
 interface UsageData {
     /** ISO date string (YYYY-MM-DD) for the last usage day */
