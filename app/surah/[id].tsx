@@ -980,6 +980,34 @@ export default function SurahDetail() {
                 )}
             </AnimatePresence>
 
+            {/* ── Ask Noor FAB ── */}
+            <MotiView
+                from={{ opacity: 0, scale: 0.6 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', damping: 14, stiffness: 150, delay: 500 }}
+                style={styles.noorFabContainer}
+            >
+                <Pressable
+                    onPress={() => {
+                        if (!surah) return;
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        router.push({
+                            pathname: '/noor-ai' as any,
+                            params: {
+                                surahNumber: String(surah.number),
+                                surahName: surah.englishName,
+                            },
+                        });
+                    }}
+                    style={({ pressed }) => [
+                        styles.noorFab,
+                        { opacity: pressed ? 0.85 : 1 },
+                    ]}
+                >
+                    <Text style={styles.noorFabIcon}>✨</Text>
+                </Pressable>
+            </MotiView>
+
             {/* Premium Share Sheet */}
             {shareVerseData && (
                 <PremiumShareSheet
@@ -1264,6 +1292,28 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 14,
         fontWeight: '700',
+    },
+    noorFabContainer: {
+        position: 'absolute',
+        bottom: 100,
+        right: 20,
+        zIndex: 25,
+    },
+    noorFab: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: '#D4A853',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#D4A853',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    noorFabIcon: {
+        fontSize: 24,
     },
 });
 

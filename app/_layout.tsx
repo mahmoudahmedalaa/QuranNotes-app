@@ -132,6 +132,10 @@ export default function RootLayout() {
                         options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'fade' }}
                     />
                     <Stack.Screen
+                        name="noor-ai"
+                        options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'fade' }}
+                    />
+                    <Stack.Screen
                         name="reflections"
                         options={{ headerShown: false }}
                     />
