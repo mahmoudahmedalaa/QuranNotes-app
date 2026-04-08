@@ -9,6 +9,8 @@
     "web": "expo start --web",
     "test": "jest",
     "lint": "eslint .",
+    "clean": "rm -rf node_modules && npm cache clean --force && watchman watch-del-all && rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* && npm install",
+    "clean:deep": "npm run clean && rm -rf ios android ~/Library/Developer/Xcode/DerivedData",
     "postinstall": "patch-package"
   },
   "dependencies": {

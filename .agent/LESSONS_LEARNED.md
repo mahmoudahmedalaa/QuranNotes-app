@@ -103,3 +103,15 @@ When the Khatma feature had too many bugs, doing a full rewrite with proper stat
 - Never auto-scroll on manual verse play — only on sequential advance (N → N+1)
 - Mood illustrations must be 56px+ for grid, 60px+ for today summary
 - Use `playVerse()` (not `playFromVerse()`) for single-verse playback in sheets/modals
+
+### 2026-04-07 — React Native Metro/Xcode Caching Issues
+
+**What went wrong**:
+- Simulator issues: White screens, "missing main.jsbundle" crashes, `ios/ios` ghost folders, and completely ignored code changes due to deeply entrenched caching in Metro, Watchman, and Xcode.
+
+**What went right**:
+- Recognizing that deep caching causes native/metro build state drift and standard cleans don't fix it.
+- Resolving the issue reliably using aggressive cleaning instead of debugging phantom code errors.
+
+**Rules added**:
+- Run `npm run clean:deep` and `npx expo prebuild --clean` unconditionally when encountering unexplainable native build errors, stale bundles, or simulator ghosting.

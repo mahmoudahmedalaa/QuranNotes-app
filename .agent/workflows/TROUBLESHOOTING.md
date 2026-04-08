@@ -50,6 +50,15 @@ export const db = firebase.firestore();
 
 ## 📱 Build & Xcode
 
+### Missing Simulator Bundle / Ghost iOS Folder
+**Symptom**: App launches with a white screen, crashes with "missing main.jsbundle", or `ios/ios` nested folders appear. Code changes are completely ignored by the simulator.
+**Cause**: Watchman, Metro Bundler, or Xcode Derived Data is retaining deeply stale, cached bundles, and preventing Metro from seeing or serving your fresh code.
+**Fix**: 
+1. Run `npm run clean:deep` to aggressively wipe out all `node_modules`, `ios`, `android`, Metro/Watchman caches, and Xcode `DerivedData`.
+2. Wait for it to finish deleting and installing packages.
+3. Run `npx expo prebuild --clean` to freshly regenerate the pristine native projects.
+4. Run `./build-ios.sh` or build from Xcode.
+
 ### Xcode Error 65
 **Cause**: Config mismatch, stale build artifacts, or corrupted Pods.
 **Fix**:

@@ -85,7 +85,7 @@ echo "   ✅ Incremented"
 echo "🧹 Step 2/7: Cleaning previous builds..."
 rm -rf build/
 mkdir -p build/
-rm -rf ~/Library/Developer/Xcode/DerivedData/${SCHEME}-*
+rm -rf ~/Library/Developer/Xcode/DerivedData/${SCHEME}-* || true
 echo "   ✅ Clean"
 
 # ---- Step 3: Patch scripts for spaces in path ----

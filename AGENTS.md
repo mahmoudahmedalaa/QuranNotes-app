@@ -251,6 +251,7 @@ Never auto-scroll on manual play (user taps a different verse)
 | **Upload** | Open Transporter → Drag IPA |
 | **Check version** | `cat app.json \| grep -A2 version` |
 | **Increment build** | Edit `app.json` → `buildNumber`, then prebuild |
+| **Deep Clean** | `npm run clean:deep` |
 
 ---
 
