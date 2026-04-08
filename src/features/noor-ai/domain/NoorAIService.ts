@@ -114,7 +114,7 @@ function getModel(): ReturnType<typeof getGenerativeModel> | null {
     try {
         const app = getApp();
         const ai = getAI(app, { backend: new GoogleAIBackend() });
-        _model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+        _model = getGenerativeModel(ai, { model: 'gemini-1.5-flash' });
         if (__DEV__) console.log('[NoorAI] ✅ AI model ready');
         return _model;
     } catch (e: any) {

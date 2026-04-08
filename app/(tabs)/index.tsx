@@ -16,7 +16,6 @@ import { DashboardHeader } from '../../src/core/components/DashboardHeader';
 import { KhatmaTile } from '../../src/features/khatma/presentation/KhatmaTile';
 import { AdhkarTile } from '../../src/features/adhkar/presentation/AdhkarTile';
 
-import NoorAICard from '../../src/features/noor-ai/presentation/NoorAICard';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const GRID_GAP = 10;
@@ -49,8 +48,6 @@ export default function DashboardScreen() {
                     {/* 1. Mood Check-In */}
                     <MoodCheckInCard />
 
-                    {/* 2. Noor AI — Flagship AI companion */}
-                    <NoorAICard />
 
                     {/* 3. Daily Verse */}
                     <DailyVerseCard />

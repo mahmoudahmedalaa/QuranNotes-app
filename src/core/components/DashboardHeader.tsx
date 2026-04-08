@@ -42,8 +42,22 @@ export function DashboardHeader() {
                 <QiblaHeaderIndicator />
                 <Pressable
                     onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        router.push('/noor-ai' as any);
+                    }}
+                    hitSlop={12}
+                    style={({ pressed }) => [
+                        styles.settingsButton,
+                        { backgroundColor: 'rgba(212, 168, 83, 0.15)' }, // Warm gold alpha
+                        pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+                    ]}
+                >
+                    <Text style={{ fontSize: 18 }}>✨</Text>
+                </Pressable>
+                <Pressable
+                    onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push('/(tabs)/settings');
+                        router.push('/(tabs)/settings' as any);
                     }}
                     hitSlop={12}
                     style={({ pressed }) => [
