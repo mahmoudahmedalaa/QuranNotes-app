@@ -53,3 +53,6 @@ functions/lib/
 functions/node_modules/
 .firebase/
 
+
+# Build env locals
+.xcode.env.local
