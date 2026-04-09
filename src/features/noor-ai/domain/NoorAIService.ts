@@ -1,20 +1,25 @@
 /**
  * NoorAIService — Unified AI brain for the Noor AI companion.
  *
- * Wraps Firebase AI Logic (Gemini 2.5 Flash) with:
- *  1. Noor's warm, scholarly persona
- *  2. Multi-turn conversation context
- *  3. Verse-grounded and open Q&A modes
- *  4. Smart tafsir context injection
+ * Dual-backend architecture:
+ *  1. PRIMARY: Firebase AI Logic (GoogleAIBackend) — secure, App Check ready
+ *  2. FALLBACK: @google/generative-ai direct SDK — works with just API key
  *
- * Falls back gracefully if Firebase AI Logic is not configured.
+ * If Firebase AI Logic fails (403/404 due to missing console setup),
+ * the service automatically falls back to the direct SDK for the rest
+ * of the session. Zero user-facing errors from config issues.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import '../../../core/polyfills/abortSignalAny';
-import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai';
-import { getApp } from 'firebase/app';
+
+// ── Firebase AI Logic (primary) ──
+import { getAI, getGenerativeModel, VertexAIBackend } from 'firebase/ai';
 import '../../../core/firebase/config';
+import { getApp } from 'firebase/app';
+
+// ── Direct Gemini SDK (fallback) ──
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import { NoorMessage, VerseContext } from './types';
 
@@ -23,8 +28,11 @@ const CACHE_PREFIX = 'noor_ai_v1_';
 const MAX_CONTEXT_MESSAGES = 10;
 const MAX_TAFSIR_CHARS = 3000;
 
-// ── Gemini model reference ──
-let _model: ReturnType<typeof getGenerativeModel> | null = null;
+// ── Backend state ──
+type Backend = 'firebase' | 'direct' | null;
+let _activeBackend: Backend = null;
+let _firebaseModel: ReturnType<typeof getGenerativeModel> | null = null;
+let _directModel: any = null;
 let _initAttempted = false;
 
 // ── Noor Persona ──
@@ -52,11 +60,11 @@ CRITICAL RULES:
 7. End scholarly answers with the source (e.g., "— Based on Ibn Kathir's commentary").`;
 
 /**
- * Safely extract text from a generateContent result.
+ * Safely extract text from a generateContent result (works for both SDKs).
  */
 function extractText(result: any): string {
     try {
-        const response = result?.response;
+        const response = result?.response ?? result;
         if (!response) return '';
 
         if (typeof response.text === 'function') return response.text() || '';
@@ -75,72 +83,186 @@ function extractText(result: any): string {
 }
 
 /**
- * Generate content with automatic retry + exponential backoff for 429.
+ * Check if an error is a config/permission issue (403/404) that warrants
+ * falling back to the direct SDK.
  */
-async function generateWithRetry(
-    model: ReturnType<typeof getGenerativeModel>,
-    prompt: string,
-    maxRetries = 3,
-): Promise<string> {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            const result = await model.generateContent(prompt);
-            return extractText(result);
-        } catch (e: any) {
-            const msg = e?.message || '';
-            const is429 = msg.includes('429') || msg.includes('quota') || msg.includes('rate');
-
-            if (is429 && attempt < maxRetries) {
-                const delay = Math.pow(2, attempt + 1) * 1000;
-                if (__DEV__) console.warn(`[NoorAI] Rate limited, retrying in ${delay / 1000}s`);
-                await new Promise(r => setTimeout(r, delay));
-                continue;
-            }
-            throw e;
-        }
-    }
-    return '';
+function isConfigError(e: any): boolean {
+    const msg = (e?.message || e?.toString?.() || '').toLowerCase();
+    return (
+        msg.includes('403') ||
+        msg.includes('404') ||
+        msg.includes('permission') ||
+        msg.includes('blocked') ||
+        msg.includes('not found') ||
+        msg.includes('genai config') ||
+        msg.includes('app check') ||
+        msg.includes('app-check')
+    );
 }
 
 /**
- * Lazily initialize the Firebase AI Logic model.
+ * Check if an error is a rate-limit (429) that should trigger retry.
  */
-function getModel(): ReturnType<typeof getGenerativeModel> | null {
-    if (_model) return _model;
-    if (_initAttempted) return null;
+function isRateLimitError(e: any): boolean {
+    const msg = (e?.message || '').toLowerCase();
+    return (
+        msg.includes('429') ||
+        msg.includes('quota') ||
+        msg.includes('rate limit') ||
+        msg.includes('resource_exhausted')
+    );
+}
 
-    _initAttempted = true;
+// ═══════════════════════════════════════════════════════════════
+// BACKEND INITIALIZATION
+// ═══════════════════════════════════════════════════════════════
 
+/**
+ * Try to initialize Firebase AI Logic (VertexAIBackend).
+ */
+function initFirebaseBackend(): boolean {
     try {
         const app = getApp();
-        const ai = getAI(app, { backend: new GoogleAIBackend() });
-        _model = getGenerativeModel(ai, { model: 'gemini-1.5-flash' });
-        if (__DEV__) console.log('[NoorAI] ✅ AI model ready');
-        return _model;
+        const ai = getAI(app, { backend: new VertexAIBackend() });
+        _firebaseModel = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+        if (__DEV__) console.log('[NoorAI] ✅ Firebase AI Logic backend initialized');
+        return true;
     } catch (e: any) {
-        if (__DEV__) console.error('[NoorAI] ❌ AI init failed:', e?.message || e);
-        return null;
+        if (__DEV__) console.warn('[NoorAI] ⚠️ Firebase AI Logic init failed:', e?.message);
+        return false;
     }
 }
 
-// ── Cache helpers ──
-function buildCacheKey(question: string, verseContext?: VerseContext): string {
-    const base = verseContext
-        ? `${CACHE_PREFIX}${verseContext.surahNumber}_${verseContext.verseNumber}`
-        : `${CACHE_PREFIX}general`;
-    const qHash = question.slice(0, 50).replace(/[^a-zA-Z0-9]/g, '_');
-    return `${base}_${qHash}`;
+/**
+ * Initialize the direct @google/generative-ai SDK as fallback.
+ */
+function initDirectBackend(): boolean {
+    try {
+        const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
+        if (!apiKey) {
+            if (__DEV__) console.error('[NoorAI] ❌ No API key available for direct backend');
+            return false;
+        }
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        _directModel = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash',
+            systemInstruction: NOOR_SYSTEM_PROMPT,
+        });
+        if (__DEV__) console.log('[NoorAI] ✅ Direct Gemini SDK backend initialized');
+        return true;
+    } catch (e: any) {
+        if (__DEV__) console.error('[NoorAI] ❌ Direct backend init failed:', e?.message);
+        return false;
+    }
 }
 
-async function checkCache(key: string): Promise<string | null> {
-    try { return await AsyncStorage.getItem(key); }
-    catch { return null; }
+/**
+ * Lazily initialize backends. Firebase first, direct as fallback.
+ */
+function ensureInitialized(): Backend {
+    if (_activeBackend) return _activeBackend;
+    if (_initAttempted) return _activeBackend;
+
+    _initAttempted = true;
+
+    // Try Firebase first
+    if (initFirebaseBackend()) {
+        _activeBackend = 'firebase';
+        // Also pre-init direct backend so fallback is instant
+        initDirectBackend();
+        return 'firebase';
+    }
+
+    // Firebase init failed — go straight to direct
+    if (initDirectBackend()) {
+        _activeBackend = 'direct';
+        return 'direct';
+    }
+
+    return null;
 }
 
-async function setCache(key: string, value: string): Promise<void> {
-    try { await AsyncStorage.setItem(key, value); }
-    catch { /* ignore */ }
+// ═══════════════════════════════════════════════════════════════
+// CONTENT GENERATION
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Generate content using Firebase AI Logic backend.
+ */
+async function generateViaFirebase(prompt: string): Promise<string> {
+    if (!_firebaseModel) throw new Error('Firebase model not initialized');
+    const result = await _firebaseModel.generateContent(prompt);
+    return extractText(result);
 }
+
+/**
+ * Generate content using direct @google/generative-ai SDK.
+ * The system instruction is already set on the model, so we just send the user prompt.
+ */
+async function generateViaDirect(prompt: string): Promise<string> {
+    if (!_directModel) throw new Error('Direct model not initialized');
+    const result = await _directModel.generateContent(prompt);
+    return extractText(result);
+}
+
+/**
+ * Generate content with automatic backend fallback + retry for 429.
+ */
+async function generateWithFallback(prompt: string, maxRetries = 2): Promise<string> {
+    const backend = ensureInitialized();
+    if (!backend) throw new Error('No AI backend available');
+
+    // Attempt with active backend
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const text =
+                _activeBackend === 'firebase'
+                    ? await generateViaFirebase(prompt)
+                    : await generateViaDirect(prompt);
+
+            if (text) return text;
+            throw new Error('Empty response from model');
+        } catch (e: any) {
+            if (__DEV__) {
+                console.error(`[NoorAI] ❌ [${_activeBackend}] Attempt ${attempt + 1}/${maxRetries + 1}:`, e?.message);
+            }
+
+            // If this is a config error on Firebase, switch to direct backend
+            if (_activeBackend === 'firebase' && isConfigError(e)) {
+                if (__DEV__) console.log('[NoorAI] 🔄 Firebase 403/404 — switching to direct SDK');
+                _activeBackend = 'direct';
+
+                // Ensure direct backend is ready
+                if (!_directModel) initDirectBackend();
+
+                if (_directModel) {
+                    // Retry immediately with direct backend (reset attempts)
+                    attempt = -1; // will become 0 on next iteration
+                    continue;
+                }
+                throw e; // direct also not available
+            }
+
+            // Rate limit — retry with backoff
+            if (isRateLimitError(e) && attempt < maxRetries) {
+                const delay = Math.pow(2, attempt + 1) * 1000;
+                if (__DEV__) console.warn(`[NoorAI] ⏳ Rate limited, retrying in ${delay / 1000}s`);
+                await new Promise((r) => setTimeout(r, delay));
+                continue;
+            }
+
+            // Final attempt or non-retryable error
+            if (attempt >= maxRetries) throw e;
+        }
+    }
+
+    return '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROMPT BUILDING
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Strip non-Latin characters from tafsir text.
@@ -156,6 +278,8 @@ function stripToEnglish(text: string): string {
 
 /**
  * Build the full prompt with conversation history and context.
+ * When using the direct SDK (which has systemInstruction built-in),
+ * we skip the system prompt from the user content.
  */
 function buildPrompt(
     question: string,
@@ -163,7 +287,8 @@ function buildPrompt(
     tafsirContext?: string,
     verseContext?: VerseContext,
 ): string {
-    let prompt = NOOR_SYSTEM_PROMPT;
+    // For direct backend, system prompt is already in the model config
+    let prompt = _activeBackend === 'direct' ? '' : NOOR_SYSTEM_PROMPT;
 
     // Add verse context if available
     if (verseContext) {
@@ -178,9 +303,8 @@ Verse: ${verseContext.surahName} (${verseContext.surahNumber}:${verseContext.ver
     // Add tafsir context if available
     if (tafsirContext) {
         const cleaned = stripToEnglish(tafsirContext);
-        const truncated = cleaned.length > MAX_TAFSIR_CHARS
-            ? cleaned.slice(0, MAX_TAFSIR_CHARS) + '...'
-            : cleaned;
+        const truncated =
+            cleaned.length > MAX_TAFSIR_CHARS ? cleaned.slice(0, MAX_TAFSIR_CHARS) + '...' : cleaned;
         prompt += `\n\nSCHOLAR'S COMMENTARY:\n${truncated}`;
     }
 
@@ -197,7 +321,32 @@ Verse: ${verseContext.surahName} (${verseContext.surahNumber}:${verseContext.ver
     // Add the current question
     prompt += `\n\nUser: ${question}\n\nNoor:`;
 
-    return prompt;
+    return prompt.trim();
+}
+
+// ── Cache helpers ──
+function buildCacheKey(question: string, verseContext?: VerseContext): string {
+    const base = verseContext
+        ? `${CACHE_PREFIX}${verseContext.surahNumber}_${verseContext.verseNumber}`
+        : `${CACHE_PREFIX}general`;
+    const qHash = question.slice(0, 50).replace(/[^a-zA-Z0-9]/g, '_');
+    return `${base}_${qHash}`;
+}
+
+async function checkCache(key: string): Promise<string | null> {
+    try {
+        return await AsyncStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+async function setCache(key: string, value: string): Promise<void> {
+    try {
+        await AsyncStorage.setItem(key, value);
+    } catch {
+        /* ignore */
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -212,11 +361,6 @@ export interface NoorResponse {
 
 /**
  * Ask Noor a question — the main entry point.
- *
- * @param question - The user's question
- * @param conversationHistory - Previous messages in this conversation
- * @param tafsirContext - Optional tafsir text for grounding
- * @param verseContext - Optional verse reference
  */
 export async function askNoor(
     question: string,
@@ -233,8 +377,8 @@ export async function askNoor(
         }
     }
 
-    const model = getModel();
-    if (!model) {
+    const backend = ensureInitialized();
+    if (!backend) {
         return {
             answer: 'I need an internet connection to help you. Please check your connection and try again.',
             cached: false,
@@ -244,10 +388,13 @@ export async function askNoor(
     const prompt = buildPrompt(question, conversationHistory, tafsirContext, verseContext);
 
     try {
-        const text = await generateWithRetry(model, prompt);
+        const text = await generateWithFallback(prompt);
 
         if (!text) {
-            return { answer: 'I wasn\'t able to generate a response. Please try again.', cached: false };
+            return {
+                answer: "I wasn't able to generate a response. Please try again.",
+                cached: false,
+            };
         }
 
         // Cache first-message responses
@@ -256,26 +403,32 @@ export async function askNoor(
             await setCache(cacheKey, text);
         }
 
-        return { answer: text, cached: false };
-    } catch (e: any) {
-        if (__DEV__) console.warn('[NoorAI] Error:', e?.message || e);
-
-        if (e?.message?.includes('429') || e?.message?.includes('quota') || e?.message?.includes('rate')) {
-            return {
-                answer: 'I\'m receiving a lot of questions right now. Please try again in a moment! 🤲',
-                cached: false,
-            };
+        if (__DEV__) {
+            console.log(`[NoorAI] ✅ Response generated via ${_activeBackend} backend`);
         }
 
-        if (e?.message?.includes('403') || e?.message?.includes('billing') || e?.message?.includes('permission')) {
+        return { answer: text, cached: false };
+    } catch (e: any) {
+        const errMsg = (e?.message || '').toLowerCase();
+
+        if (__DEV__) {
+            console.error('[NoorAI] ❌ FINAL ERROR:');
+            console.error('[NoorAI]   message:', e?.message);
+            console.error('[NoorAI]   backend:', _activeBackend);
+            try {
+                console.error('[NoorAI]   JSON:', JSON.stringify(e, null, 2));
+            } catch { }
+        }
+
+        if (isRateLimitError(e)) {
             return {
-                answer: 'AI features are temporarily unavailable. Please try again later.',
+                answer: "I'm receiving a lot of questions right now. Please try again in a moment! 🤲",
                 cached: false,
             };
         }
 
         return {
-            answer: 'Something went wrong. Please check your connection and try again.',
+            answer: `Something went wrong. Please check your connection and try again.${__DEV__ ? '\n\nDEBUG: ' + (e?.message || 'unknown error') : ''}`,
             cached: false,
         };
     }
@@ -303,8 +456,15 @@ export function getSuggestedQuestions(verseContext?: VerseContext): string[] {
 }
 
 /**
- * Check if Noor AI is available (Firebase AI configured).
+ * Check if Noor AI is available (any backend initialized).
  */
 export function isNoorAvailable(): boolean {
-    return getModel() !== null;
+    return ensureInitialized() !== null;
+}
+
+/**
+ * Get the currently active backend name (for diagnostics).
+ */
+export function getActiveBackend(): string {
+    return _activeBackend || 'none';
 }

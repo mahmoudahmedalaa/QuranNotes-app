@@ -18,7 +18,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mahmoudahmedalaa.qurannotes",
       "appleTeamId": "2S42RLH67Y",
-      "buildNumber": "44",
+      "buildNumber": "45",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow QuranNotes to use the microphone for voice follow-along recitation",

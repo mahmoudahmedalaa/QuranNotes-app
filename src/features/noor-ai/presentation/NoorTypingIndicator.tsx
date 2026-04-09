@@ -1,8 +1,8 @@
 /**
- * NoorTypingIndicator — Animated "Noor is thinking…" indicator.
+ * NoorTypingIndicator — Premium "Noor is thinking…" indicator.
  *
- * Three bouncing dots with the Noor avatar, displayed while waiting
- * for a Gemini response.
+ * Animated dots with Noor avatar and glow ring, displayed while
+ * waiting for a Gemini response.
  */
 
 import React from 'react';
@@ -10,7 +10,7 @@ import { View, StyleSheet } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { MotiView } from 'moti';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Spacing, BorderRadius } from '../../../core/theme/DesignSystem';
+import { Spacing } from '../../../core/theme/DesignSystem';
 
 export default function NoorTypingIndicator() {
     const theme = useTheme();
@@ -22,22 +22,47 @@ export default function NoorTypingIndicator() {
             transition={{ type: 'spring', damping: 18 }}
             style={styles.row}
         >
-            {/* Avatar */}
-            <View
-                style={[
-                    styles.avatar,
-                    {
-                        backgroundColor: theme.dark
-                            ? 'rgba(167, 139, 250, 0.15)'
-                            : 'rgba(98, 70, 234, 0.1)',
-                    },
-                ]}
-            >
-                <MaterialCommunityIcons
-                    name="star-four-points"
-                    size={18}
-                    color={theme.colors.primary}
+            {/* Avatar with glow */}
+            <View style={styles.avatarContainer}>
+                <View
+                    style={[
+                        styles.avatarGlow,
+                        {
+                            backgroundColor: theme.dark
+                                ? 'rgba(167, 139, 250, 0.08)'
+                                : 'rgba(98, 70, 234, 0.06)',
+                        },
+                    ]}
                 />
+                <View
+                    style={[
+                        styles.avatar,
+                        {
+                            backgroundColor: theme.dark
+                                ? 'rgba(167, 139, 250, 0.18)'
+                                : 'rgba(98, 70, 234, 0.12)',
+                            borderColor: theme.dark
+                                ? 'rgba(167, 139, 250, 0.25)'
+                                : 'rgba(98, 70, 234, 0.18)',
+                        },
+                    ]}
+                >
+                    <MotiView
+                        from={{ rotate: '0deg' }}
+                        animate={{ rotate: '180deg' }}
+                        transition={{
+                            type: 'timing',
+                            duration: 2000,
+                            loop: true,
+                        }}
+                    >
+                        <MaterialCommunityIcons
+                            name="creation"
+                            size={16}
+                            color={theme.colors.primary}
+                        />
+                    </MotiView>
+                </View>
             </View>
 
             {/* Dots container */}
@@ -45,39 +70,49 @@ export default function NoorTypingIndicator() {
                 style={[
                     styles.bubble,
                     {
-                        backgroundColor: theme.dark
-                            ? 'rgba(255,255,255,0.08)'
-                            : 'rgba(98, 70, 234, 0.06)',
+                        backgroundColor: theme.dark ? '#18181B' : '#FFFFFF',
+                        borderColor: theme.dark ? '#27272A' : '#E2E8F0',
+                        shadowColor: theme.dark ? '#000' : '#6246EA',
+                        shadowOpacity: theme.dark ? 0.2 : 0.05,
                     },
                 ]}
             >
-                <View style={styles.dotsRow}>
-                    {[0, 1, 2].map((i) => (
-                        <MotiView
-                            key={i}
-                            from={{ opacity: 0.3, scale: 0.7 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{
-                                type: 'timing',
-                                duration: 500,
-                                delay: i * 180,
-                                loop: true,
-                            }}
-                            style={[
-                                styles.dot,
-                                { backgroundColor: theme.colors.primary },
-                            ]}
-                        />
-                    ))}
-                </View>
-                <Text
+                {/* Accent stripe */}
+                <View
                     style={[
-                        styles.label,
-                        { color: theme.colors.onSurfaceVariant },
+                        styles.accentStripe,
+                        { backgroundColor: theme.colors.primary },
                     ]}
-                >
-                    Noor is thinking…
-                </Text>
+                />
+                <View style={styles.content}>
+                    <View style={styles.dotsRow}>
+                        {[0, 1, 2].map((i) => (
+                            <MotiView
+                                key={i}
+                                from={{ opacity: 0.3, scale: 0.7 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{
+                                    type: 'timing',
+                                    duration: 500,
+                                    delay: i * 180,
+                                    loop: true,
+                                }}
+                                style={[
+                                    styles.dot,
+                                    { backgroundColor: theme.colors.primary },
+                                ]}
+                            />
+                        ))}
+                    </View>
+                    <Text
+                        style={[
+                            styles.label,
+                            { color: theme.colors.onSurfaceVariant },
+                        ]}
+                    >
+                        Noor is thinking…
+                    </Text>
+                </View>
             </View>
         </MotiView>
     );
@@ -90,20 +125,46 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.md,
         marginBottom: Spacing.sm,
     },
+    // ── Avatar ──
+    avatarContainer: {
+        marginRight: 8,
+        marginBottom: 4,
+    },
+    avatarGlow: {
+        position: 'absolute',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        top: -4,
+        left: -4,
+    },
     avatar: {
         width: 32,
         height: 32,
         borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: Spacing.sm,
-        marginBottom: 4,
+        borderWidth: 1.5,
     },
+    // ── Bubble ──
     bubble: {
-        paddingHorizontal: 16,
+        flexDirection: 'row',
+        borderRadius: 20,
+        borderBottomLeftRadius: 6,
+        borderWidth: StyleSheet.hairlineWidth,
+        overflow: 'hidden',
+        shadowOffset: { width: 0, height: 1 },
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    accentStripe: {
+        width: 3,
+        borderTopLeftRadius: 20,
+        borderBottomLeftRadius: 6,
+    },
+    content: {
+        paddingHorizontal: 14,
         paddingVertical: 12,
-        borderRadius: BorderRadius.lg,
-        borderBottomLeftRadius: 4,
     },
     dotsRow: {
         flexDirection: 'row',

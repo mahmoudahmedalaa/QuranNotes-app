@@ -50,16 +50,7 @@ export function createNoorMessage(content: string, cached = false, verseContext?
 export function createGreetingMessage(): NoorMessage {
     const hour = new Date().getHours();
 
-    let greeting: string;
-    if (hour >= 5 && hour < 12) {
-        greeting = 'Assalamu Alaikum! ☀️ Good morning! I\'m Noor, your Quran companion. Ask me anything about the Quran — I can explain verses, share scholarly insights, or help you reflect on its teachings.';
-    } else if (hour >= 12 && hour < 17) {
-        greeting = 'Assalamu Alaikum! 🌤️ Good afternoon! I\'m Noor, your Quran companion. Whether you want to understand a verse, explore a theme, or reflect on the Quran\'s guidance — I\'m here to help.';
-    } else if (hour >= 17 && hour < 21) {
-        greeting = 'Assalamu Alaikum! 🌅 Good evening! I\'m Noor, your Quran companion. Let me help you explore the beautiful teachings of the Quran tonight.';
-    } else {
-        greeting = 'Assalamu Alaikum! 🌙 I\'m Noor, your Quran companion. Even at this hour, the Quran\'s guidance is a light. Ask me anything about its verses and teachings.';
-    }
+    const greeting = "Assalamu Alaikum! ✨ I'm Noor. How can I help you explore the Quran today?";
 
     return {
         id: generateId(),
@@ -73,7 +64,7 @@ export function createGreetingMessage(): NoorMessage {
  * Create a contextual greeting when launched from a verse.
  */
 export function createVerseGreetingMessage(verseContext: VerseContext): NoorMessage {
-    const content = `Assalamu Alaikum! ✨ I see you're reading **${verseContext.surahName}**, verse ${verseContext.verseNumber}. I'd love to help you understand this verse better. Ask me anything, or I can start with a summary of what the scholars say about it.`;
+    const content = `Assalamu Alaikum! ✨ You're looking at **${verseContext.surahName}**, verse ${verseContext.verseNumber}. What would you like to know about it?`;
 
     return {
         id: generateId(),

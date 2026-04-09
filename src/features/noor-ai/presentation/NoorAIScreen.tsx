@@ -1,14 +1,13 @@
 /**
- * NoorAIScreen — Flagship chat interface for the Noor AI companion.
+ * NoorAIScreen — Premium chat interface for the Noor AI companion.
  *
- * Full-screen chat with:
- *  - Premium gradient header with "Noor AI ✨" branding
- *  - Chat bubbles with Noor avatar
- *  - Suggested question chips
- *  - Typing indicator while Gemini responds
+ * Flagship chat with:
+ *  - Clean, minimal header with Noor avatar
+ *  - Premium gradient chat bubbles
+ *  - Card-style suggestion chips with icons
+ *  - Frosted glass input bar
+ *  - Smart error handling (403/429/network)
  *  - Free/Pro usage gating
- *
- * Accepts optional route params for verse-context deep linking.
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -26,9 +25,9 @@ import { Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MotiView } from 'moti';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { NoorMessage, VerseContext, NoorAIParams } from '../domain/types';
 import { askNoor, getSuggestedQuestions } from '../domain/NoorAIService';
@@ -147,7 +146,6 @@ export default function NoorAIScreen() {
                 const allowed = await canSendMessage();
                 if (!allowed) {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    // Show upgrade nudge
                     const nudge = createNoorMessage(
                         `You've used all ${DAILY_LIMIT} free messages today. Upgrade to **Pro** for unlimited Noor AI conversations! 🌟`,
                     );
@@ -169,11 +167,9 @@ export default function NoorAIScreen() {
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
             try {
-                // Pass all previous messages as conversation history
                 const history = [...messages, userMsg].filter((m) => m.role !== 'noor' || messages.indexOf(m) > 0);
                 const response = await askNoor(text, history, undefined, verseContext);
 
-                // Create Noor response
                 const noorMsg = createNoorMessage(response.answer, response.cached, verseContext);
                 const updatedMessages = [...messages, userMsg, noorMsg];
                 setMessages(updatedMessages);
@@ -188,10 +184,25 @@ export default function NoorAIScreen() {
                     const remaining = await getRemainingMessages();
                     setRemainingMsgs(remaining);
                 }
-            } catch (e) {
-                const errorMsg = createNoorMessage(
-                    'I had trouble connecting. Please check your internet and try again. 🤲',
-                );
+            } catch (e: any) {
+                const msg = (e?.message || '').toLowerCase();
+                let errorText: string;
+
+                if (msg.includes('403') || msg.includes('permission') || msg.includes('forbidden')) {
+                    errorText =
+                        'The AI service isn\'t configured yet. Please enable **Gemini Developer API** in your Firebase Console under Build → AI Logic. 🔧';
+                } else if (msg.includes('429') || msg.includes('quota') || msg.includes('rate limit')) {
+                    errorText =
+                        'I\'m getting a lot of questions right now! Please wait a moment and try again. 🤲';
+                } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) {
+                    errorText =
+                        'It looks like you\'re offline. Please check your internet connection and try again. 📡';
+                } else {
+                    errorText =
+                        'I had trouble connecting. Please try again in a moment. 🤲';
+                }
+
+                const errorMsg = createNoorMessage(errorText);
                 setMessages((prev) => [...prev, errorMsg]);
             } finally {
                 setIsLoading(false);
@@ -201,62 +212,131 @@ export default function NoorAIScreen() {
         [inputText, isLoading, isPro, messages, verseContext, conversationId],
     );
 
-    // ── Render ──
-    const headerGradient: readonly [string, string, ...string[]] = theme.dark
-        ? ['#1E1A2E', '#09090B']
-        : ['#6246EA', '#4B2FD4'];
+    // ── Derived: can send ──
+    const canSend = inputText.trim().length > 0 && !isLoading;
 
+    // ── Render ──
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {/* ── Premium Header ── */}
-            <LinearGradient colors={headerGradient} style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.container, { backgroundColor: theme.dark ? '#09090B' : '#FAFAFF' }]}>
+            {/* ── Clean Header ── */}
+            <View
+                style={[
+                    styles.header,
+                    {
+                        paddingTop: insets.top + 4,
+                        backgroundColor: theme.dark ? '#09090B' : '#FAFAFF',
+                        borderBottomColor: theme.dark ? '#27272A' : '#E2E8F0',
+                    },
+                ]}
+            >
                 <View style={styles.headerRow}>
                     <Pressable
                         onPress={() => router.back()}
                         hitSlop={12}
-                        style={styles.backButton}
+                        style={({ pressed }) => [
+                            styles.backButton,
+                            {
+                                backgroundColor: theme.dark
+                                    ? 'rgba(167, 139, 250, 0.12)'
+                                    : 'rgba(98, 70, 234, 0.08)',
+                            },
+                            pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+                        ]}
                     >
-                        <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
+                        <MaterialCommunityIcons
+                            name="chevron-left"
+                            size={24}
+                            color={theme.colors.primary}
+                        />
                     </Pressable>
 
-                    <View style={styles.headerCenter}>
-                        <View style={styles.headerTitleRow}>
+                    {/* Noor identity */}
+                    <View style={styles.headerIdentity}>
+                        <View
+                            style={[
+                                styles.headerAvatar,
+                                {
+                                    backgroundColor: theme.dark
+                                        ? 'rgba(167, 139, 250, 0.15)'
+                                        : 'rgba(98, 70, 234, 0.1)',
+                                },
+                            ]}
+                        >
                             <MaterialCommunityIcons
-                                name="star-four-points"
-                                size={18}
-                                color="rgba(255,255,255,0.9)"
+                                name="creation"
+                                size={16}
+                                color={theme.colors.primary}
                             />
-                            <Text style={styles.headerTitle}>Noor AI</Text>
-                            <Text style={styles.sparkle}>✨</Text>
                         </View>
-                        <Text style={styles.headerSubtitle}>
-                            {verseContext
-                                ? `${verseContext.surahName} · Verse ${verseContext.verseNumber}`
-                                : 'Your Quran Companion'}
-                        </Text>
+                        <View>
+                            <Text
+                                style={[
+                                    styles.headerTitle,
+                                    { color: theme.colors.onSurface },
+                                ]}
+                            >
+                                Noor AI
+                            </Text>
+                            <Text
+                                style={[
+                                    styles.headerSubtitle,
+                                    { color: theme.colors.onSurfaceVariant },
+                                ]}
+                            >
+                                {verseContext
+                                    ? `${verseContext.surahName} · Verse ${verseContext.verseNumber}`
+                                    : 'Your Quran Companion'}
+                            </Text>
+                        </View>
                     </View>
 
                     <View style={styles.headerActions}>
-                        {/* History button */}
+                        {/* History */}
                         <Pressable
                             onPress={() => setShowHistory(true)}
                             hitSlop={8}
-                            style={styles.historyButton}
+                            style={({ pressed }) => [
+                                styles.headerIconBtn,
+                                {
+                                    backgroundColor: theme.dark
+                                        ? 'rgba(167, 139, 250, 0.12)'
+                                        : 'rgba(98, 70, 234, 0.08)',
+                                },
+                                pressed && { opacity: 0.7 },
+                            ]}
                         >
-                            <MaterialCommunityIcons name="history" size={20} color="rgba(255,255,255,0.85)" />
+                            <MaterialCommunityIcons
+                                name="history"
+                                size={18}
+                                color={theme.colors.primary}
+                            />
                         </Pressable>
 
                         {/* Usage badge for free users */}
                         {!isPro && (
-                            <View style={styles.usageBadge}>
-                                <Text style={styles.usageText}>
+                            <View
+                                style={[
+                                    styles.usageBadge,
+                                    {
+                                        backgroundColor: theme.dark
+                                            ? 'rgba(167, 139, 250, 0.12)'
+                                            : 'rgba(98, 70, 234, 0.08)',
+                                    },
+                                ]}
+                            >
+                                <Text
+                                    style={[
+                                        styles.usageText,
+                                        { color: theme.colors.primary },
+                                    ]}
+                                >
                                     {remainingMsgs}/{DAILY_LIMIT}
                                 </Text>
                             </View>
                         )}
                     </View>
                 </View>
-            </LinearGradient>
+            </View>
 
             {/* ── Chat Messages ── */}
             <KeyboardAvoidingView
@@ -294,66 +374,92 @@ export default function NoorAIScreen() {
                     }
                 />
 
-                {/* ── Input Bar ── */}
+                {/* ── Premium Input Bar ── */}
                 <View
                     style={[
                         styles.inputBar,
                         {
-                            backgroundColor: theme.dark
-                                ? 'rgba(255,255,255,0.06)'
-                                : '#FFFFFF',
-                            borderTopColor: theme.colors.outline,
+                            backgroundColor: theme.dark ? '#0F0F12' : '#FFFFFF',
+                            borderTopColor: theme.dark ? '#27272A' : '#E2E8F0',
                             paddingBottom: Math.max(insets.bottom, 12),
                         },
                     ]}
                 >
-                    <TextInput
+                    <View
                         style={[
-                            styles.textInput,
+                            styles.inputRow,
                             {
                                 backgroundColor: theme.dark
-                                    ? 'rgba(255,255,255,0.08)'
-                                    : '#F8F5FF',
-                                color: theme.colors.onSurface,
-                            },
-                        ]}
-                        placeholder="Ask Noor anything…"
-                        placeholderTextColor={theme.colors.onSurfaceVariant}
-                        value={inputText}
-                        onChangeText={setInputText}
-                        multiline
-                        maxLength={500}
-                        returnKeyType="send"
-                        onSubmitEditing={() => handleSend()}
-                        blurOnSubmit
-                        editable={!isLoading}
-                    />
-                    <Pressable
-                        onPress={() => handleSend()}
-                        disabled={!inputText.trim() || isLoading}
-                        style={({ pressed }) => [
-                            styles.sendButton,
-                            {
-                                backgroundColor:
-                                    inputText.trim() && !isLoading
-                                        ? theme.colors.primary
-                                        : theme.dark
-                                            ? 'rgba(255,255,255,0.08)'
-                                            : 'rgba(98, 70, 234, 0.12)',
-                                opacity: pressed ? 0.8 : 1,
+                                    ? 'rgba(255,255,255,0.06)'
+                                    : '#F5F3FF',
+                                borderColor: theme.dark
+                                    ? 'rgba(167, 139, 250, 0.15)'
+                                    : 'rgba(98, 70, 234, 0.12)',
                             },
                         ]}
                     >
-                        <MaterialCommunityIcons
-                            name="send"
-                            size={20}
-                            color={
-                                inputText.trim() && !isLoading
-                                    ? '#FFFFFF'
-                                    : theme.colors.onSurfaceVariant
-                            }
+                        <TextInput
+                            style={[
+                                styles.textInput,
+                                { color: theme.colors.onSurface },
+                            ]}
+                            placeholder="Ask Noor anything…"
+                            placeholderTextColor={theme.colors.onSurfaceVariant}
+                            value={inputText}
+                            onChangeText={setInputText}
+                            multiline
+                            maxLength={500}
+                            returnKeyType="send"
+                            onSubmitEditing={() => handleSend()}
+                            blurOnSubmit
+                            editable={!isLoading}
                         />
-                    </Pressable>
+                        <Pressable
+                            onPress={() => handleSend()}
+                            disabled={!canSend}
+                            style={({ pressed }) => [
+                                styles.sendButton,
+                                canSend && { backgroundColor: theme.colors.primary },
+                                pressed && canSend && { opacity: 0.85, transform: [{ scale: 0.92 }] },
+                            ]}
+                        >
+                            {canSend ? (
+                                <LinearGradient
+                                    colors={
+                                        theme.dark
+                                            ? ['#A78BFA', '#7C3AED'] as const
+                                            : ['#6246EA', '#7C3AED'] as const
+                                    }
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.sendGradient}
+                                >
+                                    <MaterialCommunityIcons
+                                        name="send"
+                                        size={18}
+                                        color="#FFFFFF"
+                                    />
+                                </LinearGradient>
+                            ) : (
+                                <View
+                                    style={[
+                                        styles.sendGradient,
+                                        {
+                                            backgroundColor: theme.dark
+                                                ? 'rgba(255,255,255,0.06)'
+                                                : 'rgba(98, 70, 234, 0.08)',
+                                        },
+                                    ]}
+                                >
+                                    <MaterialCommunityIcons
+                                        name="send"
+                                        size={18}
+                                        color={theme.colors.onSurfaceVariant}
+                                    />
+                                </View>
+                            )}
+                        </Pressable>
+                    </View>
                 </View>
             </KeyboardAvoidingView>
 
@@ -371,10 +477,11 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    // ── Header ──
+    // ── Clean Header ──
     header: {
         paddingHorizontal: Spacing.md,
-        paddingBottom: 14,
+        paddingBottom: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
     },
     headerRow: {
         flexDirection: 'row',
@@ -384,56 +491,52 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: 'rgba(255,255,255,0.12)',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 10,
     },
-    headerCenter: {
+    headerIdentity: {
         flex: 1,
-    },
-    headerTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 10,
+    },
+    headerAvatar: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
-        color: '#FFFFFF',
-        fontSize: 20,
+        fontSize: 17,
         fontWeight: '700',
-        letterSpacing: 0.3,
-    },
-    sparkle: {
-        fontSize: 16,
+        letterSpacing: 0.2,
     },
     headerSubtitle: {
-        color: 'rgba(255,255,255,0.7)',
         fontSize: 12,
-        marginTop: 2,
+        marginTop: 1,
     },
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
     },
-    historyButton: {
+    headerIconBtn: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: 'rgba(255,255,255,0.12)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     usageBadge: {
-        backgroundColor: 'rgba(255,255,255,0.18)',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 12,
     },
     usageText: {
-        color: '#FFFFFF',
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: '700',
     },
     // ── Chat ──
     chatArea: {
@@ -445,29 +548,37 @@ const styles = StyleSheet.create({
     },
     // ── Input ──
     inputBar: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
         paddingHorizontal: Spacing.md,
         paddingTop: 10,
         borderTopWidth: StyleSheet.hairlineWidth,
-        gap: 8,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        borderRadius: 24,
+        borderWidth: 1,
+        paddingLeft: 16,
+        paddingRight: 4,
+        paddingVertical: 4,
+        gap: 4,
     },
     textInput: {
         flex: 1,
-        minHeight: 40,
+        minHeight: 36,
         maxHeight: 100,
-        borderRadius: BorderRadius.xl,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
         fontSize: 15,
         lineHeight: 20,
+        paddingVertical: 8,
     },
     sendButton: {
-        width: 40,
-        height: 40,
         borderRadius: 20,
+        overflow: 'hidden',
+    },
+    sendGradient: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 0,
     },
 });

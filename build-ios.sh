@@ -143,6 +143,10 @@ fi
 sed -i '' "s/DEVELOPMENT_TEAM = [A-Z0-9]*/DEVELOPMENT_TEAM = $TEAM_ID/g" "$PBXPROJ" 2>/dev/null || true
 echo "   Signing team: $TEAM_ID"
 
+# Fix "Multiple commands produce Info.plist" error
+sed -i '' "s/GENERATE_INFOPLIST_FILE = YES/GENERATE_INFOPLIST_FILE = NO/g" "$PBXPROJ" 2>/dev/null || true
+echo "   Disabled auto-generated Info.plist"
+
 echo "   ✅ Configs checked"
 
 # ---- Step 5: Force-write ExportOptions.plist ----

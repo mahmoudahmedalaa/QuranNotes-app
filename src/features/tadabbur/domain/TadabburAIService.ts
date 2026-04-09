@@ -18,7 +18,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // Polyfill AbortSignal.any() — Hermes doesn't support it but firebase/ai needs it
 import '../../../core/polyfills/abortSignalAny';
-import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai';
+import { getAI, getGenerativeModel, VertexAIBackend } from 'firebase/ai';
 import { getApp } from 'firebase/app';
 // Ensure the compat firebase.initializeApp() has run
 import '../../../core/firebase/config';
@@ -199,8 +199,8 @@ function getModel(): ReturnType<typeof getGenerativeModel> | null {
     try {
         const app = getApp();
         if (__DEV__) console.log('[TadabburAI] Firebase app:', app.name, 'project:', app.options.projectId);
-        const ai = getAI(app, { backend: new GoogleAIBackend() });
-        _model = getGenerativeModel(ai, { model: 'gemini-2.0-flash-lite' });
+        const ai = getAI(app, { backend: new VertexAIBackend() });
+        _model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
         if (__DEV__) console.log('[TadabburAI] ✅ AI model ready');
         return _model;
     } catch (e: any) {

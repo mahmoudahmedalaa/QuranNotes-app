@@ -3,6 +3,8 @@ import { View, StyleSheet, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import { MotiView } from 'moti';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 
 import { Spacing, Gradients } from '../../src/core/theme/DesignSystem';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +15,7 @@ import { DailyVerseCard } from '../../src/features/verse-of-the-day/presentation
 import { DailyHadithCard } from '../../src/features/hadith/presentation/DailyHadithCard';
 import { AdhkarScreen } from '../../src/core/presentation/screens/AdhkarScreen';
 import { DashboardHeader } from '../../src/core/components/DashboardHeader';
+import { NoorAIButton } from '../../src/core/components/NoorAIButton';
 import { KhatmaTile } from '../../src/features/khatma/presentation/KhatmaTile';
 import { AdhkarTile } from '../../src/features/adhkar/presentation/AdhkarTile';
 
@@ -23,6 +26,7 @@ const GRID_PAD = 16;
 
 export default function DashboardScreen() {
     const theme = useTheme();
+    const router = useRouter();
     const [showAdhkar, setShowAdhkar] = useState(false);
     const [adhkarPeriod, setAdhkarPeriod] = useState<'morning' | 'evening' | 'night'>('morning');
 
@@ -39,17 +43,31 @@ export default function DashboardScreen() {
                 <DashboardHeader />
                 <StreakCounter />
 
-                {/* Dashboard cards */}
+                {/* Dashboard cards — scrollable content */}
                 <ScrollView
                     style={styles.scrollView}
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Ask Noor AI — inline card */}
+                    <MotiView
+                        from={{ opacity: 0, translateY: 10 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        transition={{ type: 'spring', damping: 18, delay: 80 }}
+                        style={styles.cardWrapper}
+                    >
+                        <NoorAIButton
+                            onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                router.push({ pathname: '/noor-ai' } as any);
+                            }}
+                        />
+                    </MotiView>
+
                     {/* 1. Mood Check-In */}
                     <MoodCheckInCard />
 
-
-                    {/* 3. Daily Verse */}
+                    {/* 2. Daily Verse */}
                     <DailyVerseCard />
 
                     {/* 3. Daily Hadith */}
@@ -92,7 +110,9 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1 },
     scrollView: { flex: 1 },
     scrollContent: { paddingTop: Spacing.sm, gap: Spacing.md },
-
+    cardWrapper: {
+        paddingHorizontal: Spacing.lg,
+    },
     gridRow: {
         flexDirection: 'row',
         paddingHorizontal: GRID_PAD,

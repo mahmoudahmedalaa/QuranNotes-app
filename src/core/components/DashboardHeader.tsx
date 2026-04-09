@@ -11,7 +11,8 @@ import { NoorMascot } from './mascot/NoorMascot';
 import { QiblaHeaderIndicator } from '../../features/prayer/presentation/QiblaHeaderIndicator';
 
 /**
- * Dashboard header with greeting text, mascot, Qibla indicator, and settings button.
+ * Dashboard header with greeting, mascot, Qibla indicator, and settings.
+ * The Ask Noor AI button lives below this header as a full-width featured row.
  */
 export function DashboardHeader() {
     const router = useRouter();
@@ -40,20 +41,8 @@ export function DashboardHeader() {
             </View>
             <View style={styles.headerActions}>
                 <QiblaHeaderIndicator />
-                <Pressable
-                    onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        router.push('/noor-ai' as any);
-                    }}
-                    hitSlop={12}
-                    style={({ pressed }) => [
-                        styles.settingsButton,
-                        { backgroundColor: 'rgba(212, 168, 83, 0.15)' }, // Warm gold alpha
-                        pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
-                    ]}
-                >
-                    <Text style={{ fontSize: 18 }}>✨</Text>
-                </Pressable>
+
+                {/* ── Settings ── */}
                 <Pressable
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
