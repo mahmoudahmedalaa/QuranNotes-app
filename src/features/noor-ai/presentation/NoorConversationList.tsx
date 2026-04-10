@@ -1,26 +1,40 @@
 /**
- * NoorConversationList — Bottom sheet showing past Noor AI conversations.
+ * NoorConversationList — Slide-up modal showing past Noor AI conversations.
  *
- * Displays a list of previous chats with title, date, and message count.
- * Supports tap-to-resume and swipe-to-delete.
+ * Uses React Native's built-in Modal (renders at native window level, above
+ * everything — including fullScreenModal screens). No dependency on gorhom
+ * bottom-sheet, which has known stacking issues inside native modals.
+ *
+ * Features:
+ *  - Animated slide-up panel with spring physics
+ *  - Tap backdrop to dismiss
+ *  - Tap conversation to resume
+ *  - Long-press to delete
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
     View,
     StyleSheet,
-    FlatList,
     Pressable,
     Alert,
+    Modal,
+    Animated,
+    FlatList,
+    Dimensions,
 } from 'react-native';
-import { Text, useTheme, Portal, Modal } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { loadConversations, deleteConversation } from '../domain/NoorConversationHistory';
 import { VerseContext } from '../domain/types';
 import { Spacing, BorderRadius } from '../../../core/theme/DesignSystem';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const PANEL_HEIGHT = SCREEN_HEIGHT * 0.65;
 
 interface ConversationSummary {
     id: string;
@@ -57,19 +71,66 @@ function formatDate(timestamp: number): string {
 
 export default function NoorConversationList({ visible, onDismiss, onSelectConversation }: Props) {
     const theme = useTheme();
+    const insets = useSafeAreaInsets();
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [modalVisible, setModalVisible] = useState(false);
+
+    const slideAnim = useRef(new Animated.Value(PANEL_HEIGHT)).current;
+    const backdropAnim = useRef(new Animated.Value(0)).current;
 
     const refresh = useCallback(async () => {
         setLoading(true);
-        const convos = await loadConversations();
-        setConversations(convos);
+        try {
+            const convos = await loadConversations();
+            setConversations(convos);
+        } catch {
+            setConversations([]);
+        }
         setLoading(false);
     }, []);
 
+    // Open
     useEffect(() => {
-        if (visible) refresh();
-    }, [visible, refresh]);
+        if (visible) {
+            refresh();
+            setModalVisible(true);
+            // Animate in
+            Animated.parallel([
+                Animated.spring(slideAnim, {
+                    toValue: 0,
+                    useNativeDriver: true,
+                    tension: 65,
+                    friction: 11,
+                }),
+                Animated.timing(backdropAnim, {
+                    toValue: 1,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        } else {
+            // Animate out
+            Animated.parallel([
+                Animated.timing(slideAnim, {
+                    toValue: PANEL_HEIGHT,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(backdropAnim, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => {
+                setModalVisible(false);
+            });
+        }
+    }, [visible, refresh, slideAnim, backdropAnim]);
+
+    const handleDismiss = useCallback(() => {
+        onDismiss();
+    }, [onDismiss]);
 
     const handleDelete = useCallback(
         (id: string, title: string) => {
@@ -100,6 +161,7 @@ export default function NoorConversationList({ visible, onDismiss, onSelectConve
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         onSelectConversation(item.id);
+                        handleDismiss();
                     }}
                     onLongPress={() => handleDelete(item.id, item.title)}
                     style={({ pressed }) => [
@@ -144,21 +206,49 @@ export default function NoorConversationList({ visible, onDismiss, onSelectConve
                 </Pressable>
             </MotiView>
         ),
-        [theme, onSelectConversation, handleDelete],
+        [theme, onSelectConversation, handleDelete, handleDismiss],
     );
 
     return (
-        <Portal>
-            <Modal
-                visible={visible}
-                onDismiss={onDismiss}
-                contentContainerStyle={[
-                    styles.container,
+        <Modal
+            visible={modalVisible}
+            transparent
+            animationType="none"
+            statusBarTranslucent
+            onRequestClose={handleDismiss}
+        >
+            {/* Backdrop */}
+            <Animated.View
+                style={[
+                    styles.backdrop,
+                    { opacity: backdropAnim },
+                ]}
+            >
+                <Pressable style={StyleSheet.absoluteFill} onPress={handleDismiss} />
+            </Animated.View>
+
+            {/* Slide-up Panel */}
+            <Animated.View
+                style={[
+                    styles.panel,
                     {
-                        backgroundColor: theme.colors.surface,
+                        height: PANEL_HEIGHT,
+                        backgroundColor: theme.dark ? '#1A1A2E' : '#FFFFFF',
+                        paddingBottom: Math.max(insets.bottom, 16),
+                        transform: [{ translateY: slideAnim }],
                     },
                 ]}
             >
+                {/* Drag handle indicator */}
+                <View style={styles.handleRow}>
+                    <View
+                        style={[
+                            styles.handle,
+                            { backgroundColor: theme.dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)' },
+                        ]}
+                    />
+                </View>
+
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
@@ -171,7 +261,7 @@ export default function NoorConversationList({ visible, onDismiss, onSelectConve
                             Past Conversations
                         </Text>
                     </View>
-                    <Pressable onPress={onDismiss} hitSlop={12}>
+                    <Pressable onPress={handleDismiss} hitSlop={12}>
                         <MaterialCommunityIcons
                             name="close"
                             size={22}
@@ -197,22 +287,47 @@ export default function NoorConversationList({ visible, onDismiss, onSelectConve
                         data={conversations}
                         keyExtractor={(c) => c.id}
                         renderItem={renderItem}
+                        style={{ flex: 1 }}
                         contentContainerStyle={styles.list}
-                        showsVerticalScrollIndicator={false}
+                        showsVerticalScrollIndicator={true}
+                        indicatorStyle={theme.dark ? 'white' : 'black'}
                     />
                 )}
-            </Modal>
-        </Portal>
+            </Animated.View>
+        </Modal>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        marginHorizontal: 16,
-        marginVertical: 60,
-        borderRadius: BorderRadius.xl,
-        maxHeight: '70%',
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    panel: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
         overflow: 'hidden',
+        // iOS shadow
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        // Android elevation
+        elevation: 24,
+    },
+    handleRow: {
+        alignItems: 'center',
+        paddingTop: 10,
+        paddingBottom: 4,
+    },
+    handle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
     },
     header: {
         flexDirection: 'row',

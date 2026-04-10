@@ -9,8 +9,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NoorMessage, NoorConversation, VerseContext } from './types';
 
 // ── Constants ──
-const STORAGE_KEY = 'noor_conversations_v1';
-const MAX_CONVERSATIONS = 20;
+const STORAGE_KEY = '@noor_conversations_v1';
+const MAX_CONVERSATIONS = 50;
+
+// ── Simple Async Mutex ──
+let _lockPromise: Promise<void> = Promise.resolve();
+async function runWithLock<T>(fn: () => Promise<T>): Promise<T> {
+    const prevLock = _lockPromise;
+    let releaseLock: () => void;
+    _lockPromise = new Promise((resolve) => {
+        releaseLock = resolve;
+    });
+
+    try {
+        await prevLock;
+        return await fn();
+    } finally {
+        releaseLock!();
+    }
+}
 
 /**
  * Generate a unique conversation ID.
@@ -38,6 +55,27 @@ function generateTitle(messages: NoorMessage[], verseContext?: VerseContext): st
 
 // ── Internal helpers ──
 
+/**
+ * Strip common markdown formatting for plain-text preview.
+ * Removes: **bold**, *italic*, __underline__, ~~strikethrough~~,
+ * `code`, [links](url), headers (#), bullet points, emoji shortcodes.
+ */
+function stripMarkdown(text: string): string {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '$1')   // **bold**
+        .replace(/__(.+?)__/g, '$1')         // __underline__
+        .replace(/\*(.+?)\*/g, '$1')         // *italic*
+        .replace(/_(.+?)_/g, '$1')           // _italic_
+        .replace(/~~(.+?)~~/g, '$1')         // ~~strikethrough~~
+        .replace(/`(.+?)`/g, '$1')           // `code`
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [text](url)
+        .replace(/^#{1,6}\s+/gm, '')         // # headers
+        .replace(/^[-*+]\s+/gm, '')          // bullet points
+        .replace(/\n{2,}/g, ' ')             // collapse newlines
+        .replace(/\n/g, ' ')                 // single newlines → space
+        .trim();
+}
+
 async function loadAllRaw(): Promise<NoorConversation[]> {
     try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -64,43 +102,45 @@ export async function saveConversation(
     messages: NoorMessage[],
     verseContext?: VerseContext,
 ): Promise<string> {
-    const conversations = await loadAllRaw();
-    const now = Date.now();
-    const title = generateTitle(messages, verseContext);
+    return runWithLock(async () => {
+        const conversations = await loadAllRaw();
+        const now = Date.now();
+        const title = generateTitle(messages, verseContext);
 
-    if (conversationId) {
-        // Update existing
-        const idx = conversations.findIndex(c => c.id === conversationId);
-        if (idx >= 0) {
-            conversations[idx].messages = messages;
-            conversations[idx].updatedAt = now;
-            conversations[idx].title = title;
-            await saveAllRaw(conversations);
-            return conversationId;
+        if (conversationId) {
+            // Update existing
+            const idx = conversations.findIndex(c => c.id === conversationId);
+            if (idx >= 0) {
+                conversations[idx].messages = messages;
+                conversations[idx].updatedAt = now;
+                // keep title the same to avoid weird UX jumps, or update it if needed.
+                // Currently, we'll just keep the original title.
+                await saveAllRaw(conversations);
+                return conversationId;
+            }
         }
-    }
 
-    // Create new conversation
-    const id = conversationId || generateId();
-    const newConv: NoorConversation = {
-        id,
-        title,
-        messages,
-        createdAt: now,
-        updatedAt: now,
-        verseContext,
-    };
+        // Create new
+        const id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+        const newConv: NoorConversation = {
+            id,
+            title,
+            messages,
+            createdAt: now,
+            updatedAt: now,
+            verseContext,
+        };
 
-    // Add at the beginning (newest first)
-    conversations.unshift(newConv);
+        conversations.unshift(newConv);
 
-    // Enforce max limit — remove oldest
-    if (conversations.length > MAX_CONVERSATIONS) {
-        conversations.splice(MAX_CONVERSATIONS);
-    }
+        // Evict older ones if we exceed max
+        if (conversations.length > MAX_CONVERSATIONS) {
+            conversations.splice(MAX_CONVERSATIONS);
+        }
 
-    await saveAllRaw(conversations);
-    return id;
+        await saveAllRaw(conversations);
+        return id;
+    });
 }
 
 /**
@@ -118,13 +158,15 @@ export async function loadConversations(): Promise<Array<{
     const conversations = await loadAllRaw();
     return conversations.map(c => {
         const lastMsg = c.messages[c.messages.length - 1];
+        const rawContent = lastMsg?.content ?? '';
+        const plainText = stripMarkdown(rawContent);
         return {
             id: c.id,
             title: c.title,
             messageCount: c.messages.length,
-            lastMessage: lastMsg
-                ? lastMsg.content.slice(0, 80) + (lastMsg.content.length > 80 ? '...' : '')
-                : '',
+            lastMessage: plainText.length > 80
+                ? plainText.slice(0, 77) + '...'
+                : plainText,
             updatedAt: c.updatedAt,
             verseContext: c.verseContext,
         };
@@ -140,12 +182,14 @@ export async function loadConversation(id: string): Promise<NoorConversation | n
 }
 
 /**
- * Delete a single conversation.
+ * Delete a conversation.
  */
 export async function deleteConversation(id: string): Promise<void> {
-    const conversations = await loadAllRaw();
-    const filtered = conversations.filter(c => c.id !== id);
-    await saveAllRaw(filtered);
+    return runWithLock(async () => {
+        const conversations = await loadAllRaw();
+        const filtered = conversations.filter(c => c.id !== id);
+        await saveAllRaw(filtered);
+    });
 }
 
 /**

@@ -35,4 +35,4 @@ export type {
 
 // Presentation
 export { default as NoorAIScreen } from './presentation/NoorAIScreen';
-export { default as NoorAICard } from './presentation/NoorAICard';
+export { default as NoorConversationList } from './presentation/NoorConversationList';

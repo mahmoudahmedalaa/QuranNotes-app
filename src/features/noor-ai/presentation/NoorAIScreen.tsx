@@ -29,6 +29,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 
+
 import { NoorMessage, VerseContext, NoorAIParams } from '../domain/types';
 import { askNoor, getSuggestedQuestions } from '../domain/NoorAIService';
 import {
@@ -60,7 +61,7 @@ export default function NoorAIScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { isPro } = usePro();
-    const params = useLocalSearchParams<NoorAIParams>();
+    const params = useLocalSearchParams() as unknown as NoorAIParams;
 
     // ── State ──
     const [messages, setMessages] = useState<NoorMessage[]>([]);
@@ -293,7 +294,10 @@ export default function NoorAIScreen() {
                     <View style={styles.headerActions}>
                         {/* History */}
                         <Pressable
-                            onPress={() => setShowHistory(true)}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                setShowHistory(true);
+                            }}
                             hitSlop={8}
                             style={({ pressed }) => [
                                 styles.headerIconBtn,
