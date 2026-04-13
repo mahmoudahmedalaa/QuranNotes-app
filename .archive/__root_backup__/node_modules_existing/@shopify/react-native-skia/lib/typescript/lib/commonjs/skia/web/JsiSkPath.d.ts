@@ -1,0 +1,64 @@
+export const __esModule: boolean;
+export function toMatrix3x3(m: any): any;
+export class JsiSkPath extends _Host.HostObject {
+    /** Extract an immutable CK Path from a JsiSkPath value (for CK interop). */
+    static pathFromValue(value: any): any;
+    constructor(CanvasKit: any, ref: any);
+    /** Returns an immutable CK Path snapshot for read-only operations. */
+    asPath(): any;
+    addPath(src: any, matrix: any, extend?: boolean): this;
+    addArc(oval: any, startAngleInDegrees: any, sweepAngleInDegrees: any): this;
+    addOval(oval: any, isCCW: any, startIndex: any): this;
+    addPoly(points: any, close: any): this;
+    addRect(rect: any, isCCW: any): this;
+    addRRect(rrect: any, isCCW: any): this;
+    addCircle(x: any, y: any, r: any): this;
+    moveTo(x: any, y: any): this;
+    rMoveTo(x: any, y: any): this;
+    lineTo(x: any, y: any): this;
+    rLineTo(x: any, y: any): this;
+    quadTo(x1: any, y1: any, x2: any, y2: any): this;
+    rQuadTo(x1: any, y1: any, x2: any, y2: any): this;
+    conicTo(x1: any, y1: any, x2: any, y2: any, w: any): this;
+    rConicTo(x1: any, y1: any, x2: any, y2: any, w: any): this;
+    cubicTo(cpx1: any, cpy1: any, cpx2: any, cpy2: any, x: any, y: any): this;
+    rCubicTo(cpx1: any, cpy1: any, cpx2: any, cpy2: any, x: any, y: any): this;
+    close(): this;
+    reset(): this;
+    rewind(): this;
+    arcToOval(oval: any, startAngleInDegrees: any, sweepAngleInDegrees: any, forceMoveTo: any): this;
+    arcToRotated(rx: any, ry: any, xAxisRotateInDegrees: any, useSmallArc: any, isCCW: any, x: any, y: any): this;
+    rArcTo(rx: any, ry: any, xAxisRotateInDegrees: any, useSmallArc: any, isCCW: any, dx: any, dy: any): this;
+    arcToTangent(x1: any, y1: any, x2: any, y2: any, radius: any): this;
+    setFillType(fill: any): this;
+    setIsVolatile(_volatile: any): this;
+    offset(dx: any, dy: any): this;
+    transform(m: any): this;
+    makeAsWinding(): this | null;
+    simplify(): boolean;
+    op(path: any, op: any): boolean;
+    dash(on: any, off: any, phase: any): boolean;
+    stroke(opts: any): this | null;
+    trim(start: any, stop: any, isComplement: any): this | null;
+    countPoints(): any;
+    computeTightBounds(): _JsiSkRect.JsiSkRect;
+    contains(x: any, y: any): any;
+    copy(): JsiSkPath;
+    equals(other: any): any;
+    getBounds(): _JsiSkRect.JsiSkRect;
+    getFillType(): any;
+    getPoint(index: any): _JsiSkPoint.JsiSkPoint;
+    isEmpty(): any;
+    isVolatile(): boolean;
+    getLastPt(): {
+        x: any;
+        y: any;
+    };
+    toSVGString(): any;
+    isInterpolatable(path2: any): any;
+    interpolate(end: any, weight: any, output: any): any;
+    toCmds(): any;
+}
+import _Host = require("./Host");
+import _JsiSkRect = require("./JsiSkRect");
+import _JsiSkPoint = require("./JsiSkPoint");

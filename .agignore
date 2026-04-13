@@ -1,0 +1,48 @@
+# --- Dependencies ---
+node_modules/
+.pnp/
+.pnp.js
+
+# --- Build Outputs ---
+dist/
+build/
+lib/
+out/
+.next/
+.expo/
+android/
+ios/ios/
+ios/android/
+
+# --- Native/CocoaPods ---
+ios/Pods/
+android/app/build/
+*.xcworkspace/
+
+# --- Lock Files ---
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+Podfile.lock
+
+# --- Environment & Secrets ---
+.env
+.env.*
+*.pem
+*.p12
+*.jks
+service-account.json
+
+# --- Cache & Generated ---
+.cache/
+.turbo/
+coverage/
+*.log
+*.tsbuildinfo
+__pycache__/
+*.pyc
+.DS_Store
+
+# --- Large Data Assets (handled by source, not scanner) ---
+ios/src/features/tafsir/data/tafsir/
+ios/src/features/quran/data/

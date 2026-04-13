@@ -1,0 +1,1 @@
+{"version":3,"names":["Dropcursor","BridgeExtension","DropCursorBridge","tiptapExtension"],"sourceRoot":"../../../src","sources":["bridges/dropcursor.ts"],"mappings":"AAAA,SAASA,UAAU,QAAQ,oBAAoB;AAC/C,OAAOC,eAAe,MAAM,QAAQ;AAEpC,OAAO,MAAMC,gBAAgB,GAAG,IAAID,eAAe,CAAC;EAClDE,eAAe,EAAEH;AACnB,CAAC,CAAC"}

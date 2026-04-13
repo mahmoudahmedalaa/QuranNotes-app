@@ -1,0 +1,1 @@
+{"version":3,"names":["contextIdToId","contextId"],"sources":["utils.ts"],"sourcesContent":["// Only used on the web\nexport function contextIdToId(contextId: number) {\n  return \"rnwgpu-canvas-\" + contextId;\n}\n"],"mappings":";;;;;;AAAA;AACO,SAASA,aAAaA,CAACC,SAAiB,EAAE;EAC/C,OAAO,gBAAgB,GAAGA,SAAS;AACrC","ignoreList":[]}
