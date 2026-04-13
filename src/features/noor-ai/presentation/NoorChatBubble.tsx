@@ -12,6 +12,7 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
+import { useRouter } from 'expo-router';
 import { NoorMessage } from '../domain/types';
 import { Spacing } from '../../../core/theme/DesignSystem';
 
@@ -22,9 +23,21 @@ interface Props {
 
 export default function NoorChatBubble({ message, isLatest = false }: Props) {
     const theme = useTheme();
+    const router = useRouter();
     const isUser = message.role === 'user';
 
     const textColor = isUser ? '#FFFFFF' : theme.colors.onSurface;
+
+    // Convert [Surah Al-Baqarah, 2:286] or (2:286) into clickable markdown links
+    const processQuranCitations = (text: string) => {
+        // 1. Bracketed citations: [Surah Al-Baqarah, 2:286]
+        let processed = text.replace(/\[([^\]]*?\b(\d+):(\d+)\b[^\]]*?)\]/g, '[$1](/surah/$2?verse=$3)');
+        // 2. Parenthesized citations: (Surah 12:5)
+        processed = processed.replace(/\(([^)]*?\b(\d+):(\d+)\b[^)]*?)\)/g, '[$1](/surah/$2?verse=$3)');
+        return processed;
+    };
+
+    const displayContent = isUser ? message.content : processQuranCitations(message.content);
 
     return (
         <MotiView
@@ -130,9 +143,17 @@ export default function NoorChatBubble({ message, isLatest = false }: Props) {
                             style={{
                                 body: { color: textColor, fontSize: 15, lineHeight: 24 },
                                 paragraph: { marginTop: 0, marginBottom: 10 },
+                                link: { color: theme.colors.primary, textDecorationLine: 'none', fontWeight: 'bold' },
+                            }}
+                            onLinkPress={(url) => {
+                                if (url.startsWith('/surah/')) {
+                                    router.push(url as any);
+                                    return false; // prevent default browser open
+                                }
+                                return true;
                             }}
                         >
-                            {message.content}
+                            {displayContent}
                         </Markdown>
 
                         <Text

@@ -56,3 +56,6 @@ functions/node_modules/
 
 # Build env locals
 .xcode.env.local
+.local_data
+
+docs/Marketing/
