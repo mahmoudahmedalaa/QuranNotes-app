@@ -14,21 +14,32 @@ jest.mock('moti', () => ({
 // Mock RevenueCat
 jest.mock('../../features/payments/infrastructure/RevenueCatService', () => ({
     revenueCatService: {
+        initialize: jest.fn().mockResolvedValue(undefined),
+        loginUser: jest.fn().mockResolvedValue(null),
+        logoutUser: jest.fn().mockResolvedValue(undefined),
+        getCustomerInfo: jest.fn().mockResolvedValue({
+            entitlements: { active: {} },
+        }),
+        isPro: jest.fn().mockReturnValue(false),
         getOfferings: jest.fn().mockResolvedValue({
-            current: {
-                availablePackages: [
-                    {
-                        identifier: 'pro_monthly',
-                        product: {
-                            title: 'Pro Monthly',
-                            description: 'Unlock everything',
-                            priceString: '$4.99',
-                        },
-                    },
-                ],
+            monthly: {
+                identifier: 'pro_monthly',
+                product: {
+                    title: 'Pro Monthly',
+                    description: 'Unlock everything',
+                    priceString: '$4.99',
+                },
+            },
+            annual: {
+                identifier: 'pro_annual',
+                product: {
+                    title: 'Pro Annual',
+                    description: 'Unlock everything',
+                    priceString: '$35.99',
+                },
             },
         }),
-        purchasePackage: jest.fn().mockResolvedValue(true),
+        purchasePackage: jest.fn().mockResolvedValue({ success: true }),
         restorePurchases: jest.fn().mockResolvedValue(true),
     },
     PurchasesOffering: {},

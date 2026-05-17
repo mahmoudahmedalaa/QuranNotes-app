@@ -46,6 +46,23 @@ jest.mock('react-native-purchases', () => ({
 
 // Mock firebase
 jest.mock('firebase/compat/app', () => {
+    const buildDocRef = () => ({
+        get: jest.fn(),
+        set: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        collection: jest.fn(() => buildCollectionRef()),
+    });
+
+    const buildCollectionRef = () => ({
+        doc: jest.fn(() => buildDocRef()),
+        get: jest.fn(),
+        add: jest.fn(),
+        where: jest.fn(() => ({
+            get: jest.fn(),
+        })),
+    });
+
     const mockFirebase = {
         initializeApp: jest.fn(),
         apps: [],
@@ -61,23 +78,13 @@ jest.mock('firebase/compat/app', () => {
             currentUser: null,
         })),
         firestore: jest.fn(() => ({
-            collection: jest.fn(() => ({
-                doc: jest.fn(() => ({
-                    get: jest.fn(),
-                    set: jest.fn(),
-                    update: jest.fn(),
-                    delete: jest.fn(),
-                })),
-                get: jest.fn(),
-                add: jest.fn(),
-            })),
-            doc: jest.fn(() => ({
-                get: jest.fn(),
-                set: jest.fn(),
-                update: jest.fn(),
-                delete: jest.fn(),
-            })),
+            collection: jest.fn(() => buildCollectionRef()),
+            doc: jest.fn(() => buildDocRef()),
         })),
+    };
+    mockFirebase.firestore.FieldValue = {
+        serverTimestamp: jest.fn(() => 'mock-server-timestamp'),
+        increment: jest.fn((value) => ({ __increment: value })),
     };
     return {
         __esModule: true,
@@ -87,6 +94,14 @@ jest.mock('firebase/compat/app', () => {
 });
 jest.mock('firebase/compat/auth', () => { });
 jest.mock('firebase/compat/firestore', () => { });
+jest.mock('firebase/firestore', () => ({
+    collection: jest.fn(),
+    query: jest.fn(),
+    where: jest.fn(),
+    getDocs: jest.fn(async () => ({ docs: [] })),
+    deleteDoc: jest.fn(async () => undefined),
+    doc: jest.fn(),
+}));
 
 jest.mock('firebase/auth', () => ({
     initializeAuth: jest.fn(),
