@@ -4,11 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator } from 'react-native';
 import { useOnboarding } from '../src/features/onboarding/infrastructure/OnboardingContext';
 import { useAuth } from '../src/features/auth/infrastructure/AuthContext';
+import { useSubscriptionAccess } from '../src/features/payments/infrastructure/useSubscriptionAccess';
 
 export default function Index() {
     const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
     const { shouldShowOnboarding, loading: onboardingLoading } = useOnboarding();
     const { user, loading: authLoading } = useAuth();
+    const { isLoading: accessLoading, requiresSubscription } = useSubscriptionAccess();
 
     useEffect(() => {
         checkWelcomeStatus();
@@ -18,14 +20,14 @@ export default function Index() {
         try {
             const value = await AsyncStorage.getItem('hasSeenWelcome');
             setHasSeenWelcome(value === 'true');
-        } catch (_error) {
+        } catch {
             // If error, show welcome screen
             setHasSeenWelcome(false);
         }
     };
 
     // Loading state — wait for all data to be ready
-    if (hasSeenWelcome === null || onboardingLoading || authLoading) {
+    if (hasSeenWelcome === null || onboardingLoading || authLoading || accessLoading) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <ActivityIndicator size="large" />
@@ -48,6 +50,11 @@ export default function Index() {
         return <Redirect href="/welcome" />;
     }
 
-    // 4. Fully authenticated + onboarded + welcomed -> Home
+    // 4. Authenticated + onboarded + welcomed but gated -> Hard paywall
+    if (requiresSubscription) {
+        return <Redirect href={'/paywall?hard=1' as any} />;
+    }
+
+    // 5. Fully authenticated + onboarded + welcomed -> Home
     return <Redirect href="/(tabs)" />;
 }

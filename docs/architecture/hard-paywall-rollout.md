@@ -17,6 +17,17 @@ The rollout is scaffolded behind [`DEFAULT_PAYWALL_ROLLOUT_CONFIG`](/Users/mahmo
 
 This means the access-policy plumbing can ship without changing live behavior.
 
+## Current Operational State
+
+As of 2026-05-17:
+
+- `config/paywallRollout` is present in Firebase
+- `enabled` is still `false`
+- `grandfatherBefore` is `2026-05-18T00:00:00.000Z`
+- `rolloutVersion` is `1`
+- `users/{uid}/access/state` has been backfilled for all 72 current auth users
+- telemetry summary and event docs are still `0`, which is expected until an app build containing the telemetry code is actively used
+
 ## Access Rules
 
 When `enabled` is flipped to `true`:
@@ -27,6 +38,7 @@ When `enabled` is flipped to `true`:
 
 The primary enforcement points are:
 
+- [`app/index.tsx`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/app/index.tsx)
 - [`app/onboarding/premium.tsx`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/app/onboarding/premium.tsx)
 - [`app/(tabs)/_layout.tsx`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/app/(tabs)/_layout.tsx)
 - [`src/features/payments/presentation/PaywallScreen.tsx`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/src/features/payments/presentation/PaywallScreen.tsx)
@@ -117,6 +129,11 @@ Dry-run result on 2026-05-17:
 - would require subscription immediately: 0
 
 That confirms the current cutoff safely preserves the full existing install base and only affects accounts created after the cutoff date.
+
+Write result on 2026-05-17:
+
+- 72 access documents written
+- 0 existing users would require subscription immediately
 
 When the numbers look correct, write the durable access records:
 

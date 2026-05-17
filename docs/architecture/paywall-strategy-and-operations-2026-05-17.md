@@ -66,6 +66,17 @@ Grandfathering dry-run with cutoff `2026-05-18T00:00:00.000Z`:
 
 This is the safety property we want before any rollout is enabled.
 
+## Current Live Rollout State
+
+After the groundwork phase completed on 2026-05-17:
+
+- Firebase now has an explicit `config/paywallRollout` document
+- that config is still disabled
+- all 72 current users have durable grandfather access docs
+- telemetry counts remain at zero because the instrumented app build has not yet produced live traffic
+
+This means the rollout is now controllable and reversible from Firebase, while the current user base is explicitly protected.
+
 ## What Has Been Implemented
 
 ### Access control
