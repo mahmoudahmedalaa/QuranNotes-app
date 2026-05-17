@@ -81,6 +81,28 @@ PYEOF
 echo "   Build number: $BUILD_NUMBER → $NEW_BUILD"
 echo "   ✅ Incremented"
 
+# Keep native targets in sync with app.json so the app target and widget
+# extension ship with the same CFBundleVersion for TestFlight/App Store.
+python3 << PYEOF
+import re
+from pathlib import Path
+
+scheme = "$SCHEME"
+new_build = "$NEW_BUILD"
+
+pbxproj = Path("ios") / f"{scheme}.xcodeproj" / "project.pbxproj"
+if pbxproj.exists():
+    content = pbxproj.read_text()
+    content = re.sub(
+        r"CURRENT_PROJECT_VERSION = \d+;",
+        f"CURRENT_PROJECT_VERSION = {new_build};",
+        content,
+    )
+    pbxproj.write_text(content)
+
+PYEOF
+echo "   Synced native build numbers"
+
 # ---- Step 2: Clean ----
 echo "🧹 Step 2/7: Cleaning previous builds..."
 rm -rf build/
