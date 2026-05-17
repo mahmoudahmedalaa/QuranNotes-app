@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "typecheck:functions": "npm --prefix functions exec tsc -- --noEmit -p tsconfig.json",
     "report:firebase-usage": "node scripts/report-firebase-usage.js",
     "paywall:rollout": "node scripts/manage-paywall-rollout.js",
     "backfill:grandfather-access": "node scripts/backfill-grandfathered-access.js",
