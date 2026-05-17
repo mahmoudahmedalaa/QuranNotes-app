@@ -1,9 +1,16 @@
 import { View } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { FloatingTabBar } from '../../src/core/navigation/FloatingTabBar';
 import { GlobalMiniPlayer } from '../../src/features/audio-player/presentation/GlobalMiniPlayer';
+import { useSubscriptionAccess } from '../../src/features/payments/infrastructure/useSubscriptionAccess';
 
 export default function TabsLayout() {
+    const { isLoading, requiresSubscription } = useSubscriptionAccess();
+
+    if (!isLoading && requiresSubscription) {
+        return <Redirect href={'/paywall?hard=1' as any} />;
+    }
+
     return (
         <View style={{ flex: 1, backgroundColor: 'transparent' }}>
             <Tabs

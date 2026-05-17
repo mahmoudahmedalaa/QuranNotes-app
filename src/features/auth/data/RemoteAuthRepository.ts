@@ -15,6 +15,8 @@ export class RemoteAuthRepository implements IAuthRepository {
             displayName: firebaseUser.displayName,
             isAnonymous: firebaseUser.isAnonymous,
             photoURL: firebaseUser.photoURL,
+            createdAt: firebaseUser.metadata.creationTime ?? null,
+            lastSignInAt: firebaseUser.metadata.lastSignInTime ?? null,
         };
     }
 

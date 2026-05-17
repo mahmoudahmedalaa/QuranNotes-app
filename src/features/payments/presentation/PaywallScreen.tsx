@@ -33,12 +33,13 @@ const ANNUAL_PRICE = 35.99;
 
 export default function PaywallScreen() {
     const router = useRouter();
-    const { reason } = useLocalSearchParams<{ reason?: string }>();
+    const { reason, hard } = useLocalSearchParams<{ reason?: string; hard?: string }>();
     const { checkStatus } = usePro();
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
     const [isAnnual, setIsAnnual] = useState(true);
+    const isHardPaywall = hard === '1';
 
     useEffect(() => {
         loadOfferings();
@@ -125,8 +126,10 @@ export default function PaywallScreen() {
                 };
             default:
                 return {
-                    title: 'QuranNotes Pro',
-                    subtitle: 'Unlock your full spiritual potential',
+                    title: isHardPaywall ? 'Continue with QuranNotes Pro' : 'QuranNotes Pro',
+                    subtitle: isHardPaywall
+                        ? 'This account needs an active subscription to enter the app. Existing purchases can be restored at any time.'
+                        : 'Unlock your full spiritual potential',
                     highlightIndex: null
                 };
         }
@@ -153,11 +156,15 @@ export default function PaywallScreen() {
             const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
 
             if (success) {
-                checkStatus();
+                await checkStatus();
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert('Success', 'You are now a Pro member!', [
-                    { text: 'OK', onPress: () => router.back() }
-                ]);
+                if (isHardPaywall) {
+                    router.replace('/');
+                } else {
+                    Alert.alert('Success', 'You are now a Pro member!', [
+                        { text: 'OK', onPress: () => router.back() }
+                    ]);
+                }
             } else if (userCancelled) {
                 // User cancelled, do nothing (no scary error message)
             } else {
@@ -177,9 +184,14 @@ export default function PaywallScreen() {
         const success = await revenueCatService.restorePurchases();
         setPurchasing(false);
         if (success) {
-            checkStatus();
-            Alert.alert('Restored', 'Your purchases have been restored.');
-            router.back();
+            await checkStatus();
+            if (isHardPaywall) {
+                Alert.alert('Restored', 'Your purchases have been restored.');
+                router.replace('/');
+            } else {
+                Alert.alert('Restored', 'Your purchases have been restored.');
+                router.back();
+            }
         } else {
             Alert.alert('Error', 'Could not restore purchases.');
         }
@@ -302,9 +314,11 @@ export default function PaywallScreen() {
                         disabled={purchasing}>
                         Unlock Full Access
                     </Button>
-                    <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
-                        <Text style={styles.secondaryText}>Maybe Later</Text>
-                    </Pressable>
+                    {!isHardPaywall && (
+                        <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryText}>Maybe Later</Text>
+                        </Pressable>
+                    )}
 
                     {/* Restore Purchases */}
                     <Pressable onPress={handleRestore} style={styles.restoreButton}>

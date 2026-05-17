@@ -31,6 +31,8 @@ export class MockAuthRepository implements IAuthRepository {
             displayName: 'Guest User',
             isAnonymous: true,
             photoURL: null,
+            createdAt: new Date().toISOString(),
+            lastSignInAt: new Date().toISOString(),
         };
 
         await this.setCurrentUser(user);
@@ -53,6 +55,8 @@ export class MockAuthRepository implements IAuthRepository {
             displayName: email.split('@')[0],
             isAnonymous: false,
             photoURL: null,
+            createdAt: new Date().toISOString(),
+            lastSignInAt: new Date().toISOString(),
         };
 
         await this.setCurrentUser(user);

@@ -18,6 +18,7 @@ import { revenueCatService, PurchasesOffering } from '../../src/features/payment
 import { usePro } from '../../src/features/auth/infrastructure/ProContext';
 import { isRamadanSeason } from '../../src/core/utils/ramadanUtils';
 import RamadanPaywallScreen from '../../src/features/payments/presentation/RamadanPaywallScreen';
+import { useSubscriptionAccess } from '../../src/features/payments/infrastructure/useSubscriptionAccess';
 
 
 
@@ -37,14 +38,16 @@ const ANNUAL_PRICE = 35.99;
 export default function OnboardingPremium() {
     useTheme();
     const router = useRouter();
-    const { highlight } = useLocalSearchParams();
+    const { highlight, hard } = useLocalSearchParams<{ highlight?: string; hard?: string }>();
     const { completeOnboarding } = useOnboarding();
     const { checkStatus } = usePro();
+    const { requiresSubscription } = useSubscriptionAccess();
     const [isAnnual, setIsAnnual] = useState(true);
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [purchasing, setPurchasing] = useState(false);
 
     const highlightIndex = highlight ? parseInt(highlight as string) : null;
+    const isHardPaywall = hard === '1' || requiresSubscription;
 
     // ── Ramadan season? Show the Ramadan paywall instead ──
     const handleOnboardingComplete = useCallback(async () => {
@@ -87,7 +90,8 @@ export default function OnboardingPremium() {
         return (
             <RamadanPaywallScreen
                 onPurchaseSuccess={handleOnboardingComplete}
-                onDismiss={handleOnboardingComplete}
+                onDismiss={isHardPaywall ? undefined : handleOnboardingComplete}
+                allowDismiss={!isHardPaywall}
             />
         );
     }
@@ -110,7 +114,11 @@ export default function OnboardingPremium() {
         try {
             const { success, userCancelled, error: purchaseError } = await revenueCatService.purchasePackage(packageToBuy);
             if (success) {
-                try { checkStatus(); } catch (_e) { /* non-critical */ }
+                try {
+                    await checkStatus();
+                } catch (_e) {
+                    /* non-critical */
+                }
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 try {
                     await completeOnboarding();
@@ -130,6 +138,8 @@ export default function OnboardingPremium() {
     };
 
     const handleStartFree = async () => {
+        if (isHardPaywall) return;
+
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         try {
             await completeOnboarding();
@@ -138,6 +148,29 @@ export default function OnboardingPremium() {
         }
         router.dismissAll();
         router.replace('/');
+    };
+
+    const handleRestore = async () => {
+        setPurchasing(true);
+        try {
+            const success = await revenueCatService.restorePurchases();
+
+            if (success) {
+                try {
+                    await checkStatus();
+                } catch (_e) {
+                    /* non-critical */
+                }
+                Alert.alert('Restored', 'Your purchases have been restored.');
+                await handleOnboardingComplete();
+            } else {
+                Alert.alert('Error', 'Could not restore purchases.');
+            }
+        } catch (_error) {
+            Alert.alert('Error', 'Could not restore purchases.');
+        } finally {
+            setPurchasing(false);
+        }
     };
 
     const price = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
@@ -153,7 +186,11 @@ export default function OnboardingPremium() {
                     transition={{ type: 'timing', duration: 400 }}
                     style={styles.header}>
                     <Text style={styles.title}>QuranNotes Pro</Text>
-                    <Text style={styles.subtitle}>Unlock your full spiritual potential</Text>
+                    <Text style={styles.subtitle}>
+                        {isHardPaywall
+                            ? 'New accounts need an active subscription to continue. Existing users keep access.'
+                            : 'Unlock your full spiritual potential'}
+                    </Text>
                 </MotiView>
 
                 {/* Features List */}
@@ -243,8 +280,13 @@ export default function OnboardingPremium() {
                         disabled={purchasing}>
                         Unlock Full Access
                     </Button>
-                    <Pressable onPress={handleStartFree} style={styles.secondaryButton}>
-                        <Text style={styles.secondaryText}>Start Free</Text>
+                    {!isHardPaywall && (
+                        <Pressable onPress={handleStartFree} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryText}>Start Free</Text>
+                        </Pressable>
+                    )}
+                    <Pressable onPress={handleRestore} style={styles.secondaryButton}>
+                        <Text style={styles.secondaryText}>Restore Purchases</Text>
                     </Pressable>
                 </MotiView>
             </SafeAreaView>

@@ -4,4 +4,6 @@ export interface User {
     displayName: string | null;
     isAnonymous: boolean;
     photoURL: string | null;
+    createdAt: string | null;
+    lastSignInAt: string | null;
 }

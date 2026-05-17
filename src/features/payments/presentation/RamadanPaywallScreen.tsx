@@ -41,9 +41,15 @@ interface RamadanPaywallProps {
     onPurchaseSuccess?: () => void;
     /** Called when user dismisses — used by onboarding to call completeOnboarding */
     onDismiss?: () => void;
+    /** Disable the close path when the paywall is acting as a hard gate. */
+    allowDismiss?: boolean;
 }
 
-export default function RamadanPaywallScreen({ onPurchaseSuccess, onDismiss }: RamadanPaywallProps = {}) {
+export default function RamadanPaywallScreen({
+    onPurchaseSuccess,
+    onDismiss,
+    allowDismiss = true,
+}: RamadanPaywallProps = {}) {
     useTheme();
     const router = useRouter();
     const { checkStatus } = usePro();
@@ -151,12 +157,14 @@ export default function RamadanPaywallScreen({ onPurchaseSuccess, onDismiss }: R
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Close Button */}
-                <Pressable
-                    onPress={() => onDismiss ? onDismiss() : router.back()}
-                    style={styles.closeButton}
-                    hitSlop={16}>
-                    <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
-                </Pressable>
+                {allowDismiss && (
+                    <Pressable
+                        onPress={() => onDismiss ? onDismiss() : router.back()}
+                        style={styles.closeButton}
+                        hitSlop={16}>
+                        <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
+                    </Pressable>
+                )}
 
                 <ScrollView
                     style={styles.scrollView}
