@@ -58,6 +58,10 @@ Manual work in App Store Connect and RevenueCat:
 3. Verify RevenueCat offering and entitlement mapping.
 4. Verify restore flows.
 
+Use this guide during the manual setup phase:
+
+- [`app-store-revenuecat-setup-guide.md`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/docs/architecture/app-store-revenuecat-setup-guide.md)
+
 ### Phase 4 — Activation
 
 1. Release the app version that includes the rollout code.
