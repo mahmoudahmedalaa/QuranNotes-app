@@ -110,6 +110,14 @@ Before enabling the hard paywall in production, run a dry-run backfill to see ho
 npm run backfill:grandfather-access -- --cutoff=2026-05-18T00:00:00.000Z
 ```
 
+Dry-run result on 2026-05-17:
+
+- total users evaluated: 72
+- would be grandfathered: 72
+- would require subscription immediately: 0
+
+That confirms the current cutoff safely preserves the full existing install base and only affects accounts created after the cutoff date.
+
 When the numbers look correct, write the durable access records:
 
 ```bash

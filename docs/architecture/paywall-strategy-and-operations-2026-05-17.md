@@ -59,6 +59,13 @@ Highlights from the baseline:
 - 45 sync docs across 9 distinct users
 - no historical paywall/session telemetry existed yet
 
+Grandfathering dry-run with cutoff `2026-05-18T00:00:00.000Z`:
+
+- 72 existing users would be grandfathered
+- 0 existing users would be newly hard-gated
+
+This is the safety property we want before any rollout is enabled.
+
 ## What Has Been Implemented
 
 ### Access control
