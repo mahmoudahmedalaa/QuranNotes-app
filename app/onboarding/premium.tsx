@@ -7,6 +7,7 @@ import { MotiView } from 'moti';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useOnboarding } from '../../src/features/onboarding/infrastructure/OnboardingContext';
+import { useAuth } from '../../src/features/auth/infrastructure/AuthContext';
 import {
     Spacing,
     BorderRadius,
@@ -19,6 +20,7 @@ import { usePro } from '../../src/features/auth/infrastructure/ProContext';
 import { isRamadanSeason } from '../../src/core/utils/ramadanUtils';
 import RamadanPaywallScreen from '../../src/features/payments/presentation/RamadanPaywallScreen';
 import { useSubscriptionAccess } from '../../src/features/payments/infrastructure/useSubscriptionAccess';
+import { TelemetryService } from '../../src/features/payments/infrastructure/TelemetryService';
 
 
 
@@ -41,6 +43,7 @@ export default function OnboardingPremium() {
     const { highlight, hard } = useLocalSearchParams<{ highlight?: string; hard?: string }>();
     const { completeOnboarding } = useOnboarding();
     const { checkStatus } = usePro();
+    const { user } = useAuth();
     const { requiresSubscription } = useSubscriptionAccess();
     const [isAnnual, setIsAnnual] = useState(true);
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
@@ -48,6 +51,13 @@ export default function OnboardingPremium() {
 
     const highlightIndex = highlight ? parseInt(highlight as string) : null;
     const isHardPaywall = hard === '1' || requiresSubscription;
+    let showRamadan = false;
+
+    try {
+        showRamadan = isRamadanSeason();
+    } catch {
+        // Date computation failure — fall back to standard paywall
+    }
 
     // ── Ramadan season? Show the Ramadan paywall instead ──
     const handleOnboardingComplete = useCallback(async () => {
@@ -63,7 +73,7 @@ export default function OnboardingPremium() {
         } catch (err) {
             if (__DEV__) console.warn('[Premium] navigation failed:', err);
             // Fallback: try a simple replace
-            try { router.replace('/'); } catch (_e) { /* last resort */ }
+            try { router.replace('/'); } catch { /* last resort */ }
         }
     }, [completeOnboarding, router]);
 
@@ -72,26 +82,30 @@ export default function OnboardingPremium() {
             try {
                 const current = await revenueCatService.getOfferings();
                 setOffering(current);
-            } catch (_e) {
+            } catch {
                 // Offerings may fail on simulator — still allow free start
             }
         };
         loadOfferings();
     }, []);
 
-    // Render Ramadan paywall during Ramadan season (after all hooks)
-    let showRamadan = false;
-    try {
-        showRamadan = isRamadanSeason();
-    } catch (_e) {
-        // Date computation failure — fall back to standard paywall
-    }
+    useEffect(() => {
+        if (!user || showRamadan) return;
+
+        TelemetryService.trackPaywallView(user.id, {
+            hardPaywall: isHardPaywall,
+            location: 'onboarding',
+            reason: 'onboarding-premium',
+        }).catch(() => { });
+    }, [user, isHardPaywall, showRamadan]);
+
     if (showRamadan) {
         return (
             <RamadanPaywallScreen
                 onPurchaseSuccess={handleOnboardingComplete}
                 onDismiss={isHardPaywall ? undefined : handleOnboardingComplete}
                 allowDismiss={!isHardPaywall}
+                location="onboarding"
             />
         );
     }
@@ -112,12 +126,29 @@ export default function OnboardingPremium() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'onboarding',
+                    outcome: 'started',
+                    hardPaywall: isHardPaywall,
+                    reason: 'onboarding-premium',
+                });
+            }
+
             const { success, userCancelled, error: purchaseError } = await revenueCatService.purchasePackage(packageToBuy);
             if (success) {
                 try {
                     await checkStatus();
-                } catch (_e) {
+                } catch {
                     /* non-critical */
+                }
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'onboarding',
+                        outcome: 'success',
+                        hardPaywall: isHardPaywall,
+                        reason: 'onboarding-premium',
+                    });
                 }
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 try {
@@ -128,9 +159,33 @@ export default function OnboardingPremium() {
                 router.dismissAll();
                 router.replace('/');
             } else if (!userCancelled) {
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'onboarding',
+                        outcome: 'failed',
+                        hardPaywall: isHardPaywall,
+                        reason: 'onboarding-premium',
+                        message: purchaseError,
+                    });
+                }
                 Alert.alert('Purchase Failed', purchaseError || 'Could not complete purchase. Please try again.');
+            } else if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'onboarding',
+                    outcome: 'cancelled',
+                    hardPaywall: isHardPaywall,
+                    reason: 'onboarding-premium',
+                });
             }
-        } catch (_error) {
+        } catch {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'onboarding',
+                    outcome: 'failed',
+                    hardPaywall: isHardPaywall,
+                    reason: 'onboarding-premium',
+                });
+            }
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
             setPurchasing(false);
@@ -158,15 +213,31 @@ export default function OnboardingPremium() {
             if (success) {
                 try {
                     await checkStatus();
-                } catch (_e) {
+                } catch {
                     /* non-critical */
+                }
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'onboarding',
+                        outcome: 'restored',
+                        hardPaywall: isHardPaywall,
+                        reason: 'onboarding-premium',
+                    });
                 }
                 Alert.alert('Restored', 'Your purchases have been restored.');
                 await handleOnboardingComplete();
             } else {
                 Alert.alert('Error', 'Could not restore purchases.');
             }
-        } catch (_error) {
+        } catch {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'onboarding',
+                    outcome: 'failed',
+                    hardPaywall: isHardPaywall,
+                    reason: 'onboarding-restore',
+                });
+            }
             Alert.alert('Error', 'Could not restore purchases.');
         } finally {
             setPurchasing(false);

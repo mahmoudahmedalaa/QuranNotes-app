@@ -15,6 +15,7 @@ import { NotificationScheduler } from '../src/features/notifications/presentatio
 import { OnboardingProvider, useOnboarding } from '../src/features/onboarding/infrastructure/OnboardingContext';
 import { AuthProvider, useAuth } from '../src/features/auth/infrastructure/AuthContext';
 import { ProProvider } from '../src/features/auth/infrastructure/ProContext';
+import { PaywallProvider } from '../src/features/payments/infrastructure/PaywallContext';
 import { GlobalErrorBoundary } from '../src/core/components/GlobalErrorBoundary';
 import { useSync } from '../src/core/hooks/useSync';
 import { Stack } from 'expo-router';
@@ -42,6 +43,7 @@ const AppProviders = composeProviders([
     RepositoryProvider,
     AuthProvider,
     ProProvider,
+    PaywallProvider,
     OnboardingProvider,
     StreakProvider,
     SettingsProvider,

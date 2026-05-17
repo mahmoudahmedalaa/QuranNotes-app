@@ -4,6 +4,7 @@ import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { useRouter, useLocalSearchParams, Redirect } from 'expo-router';
 import { revenueCatService, PurchasesOffering } from '../infrastructure/RevenueCatService';
 import { usePro } from '../../auth/infrastructure/ProContext';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 import { Spacing, BorderRadius, BrandTokens } from '../../../core/theme/DesignSystem';
 import { MotiView } from 'moti';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { isRamadanSeason } from '../../../core/utils/ramadanUtils';
+import { TelemetryService } from '../infrastructure/TelemetryService';
 
 
 const FEATURES = [
@@ -35,6 +37,7 @@ export default function PaywallScreen() {
     const router = useRouter();
     const { reason, hard } = useLocalSearchParams<{ reason?: string; hard?: string }>();
     const { checkStatus } = usePro();
+    const { user } = useAuth();
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
@@ -44,6 +47,16 @@ export default function PaywallScreen() {
     useEffect(() => {
         loadOfferings();
     }, []);
+
+    useEffect(() => {
+        if (!user) return;
+
+        TelemetryService.trackPaywallView(user.id, {
+            hardPaywall: isHardPaywall,
+            location: 'modal',
+            reason,
+        }).catch(() => { });
+    }, [user, isHardPaywall, reason]);
 
     const loadOfferings = async () => {
         try {
@@ -58,7 +71,8 @@ export default function PaywallScreen() {
 
     // During Ramadan season (2 weeks before → end), redirect to the special Ramadan paywall
     if (isRamadanSeason()) {
-        return <Redirect href={'/ramadan-paywall' as any} />;
+        const redirectHref = `/ramadan-paywall?location=ramadan${isHardPaywall ? '&hard=1' : ''}`;
+        return <Redirect href={redirectHref as any} />;
     }
 
     // Get context-specific messaging
@@ -153,10 +167,27 @@ export default function PaywallScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'modal',
+                    outcome: 'started',
+                    hardPaywall: isHardPaywall,
+                    reason,
+                });
+            }
+
             const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
 
             if (success) {
                 await checkStatus();
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'modal',
+                        outcome: 'success',
+                        hardPaywall: isHardPaywall,
+                        reason,
+                    });
+                }
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 if (isHardPaywall) {
                     router.replace('/');
@@ -167,12 +198,37 @@ export default function PaywallScreen() {
                 }
             } else if (userCancelled) {
                 // User cancelled, do nothing (no scary error message)
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'modal',
+                        outcome: 'cancelled',
+                        hardPaywall: isHardPaywall,
+                        reason,
+                    });
+                }
             } else {
                 // Show friendly error message
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'modal',
+                        outcome: 'failed',
+                        hardPaywall: isHardPaywall,
+                        reason,
+                        message: error,
+                    });
+                }
                 Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
             }
         } catch (error) {
             if (__DEV__) console.error('Purchase failed:', error);
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'modal',
+                    outcome: 'failed',
+                    hardPaywall: isHardPaywall,
+                    reason,
+                });
+            }
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
             setPurchasing(false);
@@ -181,19 +237,40 @@ export default function PaywallScreen() {
 
     const handleRestore = async () => {
         setPurchasing(true);
-        const success = await revenueCatService.restorePurchases();
-        setPurchasing(false);
-        if (success) {
-            await checkStatus();
-            if (isHardPaywall) {
-                Alert.alert('Restored', 'Your purchases have been restored.');
-                router.replace('/');
+        try {
+            const success = await revenueCatService.restorePurchases();
+            if (success) {
+                await checkStatus();
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location: 'modal',
+                        outcome: 'restored',
+                        hardPaywall: isHardPaywall,
+                        reason,
+                    });
+                }
+                if (isHardPaywall) {
+                    Alert.alert('Restored', 'Your purchases have been restored.');
+                    router.replace('/');
+                } else {
+                    Alert.alert('Restored', 'Your purchases have been restored.');
+                    router.back();
+                }
             } else {
-                Alert.alert('Restored', 'Your purchases have been restored.');
-                router.back();
+                Alert.alert('Error', 'Could not restore purchases.');
             }
-        } else {
+        } catch {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'modal',
+                    outcome: 'failed',
+                    hardPaywall: isHardPaywall,
+                    reason: reason || 'restore',
+                });
+            }
             Alert.alert('Error', 'Could not restore purchases.');
+        } finally {
+            setPurchasing(false);
         }
     };
 

@@ -11,6 +11,7 @@ import { Text, useTheme, ActivityIndicator } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { revenueCatService, PurchasesOffering } from '../infrastructure/RevenueCatService';
 import { usePro } from '../../auth/infrastructure/ProContext';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 import { Spacing, BorderRadius } from '../../../core/theme/DesignSystem';
 import { MotiView } from 'moti';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { ramadanCountdownText } from '../../../core/utils/ramadanUtils';
+import { TelemetryService } from '../infrastructure/TelemetryService';
 
 
 
@@ -43,16 +45,19 @@ interface RamadanPaywallProps {
     onDismiss?: () => void;
     /** Disable the close path when the paywall is acting as a hard gate. */
     allowDismiss?: boolean;
+    location?: 'onboarding' | 'ramadan';
 }
 
 export default function RamadanPaywallScreen({
     onPurchaseSuccess,
     onDismiss,
     allowDismiss = true,
+    location = 'ramadan',
 }: RamadanPaywallProps = {}) {
     useTheme();
     const router = useRouter();
     const { checkStatus } = usePro();
+    const { user } = useAuth();
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
@@ -67,6 +72,16 @@ export default function RamadanPaywallScreen({
         }, 3600000);
         return () => clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        if (!user) return;
+
+        TelemetryService.trackPaywallView(user.id, {
+            hardPaywall: !allowDismiss,
+            location,
+            reason: 'ramadan-paywall',
+        }).catch(() => { });
+    }, [user, allowDismiss, location]);
 
     const loadOfferings = async () => {
         try {
@@ -95,9 +110,26 @@ export default function RamadanPaywallScreen({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location,
+                    outcome: 'started',
+                    hardPaywall: !allowDismiss,
+                    reason: 'ramadan-paywall',
+                });
+            }
+
             const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
             if (success) {
-                checkStatus();
+                await checkStatus();
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location,
+                        outcome: 'success',
+                        hardPaywall: !allowDismiss,
+                        reason: 'ramadan-paywall',
+                    });
+                }
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 if (onPurchaseSuccess) {
                     onPurchaseSuccess();
@@ -109,11 +141,36 @@ export default function RamadanPaywallScreen({
                     );
                 }
             } else if (userCancelled) {
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location,
+                        outcome: 'cancelled',
+                        hardPaywall: !allowDismiss,
+                        reason: 'ramadan-paywall',
+                    });
+                }
             } else {
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location,
+                        outcome: 'failed',
+                        hardPaywall: !allowDismiss,
+                        reason: 'ramadan-paywall',
+                        message: error,
+                    });
+                }
                 Alert.alert('Purchase Failed', error || 'Could not complete purchase. Please try again.');
             }
         } catch (error) {
             if (__DEV__) console.warn('Purchase failed:', error);
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location,
+                    outcome: 'failed',
+                    hardPaywall: !allowDismiss,
+                    reason: 'ramadan-paywall',
+                });
+            }
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
             setPurchasing(false);
@@ -122,14 +179,35 @@ export default function RamadanPaywallScreen({
 
     const handleRestore = async () => {
         setPurchasing(true);
-        const success = await revenueCatService.restorePurchases();
-        setPurchasing(false);
-        if (success) {
-            checkStatus();
-            Alert.alert('Restored', 'Your purchases have been restored.');
-            if (onPurchaseSuccess) onPurchaseSuccess(); else router.back();
-        } else {
+        try {
+            const success = await revenueCatService.restorePurchases();
+            if (success) {
+                await checkStatus();
+                if (user) {
+                    await TelemetryService.trackSubscriptionEvent(user.id, {
+                        location,
+                        outcome: 'restored',
+                        hardPaywall: !allowDismiss,
+                        reason: 'ramadan-paywall',
+                    });
+                }
+                Alert.alert('Restored', 'Your purchases have been restored.');
+                if (onPurchaseSuccess) onPurchaseSuccess(); else router.back();
+            } else {
+                Alert.alert('Error', 'Could not restore purchases.');
+            }
+        } catch {
+            if (user) {
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location,
+                    outcome: 'failed',
+                    hardPaywall: !allowDismiss,
+                    reason: 'ramadan-paywall-restore',
+                });
+            }
             Alert.alert('Error', 'Could not restore purchases.');
+        } finally {
+            setPurchasing(false);
         }
     };
 

@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
+    "report:firebase-usage": "node scripts/report-firebase-usage.js",
+    "backfill:grandfather-access": "node scripts/backfill-grandfathered-access.js",
     "lint": "eslint .",
     "clean": "rm -rf node_modules && npm cache clean --force && watchman watch-del-all && rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* && npm install",
     "clean:deep": "npm run clean && rm -rf ios android ~/Library/Developer/Xcode/DerivedData",

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../auth/infrastructure/AuthContext';
+import { TelemetryService } from '../../payments/infrastructure/TelemetryService';
 
 const ONBOARDING_KEY_PREFIX = '@quran_notes:onboarding:';
 
@@ -108,6 +109,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     const completeOnboarding = async () => {
         const newState = { ...state, completed: true };
         await saveState(newState);
+        if (user) {
+            await TelemetryService.trackOnboardingCompleted(user.id, false);
+        }
     };
 
     const skipOnboarding = async () => {
@@ -117,6 +121,9 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
             skippedAt: new Date().toISOString(),
         };
         await saveState(newState);
+        if (user) {
+            await TelemetryService.trackOnboardingCompleted(user.id, true);
+        }
     };
 
     const markRecordingMade = () => {
