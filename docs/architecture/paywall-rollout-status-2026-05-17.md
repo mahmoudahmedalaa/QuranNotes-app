@@ -24,6 +24,12 @@ This document captures the live operational state after the initial rollout grou
 
 This is expected until a released build with the telemetry code is actively used by real users.
 
+The funnel report currently resolves to an all-zero baseline:
+
+```bash
+npm run report:paywall-funnel
+```
+
 ## Interpretation
 
 The rollout foundation is live, but the hard paywall is not active.

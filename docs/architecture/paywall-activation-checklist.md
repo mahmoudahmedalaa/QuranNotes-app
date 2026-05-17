@@ -89,6 +89,7 @@ Useful commands:
 
 ```bash
 npm run report:firebase-usage
+npm run report:paywall-funnel
 npm run paywall:rollout
 ```
 
@@ -107,3 +108,4 @@ That restores open access for non-Pro users without deleting any telemetry or gr
 - `enabled=false` means the code is live but inactive.
 - `grandfatherBefore` is the contract that protects the existing install base.
 - `rolloutVersion` should be incremented only when we intentionally redefine the rollout boundary or logic.
+- Use [`paywall-telemetry-reference.md`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/docs/architecture/paywall-telemetry-reference.md) as the guide for interpreting the funnel report after release.
