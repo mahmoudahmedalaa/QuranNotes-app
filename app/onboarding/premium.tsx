@@ -21,6 +21,7 @@ import { isRamadanSeason } from '../../src/core/utils/ramadanUtils';
 import RamadanPaywallScreen from '../../src/features/payments/presentation/RamadanPaywallScreen';
 import { useSubscriptionAccess } from '../../src/features/payments/infrastructure/useSubscriptionAccess';
 import { TelemetryService } from '../../src/features/payments/infrastructure/TelemetryService';
+import { getSelectedPackage, getTrialBadgeText, getTrialCtaText } from '../../src/features/payments/presentation/paywallOfferUtils';
 
 
 
@@ -111,14 +112,18 @@ export default function OnboardingPremium() {
     }
 
     const handleSubscribe = async () => {
-        if (!offering) {
-            Alert.alert('Error', 'Could not load products. Please try again or start free.');
-            return;
+        let currentOffering = offering;
+        if (!currentOffering) {
+            currentOffering = await revenueCatService.getOfferings();
+            setOffering(currentOffering);
         }
 
-        const packageToBuy = isAnnual ? offering.annual : offering.monthly;
+        const packageToBuy = getSelectedPackage(currentOffering, isAnnual);
         if (!packageToBuy) {
-            Alert.alert('Error', 'Product not available.');
+            Alert.alert(
+                'Subscription Unavailable',
+                'The App Store products are still loading or not available yet. Please close and reopen the app, then try again in a little while.'
+            );
             return;
         }
 
@@ -244,7 +249,12 @@ export default function OnboardingPremium() {
         }
     };
 
-    const price = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
+    const selectedPackage = getSelectedPackage(offering, isAnnual);
+    const fallbackPrice = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
+    const price = selectedPackage?.product.price ?? fallbackPrice;
+    const priceString = selectedPackage?.product.priceString ?? `$${price.toFixed(2)}`;
+    const trialBadgeText = getTrialBadgeText(selectedPackage);
+    const ctaText = getTrialCtaText(selectedPackage, 'Unlock Full Access');
     const savings = isAnnual ? Math.round((1 - ANNUAL_PRICE / 12 / MONTHLY_PRICE) * 100) : 0;
 
     return (
@@ -262,6 +272,9 @@ export default function OnboardingPremium() {
                             ? 'New accounts need an active subscription to continue. Existing users keep access.'
                             : 'Unlock your full spiritual potential'}
                     </Text>
+                    {trialBadgeText && (
+                        <Text style={styles.trialText}>{trialBadgeText}</Text>
+                    )}
                 </MotiView>
 
                 {/* Features List */}
@@ -324,7 +337,7 @@ export default function OnboardingPremium() {
                     </View>
 
                     <View style={styles.priceDisplay}>
-                        <Text style={styles.price}>${price.toFixed(2)}</Text>
+                        <Text style={styles.price}>{priceString}</Text>
                         <Text style={styles.priceUnit}>/{isAnnual ? 'year' : 'month'}</Text>
                     </View>
                     {isAnnual && (
@@ -348,8 +361,8 @@ export default function OnboardingPremium() {
                         buttonColor="#FFFFFF"
                         textColor={BrandTokens.light.accentPrimary}
                         loading={purchasing}
-                        disabled={purchasing}>
-                        Unlock Full Access
+                        disabled={purchasing || !selectedPackage}>
+                        {ctaText}
                     </Button>
                     {!isHardPaywall && (
                         <Pressable onPress={handleStartFree} style={styles.secondaryButton}>
@@ -387,6 +400,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#4C3D7A',
         marginTop: Spacing.xs,
+    },
+    trialText: {
+        fontSize: 14,
+        color: BrandTokens.light.accentPrimary,
+        marginTop: Spacing.xs,
+        fontWeight: '700',
+        textTransform: 'capitalize',
     },
     featuresContainer: {
         paddingHorizontal: Spacing.lg,

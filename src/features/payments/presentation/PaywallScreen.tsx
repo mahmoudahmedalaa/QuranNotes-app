@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { isRamadanSeason } from '../../../core/utils/ramadanUtils';
 import { TelemetryService } from '../infrastructure/TelemetryService';
+import { getSelectedPackage, getTrialBadgeText, getTrialCtaText } from './paywallOfferUtils';
 
 
 const FEATURES = [
@@ -152,14 +153,18 @@ export default function PaywallScreen() {
     const contextMessage = getMessage();
 
     const handlePurchase = async () => {
-        if (!offering) {
-            Alert.alert('Error', 'Could not load products. Please try again.');
-            return;
+        let currentOffering = offering;
+        if (!currentOffering) {
+            currentOffering = await revenueCatService.getOfferings();
+            setOffering(currentOffering);
         }
 
-        const packageToBuy = isAnnual ? offering.annual : offering.monthly;
+        const packageToBuy = getSelectedPackage(currentOffering, isAnnual);
         if (!packageToBuy) {
-            Alert.alert('Error', 'Product not available.');
+            Alert.alert(
+                'Subscription Unavailable',
+                'The App Store products are still loading or not available yet. Please close and reopen the app, then try again in a little while.'
+            );
             return;
         }
 
@@ -274,7 +279,12 @@ export default function PaywallScreen() {
         }
     };
 
-    const price = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
+    const selectedPackage = getSelectedPackage(offering, isAnnual);
+    const fallbackPrice = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
+    const price = selectedPackage?.product.price ?? fallbackPrice;
+    const priceString = selectedPackage?.product.priceString ?? `$${price.toFixed(2)}`;
+    const trialBadgeText = getTrialBadgeText(selectedPackage);
+    const ctaText = getTrialCtaText(selectedPackage, 'Unlock Full Access');
     const savings = isAnnual ? Math.round((1 - ANNUAL_PRICE / 12 / MONTHLY_PRICE) * 100) : 0;
 
     if (loading) {
@@ -363,13 +373,16 @@ export default function PaywallScreen() {
                         </View>
 
                         <View style={styles.priceDisplay}>
-                            <Text style={styles.price}>${price.toFixed(2)}</Text>
+                            <Text style={styles.price}>{priceString}</Text>
                             <Text style={styles.priceUnit}>/{isAnnual ? 'year' : 'month'}</Text>
                         </View>
                         {isAnnual && (
                             <Text style={styles.priceNote}>
                                 Just ${(ANNUAL_PRICE / 12).toFixed(2)}/month
                             </Text>
+                        )}
+                        {trialBadgeText && (
+                            <Text style={styles.trialText}>{trialBadgeText}</Text>
                         )}
                     </MotiView>
                 </ScrollView>
@@ -388,8 +401,8 @@ export default function PaywallScreen() {
                         buttonColor="#FFFFFF"
                         textColor={BrandTokens.light.accentPrimary}
                         loading={purchasing}
-                        disabled={purchasing}>
-                        Unlock Full Access
+                        disabled={purchasing || !selectedPackage}>
+                        {ctaText}
                     </Button>
                     {!isHardPaywall && (
                         <Pressable onPress={() => router.back()} style={styles.secondaryButton}>
@@ -404,9 +417,10 @@ export default function PaywallScreen() {
 
                     {/* Subscription Disclosure */}
                     <Text style={styles.disclosureText}>
+                        {trialBadgeText ? `${trialBadgeText}. ` : ''}
                         {isAnnual
-                            ? `Annual subscription: $${ANNUAL_PRICE.toFixed(2)}/year ($${(ANNUAL_PRICE / 12).toFixed(2)}/mo).`
-                            : `Monthly subscription: $${MONTHLY_PRICE.toFixed(2)}/month.`
+                            ? `Annual subscription: ${selectedPackage?.product.priceString ?? `$${ANNUAL_PRICE.toFixed(2)}`}/year ($${(ANNUAL_PRICE / 12).toFixed(2)}/mo).`
+                            : `Monthly subscription: ${selectedPackage?.product.priceString ?? `$${MONTHLY_PRICE.toFixed(2)}`}/month.`
                         }{' '}
                         Payment will be charged to your Apple ID account. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage in Settings → Apple ID → Subscriptions.
                     </Text>
@@ -541,6 +555,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: 'rgba(255,255,255,0.7)',
         marginTop: Spacing.xs,
+    },
+    trialText: {
+        fontSize: 14,
+        color: '#4ADE80',
+        marginTop: Spacing.xs,
+        fontWeight: '700',
+        textTransform: 'capitalize',
     },
     ctaContainer: {
         paddingHorizontal: Spacing.xl,

@@ -87,6 +87,21 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    // ─── User Access State (Rollout / Grandfathering) ───────────────
+    match /users/{userId}/access/{docId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    // ─── User Metrics Summary (Operational Telemetry) ───────────────
+    match /users/{userId}/metrics/{docId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    // ─── User Telemetry Event Stream ────────────────────────────────
+    match /users/{userId}/telemetry_events/{eventId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
     // ─── Default: Deny everything else ──────────────────────────────
     match /{document=**} {
       allow read, write: if false;
