@@ -27,6 +27,42 @@ set -eo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
+# Load local Expo env vars into the shell so xcodebuild script phases and
+# Expo config generation inherit the same Firebase/RevenueCat values used in
+# day-to-day development.
+if [ -f ".env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ".env"
+  set +a
+fi
+
+if [ -f ".env.local" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ".env.local"
+  set +a
+fi
+
+REQUIRED_ENV_VARS=(
+  EXPO_PUBLIC_FIREBASE_API_KEY
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID
+  EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
+  EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+  EXPO_PUBLIC_FIREBASE_APP_ID
+  EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID
+  EXPO_PUBLIC_REVENUECAT_IOS_KEY
+)
+
+for REQUIRED_ENV_VAR in "${REQUIRED_ENV_VARS[@]}"; do
+  if [ -z "${!REQUIRED_ENV_VAR}" ]; then
+    echo "❌ Missing required environment variable: $REQUIRED_ENV_VAR"
+    echo "   Ensure your local .env/.env.local file is present before archiving."
+    exit 1
+  fi
+done
+
 # Read scheme name from workspace
 if [ -d "ios" ]; then
   WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | head -n 1)
@@ -82,17 +118,23 @@ echo "   Build number: $BUILD_NUMBER → $NEW_BUILD"
 echo "   ✅ Incremented"
 
 # Keep native targets in sync with app.json so the app target and widget
-# extension ship with the same CFBundleVersion for TestFlight/App Store.
+# extension ship with the same release metadata for TestFlight/App Store.
 python3 << PYEOF
 import re
 from pathlib import Path
 
 scheme = "$SCHEME"
+app_version = "$APP_VERSION"
 new_build = "$NEW_BUILD"
 
 pbxproj = Path("ios") / f"{scheme}.xcodeproj" / "project.pbxproj"
 if pbxproj.exists():
     content = pbxproj.read_text()
+    content = re.sub(
+        r"MARKETING_VERSION = [0-9.]+;",
+        f"MARKETING_VERSION = {app_version};",
+        content,
+    )
     content = re.sub(
         r"CURRENT_PROJECT_VERSION = \d+;",
         f"CURRENT_PROJECT_VERSION = {new_build};",
