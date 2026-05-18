@@ -9,6 +9,21 @@ Enable the hard paywall for new users only, while preserving:
 - restore-purchase flows
 - fast rollback capability
 
+## Current State
+
+As of 2026-05-18:
+
+- Firebase rollout config exists and is still `enabled=false`
+- existing users are protected by durable `users/{uid}/access/state` docs
+- telemetry is live and confirmed writing
+- current observed telemetry baseline:
+  - metrics summary docs: `1`
+  - telemetry event docs: `0`
+  - app opens recorded: `1`
+  - paywall views recorded: `2`
+- latest release candidate archive prepared locally: `2.2.2 (50)`
+- that archive includes the paywall offer-copy improvements, but TestFlight upload is still pending Apple account / signing availability in Xcode
+
 ## Engineering Sequence
 
 ### Phase 1 — Safe groundwork
@@ -69,13 +84,13 @@ Use this guide during the manual setup phase:
 3. Enable the rollout in dry-run first:
 
 ```bash
-npm run paywall:rollout -- --enabled=true --grandfather-before=2026-05-18T00:00:00.000Z --rollout-version=1
+npm run paywall:activate -- --grandfather-before=2026-05-18T00:00:00.000Z --rollout-version=1
 ```
 
 4. Write the activation only when all checks are green:
 
 ```bash
-npm run paywall:rollout -- --enabled=true --grandfather-before=2026-05-18T00:00:00.000Z --rollout-version=1 --write
+npm run paywall:activate -- --grandfather-before=2026-05-18T00:00:00.000Z --rollout-version=1 --write
 ```
 
 ## Monitoring After Activation
@@ -102,7 +117,7 @@ npm run paywall:rollout
 Immediate rollback is a config change:
 
 ```bash
-npm run paywall:rollout -- --enabled=false --grandfather-before=2026-05-18T00:00:00.000Z --rollout-version=1 --write
+npm run paywall:rollback -- --grandfather-before=2026-05-18T00:00:00.000Z --rollout-version=1 --write
 ```
 
 That restores open access for non-Pro users without deleting any telemetry or grandfather docs.
@@ -113,3 +128,4 @@ That restores open access for non-Pro users without deleting any telemetry or gr
 - `grandfatherBefore` is the contract that protects the existing install base.
 - `rolloutVersion` should be incremented only when we intentionally redefine the rollout boundary or logic.
 - Use [`paywall-telemetry-reference.md`](/Users/mahmoudalaaeldin/Documents/Projects/VibeCoding/Projects/QuranApp-paywall-audit/docs/architecture/paywall-telemetry-reference.md) as the guide for interpreting the funnel report after release.
+- The onboarding hard-paywall path already exists in code. New users will only be gated after `enabled` is explicitly flipped to `true`.

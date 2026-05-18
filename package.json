@@ -13,6 +13,8 @@
     "report:firebase-usage": "node scripts/report-firebase-usage.js",
     "report:paywall-funnel": "node scripts/report-paywall-funnel.js",
     "paywall:rollout": "node scripts/manage-paywall-rollout.js",
+    "paywall:activate": "node scripts/activate-paywall-rollout.js",
+    "paywall:rollback": "node scripts/rollback-paywall-rollout.js",
     "backfill:grandfather-access": "node scripts/backfill-grandfathered-access.js",
     "lint": "eslint .",
     "clean": "rm -rf node_modules && npm cache clean --force && watchman watch-del-all && rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* && npm install",

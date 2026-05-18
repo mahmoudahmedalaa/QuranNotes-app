@@ -1,6 +1,6 @@
-# Paywall Rollout Status — 2026-05-17
+# Paywall Rollout Status — 2026-05-18
 
-This document captures the live operational state after the initial rollout groundwork was applied.
+This document captures the live operational state after rollout groundwork, telemetry validation, and the latest paywall UX patch.
 
 ## Firebase Status
 
@@ -12,19 +12,22 @@ This document captures the live operational state after the initial rollout grou
 
 ## User Protection Status
 
-- total auth users: 72
+- total auth users: 73
 - durable access docs written: 72
 - users grandfathered by the current cutoff: 72
 - existing users newly gated: 0
 
 ## Telemetry Status
 
-- metrics summary docs: 0
+- metrics summary docs: 1
 - telemetry event docs: 0
+- app opens recorded: 1
+- users seen in last 7 days: 1
+- paywall views recorded in summary docs: 2
 
-This is expected until a released build with the telemetry code is actively used by real users.
+This confirms the telemetry path is now writing from a released build.
 
-The funnel report currently resolves to an all-zero baseline:
+The funnel report now shows a minimal but valid baseline:
 
 ```bash
 npm run report:paywall-funnel
@@ -36,8 +39,17 @@ The rollout foundation is live, but the hard paywall is not active.
 
 - remote control exists
 - existing users are protected
-- telemetry tables are ready
+- telemetry tables are live
 - no monetization behavior has changed yet
+
+## Release Candidate Status
+
+- latest local archive: `2.2.2 (50)`
+- includes:
+  - intro-offer trial messaging support on paywalls
+  - live package pricing from RevenueCat products
+  - clearer unavailable-product fallback messaging
+- TestFlight upload is still pending because the non-interactive export/upload path could not access an Apple distribution account/certificate in this session
 
 ## Useful Commands
 
