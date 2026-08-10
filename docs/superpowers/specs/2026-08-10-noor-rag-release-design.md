@@ -1,7 +1,7 @@
 # QuranNotes Noor RAG Release Design
 
 **Date:** 2026-08-10
-**Status:** Owner-approved architecture; written-spec review pending
+**Status:** Owner-approved specification
 **Release carrier:** `codex/noor-rag-release`
 **Release base:** `8f36182b7def8140ddd87232b7d4a40b9dc02ba8`
 **Production baseline:** App Store `2.2.2`; best matching source commit `33c2d9baf`
@@ -150,7 +150,7 @@ Before public activation, the release must record the exact upstream resource ID
 
 ### Verse-level AI
 
-The app submits a canonical source, surah, verse, operation, and optional question. The backend retrieves the exact commentary range. It does not use vector search when the verse and source are already known.
+The app submits a canonical source, surah, verse, operation, and optional question. The backend retrieves the exact commentary range. It does not use vector search when the verse and source are already known. Verse lookup records carry deterministic ordered chunk IDs: canonical units sort by verse start, verse end, and canonical ID, then chunks by numeric index. The backend deduplicates in that order and adds whole chunks until the next would exceed the configured evidence-character budget; it never slices or lexically reranks source text. Corpus activation requires the evidence budget to fit at least the manifest's largest finalized chunk, so even very long shared-range commentary yields a stable, nonempty bounded prefix.
 
 For Al-Sa'di, Gemini may explain the Arabic commentary in English, but the source passage remains Arabic and the response cites Al-Sa'di explicitly.
 
@@ -205,6 +205,7 @@ interface NoorAnswer {
     | 'quota_exceeded'
     | 'invalid_request'
     | 'temporarily_unavailable';
+  nextResetAt?: string; // required ISO-8601 UTC timestamp only for quota_exceeded
   citations: Array<{
     chunkId: string;
     canonicalUnitId: string;
@@ -245,7 +246,7 @@ Every substantive answer paragraph must contain at least one accepted citation m
 - Paid Monthly, Annual, and Lifetime users receive five requests per minute and 50 successful AI answers per UTC day across Noor and verse-level AI. Grandfathered accounts receive three successful answers per UTC day. Owner-allowlisted QA accounts receive 100 per UTC day while the backend is dark.
 - Usage reservation and completion/refund are transactional so concurrent calls cannot bypass limits or charge failed requests permanently. A reservation expires after two minutes if not finalized.
 - A validated request ID is idempotent for ten minutes. The completed typed response is stored only for that retry window, excluded from logs, and deleted by Firestore TTL. Repeating the request ID returns the same response without another quota charge or model call.
-- A quota denial returns `quota_exceeded` with the next UTC reset time. `not_entitled` directs the client to the paywall without exposing provider internals.
+- A quota denial returns `quota_exceeded` with `nextResetAt` as the next ISO-8601 UTC reset time. Other statuses omit `nextResetAt`. `not_entitled` directs the client to the paywall without exposing provider internals.
 - The new paywall and App Store copy must not call AI answers or AI insights "unlimited." It describes access to Noor AI and verse explanations without promising an uncapped service. Existing `Unlimited AI Quran Insights` and `Unlock Unlimited AI Insights` copy is replaced in this release. The 50-answer daily fair-use limit and reset behavior are disclosed in purchase-facing terms before payment.
 - Global maximum instances, timeout, output-token limit, project quota, budget alerts, and a server kill switch bound failure and spend.
 
@@ -286,7 +287,7 @@ Production telemetry records:
 
 - request ID;
 - operation mode;
-- a keyed-HMAC account pseudonym, rotated with the telemetry key and not reversible without the secret;
+- a keyed-HMAC account pseudonym plus required non-secret key-version identifier, rotated with the telemetry key and not reversible without the secret;
 - entitlement class;
 - backend/model/corpus/prompt versions;
 - retrieval duration and returned chunk IDs;
@@ -296,7 +297,7 @@ Production telemetry records:
 
 Production telemetry does not record raw questions, answers, callable payloads, provider response/error bodies, notes, mood, recordings, email addresses, or partial religious-query text. Validated client request IDs are UUIDs only; server trace IDs are generated independently.
 
-Safety telemetry is retained for 30 days, restricted to production operators, and deleted through the documented retention job. Account deletion removes entitlement cache, quota, idempotency, and account-linked operational records. Broader engagement instrumentation remains in the separate analytics scope and is not added by this release.
+Safety telemetry is retained for 30 days, restricted to production operators, and deleted through the documented retention job. A server-only bounded UID-to-pseudonym/version subject record preserves deletion across HMAC-key rotations. Account deletion removes entitlement cache, quota, idempotency, every mapped telemetry pseudonym, and the subject record. Broader engagement instrumentation remains in the separate analytics scope and is not added by this release.
 
 ## Billing Consolidation
 
