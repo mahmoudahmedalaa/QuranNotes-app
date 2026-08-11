@@ -1,6 +1,6 @@
 export const EMBEDDING_MODEL = 'gemini-embedding-2' as const;
 export const EMBEDDING_DIMENSION = 768 as const;
-export const EMBEDDING_CONCURRENCY = 16 as const;
+export const EMBEDDING_CONCURRENCY = 32 as const;
 
 export interface Embedder {
     embed(text: string): Promise<readonly number[]>;

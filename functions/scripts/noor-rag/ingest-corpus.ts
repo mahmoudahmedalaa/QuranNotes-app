@@ -3,6 +3,7 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import {
     EMBEDDING_DIMENSION,
@@ -20,6 +21,7 @@ export const VERTEX_LOCATION = 'global' as const;
 const GENERATION_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BATCH_WRITES = 450;
 const MAX_CHUNK_BATCH_WRITES = 200;
+const FIRESTORE_WRITE_RETRY_DELAY_MS = 100;
 
 export type IngestArtifacts = CorpusArtifacts;
 
@@ -139,6 +141,36 @@ export function assertProductionArtifact(manifest: CorpusManifest): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function cachedChunkMetadataReader(
+    load: () => Promise<ReadonlyMap<string, Record<string, unknown>>>,
+): (path: string) => Promise<Record<string, unknown> | null> {
+    let cached: Promise<ReadonlyMap<string, Record<string, unknown>>> | undefined;
+    return async (path: string): Promise<Record<string, unknown> | null> => {
+        cached ??= load();
+        return (await cached).get(path) ?? null;
+    };
+}
+
+export async function writeWithSingleTransientRetry(
+    write: () => Promise<void>,
+    retryDelayMs = FIRESTORE_WRITE_RETRY_DELAY_MS,
+): Promise<void> {
+    try {
+        await write();
+        return;
+    } catch (error: unknown) {
+        if (!isRecord(error) || (error.code !== 4 && error.code !== 14)) {
+            throw new Error('Firestore write failed');
+        }
+    }
+    await delay(retryDelayMs);
+    try {
+        await write();
+    } catch {
+        throw new Error('Firestore write failed');
+    }
 }
 
 function canSkipChunk(chunk: CorpusChunk, metadata: Record<string, unknown> | null): boolean {
@@ -413,6 +445,12 @@ async function productionAdapters(options: IngestOptions): Promise<{
     const app = initializeApp({ credential, projectId: project }, `noor-ingest-${Date.now()}`);
     const firestore = getFirestore(app);
     const client = new GoogleGenAI({ vertexai: true, project, location });
+    const readChunkMetadata = cachedChunkMetadataReader(async () => {
+        const snapshot = await firestore.collection(`corpora/${options.version}/chunks`).select(
+            'contentHash', 'embeddingModel', 'embeddingDimension', 'embeddingComplete', 'embeddingMetadata',
+        ).get();
+        return new Map(snapshot.docs.map(document => [document.ref.path, document.data()]));
+    });
     return {
         embedder: createVertexEmbedder(client.models),
         repository: {
@@ -420,10 +458,7 @@ async function productionAdapters(options: IngestOptions): Promise<{
                 const snapshot = await firestore.doc(path).get();
                 return snapshot.exists ? (snapshot.data() ?? null) : null;
             },
-            readChunkMetadata: async (path: string): Promise<Record<string, unknown> | null> => {
-                const snapshot = await firestore.doc(path).get();
-                return snapshot.exists ? (snapshot.data() ?? null) : null;
-            },
+            readChunkMetadata,
             writeBatch: async (writes: readonly RepositoryWrite[]): Promise<void> => {
                 if (writes.length > MAX_BATCH_WRITES) {
                     throw new Error(`Firestore batch exceeds ${MAX_BATCH_WRITES} writes`);
@@ -432,10 +467,10 @@ async function productionAdapters(options: IngestOptions): Promise<{
                 for (const write of writes) {
                     batch.set(firestore.doc(write.path), write.data, { merge: true });
                 }
-                await batch.commit();
+                await writeWithSingleTransientRetry(async () => { await batch.commit(); });
             },
             writeManifest: async (path: string, data: Readonly<Record<string, unknown>>): Promise<void> => {
-                await firestore.doc(path).set(data, { merge: true });
+                await writeWithSingleTransientRetry(async () => { await firestore.doc(path).set(data, { merge: true }); });
             },
         },
     };

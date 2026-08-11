@@ -6,8 +6,10 @@ import {
     LOCKED_CORPUS_VERSION,
     LOCKED_PROJECT,
     ingestCorpus,
+    cachedChunkMetadataReader,
     parseIngestArguments,
     requireProductionVertexConfig,
+    writeWithSingleTransientRetry,
     type IngestArtifacts,
     type IngestRepository,
     type RepositoryWrite,
@@ -89,6 +91,36 @@ const embedder: Embedder = {
 };
 
 describe('Noor corpus ingestion', () => {
+    it('loads resumable chunk metadata once and serves subsequent paths from memory', async () => {
+        let loads = 0;
+        const read = cachedChunkMetadataReader(async () => {
+            loads += 1;
+            return new Map([['corpora/v/chunks/c_0', { contentHash: 'hash-0' }]]);
+        });
+
+        assert.deepEqual(await read('corpora/v/chunks/c_0'), { contentHash: 'hash-0' });
+        assert.equal(await read('corpora/v/chunks/missing'), null);
+        assert.equal(loads, 1);
+    });
+
+    it('retries one transient Firestore write and never retries nontransient failures', async () => {
+        for (const code of [4, 14]) {
+            let transientAttempts = 0;
+            await writeWithSingleTransientRetry(async () => {
+                transientAttempts += 1;
+                if (transientAttempts === 1) throw { code };
+            }, 0);
+            assert.equal(transientAttempts, 2);
+        }
+
+        let attempts = 0;
+        await assert.rejects(writeWithSingleTransientRetry(async () => {
+            attempts += 1;
+            throw { code: 7, details: 'secret/provider/path' };
+        }, 0), /^Error: Firestore write failed$/);
+        assert.equal(attempts, 1);
+    });
+
     it('defaults to an offline dry-run and makes zero adapter calls', async () => {
         const repository = new FakeRepository();
         let embedCalls = 0;

@@ -57,7 +57,7 @@ describe('Noor corpus embeddings', () => {
         assert.throws(() => validateEmbedding([...Array<number>(767).fill(0), Number.POSITIVE_INFINITY]), /finite/);
     });
 
-    it('preserves deterministic order while bounding concurrency at sixteen', async () => {
+    it('preserves deterministic order while bounding concurrency at thirty-two', async () => {
         let active = 0;
         let maximumActive = 0;
         const embedder: Embedder = {
@@ -70,10 +70,10 @@ describe('Noor corpus embeddings', () => {
             },
         };
 
-        const texts = Array.from({ length: 20 }, (_, index) => String(index));
+        const texts = Array.from({ length: 40 }, (_, index) => String(index));
         const results = await embedWithConcurrency(texts, embedder);
 
-        assert.equal(maximumActive, 16);
+        assert.equal(maximumActive, 32);
         assert.deepEqual(results.map(result => result.ok ? result.embedding[0] : 'failed'), texts.map(Number));
     });
 });
