@@ -21,6 +21,7 @@ export const VERTEX_LOCATION = 'global' as const;
 const GENERATION_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BATCH_WRITES = 450;
 const MAX_CHUNK_BATCH_WRITES = 200;
+const MAX_METADATA_BATCH_WRITES = 100; // ponytail: small batches avoid Firestore payload/deadline failures.
 const FIRESTORE_WRITE_RETRY_DELAY_MS = 100;
 
 export type IngestArtifacts = CorpusArtifacts;
@@ -335,7 +336,7 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
     ];
     const plannedDataWrites = pending.length + remainingWrites.length;
     const batchCount = Math.ceil(pending.length / MAX_CHUNK_BATCH_WRITES)
-        + Math.ceil(remainingWrites.length / MAX_BATCH_WRITES);
+        + Math.ceil(remainingWrites.length / MAX_METADATA_BATCH_WRITES);
     safeReport(input, 'pre-mutation', {
         counts,
         plannedDataWrites,
@@ -378,8 +379,8 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
         ));
         if (writeFailed) break;
     }
-    for (let start = 0; !writeFailed && start < remainingWrites.length; start += MAX_BATCH_WRITES) {
-        const batch = remainingWrites.slice(start, start + MAX_BATCH_WRITES);
+    for (let start = 0; !writeFailed && start < remainingWrites.length; start += MAX_METADATA_BATCH_WRITES) {
+        const batch = remainingWrites.slice(start, start + MAX_METADATA_BATCH_WRITES);
         try {
             await input.repository.writeBatch(batch);
             written += batch.length;

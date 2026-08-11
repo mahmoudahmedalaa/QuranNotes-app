@@ -287,10 +287,10 @@ describe('Noor corpus ingestion', () => {
         assert.deepEqual(repository.document(manifestPath)?.failedWrites, []);
     });
 
-    it('never exceeds 450 deterministic upserts in one repository batch', async () => {
+    it('caps metadata batches at 100 deterministic upserts', async () => {
         const many = artifacts();
         const template = many.units[0]!;
-        many.units = Array.from({ length: 451 }, (_, index) => ({
+        many.units = Array.from({ length: 251 }, (_, index) => ({
             ...template,
             canonicalUnitId: `u_${String(index).padStart(3, '0')}`,
         }));
@@ -308,8 +308,8 @@ describe('Noor corpus ingestion', () => {
         });
 
         assert.equal(result.complete, true);
-        assert.deepEqual(repository.batches.map(batch => batch.length), [450, 1]);
+        assert.deepEqual(repository.batches.map(batch => batch.length), [100, 100, 51]);
         assert.equal(repository.batches[0]![0]!.path, `corpora/${LOCKED_CORPUS_VERSION}/units/u_000`);
-        assert.equal(repository.batches[1]![0]!.path, `corpora/${LOCKED_CORPUS_VERSION}/units/u_450`);
+        assert.equal(repository.batches[2]![0]!.path, `corpora/${LOCKED_CORPUS_VERSION}/units/u_200`);
     });
 });
