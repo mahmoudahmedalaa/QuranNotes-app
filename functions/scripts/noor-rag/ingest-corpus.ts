@@ -19,6 +19,7 @@ export const LOCKED_CORPUS_VERSION = '2026-08-10-v1' as const;
 export const VERTEX_LOCATION = 'global' as const;
 const GENERATION_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BATCH_WRITES = 450;
+const MAX_CHUNK_BATCH_WRITES = 200;
 
 export type IngestArtifacts = CorpusArtifacts;
 
@@ -301,7 +302,7 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
         ...input.artifacts.lookups.map(lookup => lookupWrite(input.options.version, lookup)),
     ];
     const plannedDataWrites = pending.length + remainingWrites.length;
-    const batchCount = Math.ceil(pending.length / MAX_BATCH_WRITES)
+    const batchCount = Math.ceil(pending.length / MAX_CHUNK_BATCH_WRITES)
         + Math.ceil(remainingWrites.length / MAX_BATCH_WRITES);
     safeReport(input, 'pre-mutation', {
         counts,
@@ -315,11 +316,12 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
 
     const failedWrites: string[] = [];
     let written = 0;
+    let writeFailed = false;
     await input.repository.writeManifest(manifestPath, manifestData(
         input.artifacts, 'in_progress', skippedIds.size, written, failedChunks, failedWrites,
     ));
-    for (let start = 0; start < pending.length; start += MAX_BATCH_WRITES) {
-        const chunks = pending.slice(start, start + MAX_BATCH_WRITES);
+    for (let start = 0; start < pending.length; start += MAX_CHUNK_BATCH_WRITES) {
+        const chunks = pending.slice(start, start + MAX_CHUNK_BATCH_WRITES);
         const embedded = await embedWithConcurrency(chunks.map(
             chunk => formatEmbeddingDocument(chunk.sourceTitle, chunk.retrievalText),
         ), input.embedder);
@@ -336,23 +338,27 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
                 written += batch.length;
             }
         } catch {
-            failedWrites.push(...batch.map(write => write.path));
+            failedWrites.push('chunk-batch:write_failed');
+            writeFailed = true;
         }
         await input.repository.writeManifest(manifestPath, manifestData(
             input.artifacts, 'in_progress', skippedIds.size, written, failedChunks, failedWrites,
         ));
+        if (writeFailed) break;
     }
-    for (let start = 0; start < remainingWrites.length; start += MAX_BATCH_WRITES) {
+    for (let start = 0; !writeFailed && start < remainingWrites.length; start += MAX_BATCH_WRITES) {
         const batch = remainingWrites.slice(start, start + MAX_BATCH_WRITES);
         try {
             await input.repository.writeBatch(batch);
             written += batch.length;
         } catch {
-            failedWrites.push(...batch.map(write => write.path));
+            failedWrites.push('data-batch:write_failed');
+            writeFailed = true;
         }
         await input.repository.writeManifest(manifestPath, manifestData(
             input.artifacts, 'in_progress', skippedIds.size, written, failedChunks, failedWrites,
         ));
+        if (writeFailed) break;
     }
     const complete = failedChunks.length === 0
         && failedWrites.length === 0

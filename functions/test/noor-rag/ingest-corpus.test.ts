@@ -51,6 +51,7 @@ class FakeRepository implements IngestRepository {
     readonly calls: string[] = [];
     readonly batches: RepositoryWrite[][] = [];
     private readonly documents = new Map<string, Record<string, unknown>>();
+    failBatchAt: number | undefined;
     constructor(existing: Readonly<Record<string, unknown>> = {}) {
         Object.entries(existing).forEach(([path, data]) => {
             if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
@@ -69,11 +70,17 @@ class FakeRepository implements IngestRepository {
     async writeBatch(writes: readonly RepositoryWrite[]): Promise<void> {
         this.calls.push('batch');
         this.batches.push([...writes]);
+        if (this.batches.length === this.failBatchAt) {
+            throw new Error('permission denied: secret/provider/path detail');
+        }
         writes.forEach(write => this.documents.set(write.path, { ...write.data }));
     }
     async writeManifest(path: string, data: Readonly<Record<string, unknown>>): Promise<void> {
         this.calls.push(`manifest:${path}:${String(data.status)}`);
         this.documents.set(path, { ...data });
+    }
+    document(path: string): Record<string, unknown> | undefined {
+        return this.documents.get(path);
     }
 }
 
@@ -167,7 +174,7 @@ describe('Noor corpus ingestion', () => {
             options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
             artifacts: many, repository,
             embedder: { embed: async (text) => {
-                if (text.endsWith('retrieval 450')) {
+                if (text.endsWith('retrieval 200')) {
                     sawFirstGroupCheckpoint = repository.calls.filter(call => call === 'batch').length === 1
                         && repository.calls.filter(call => call.endsWith(':in_progress')).length >= 2;
                 }
@@ -178,7 +185,7 @@ describe('Noor corpus ingestion', () => {
 
         assert.equal(result.complete, true);
         assert.equal(sawFirstGroupCheckpoint, true);
-        assert.deepEqual(repository.batches.slice(0, 2).map(batch => batch.length), [450, 1]);
+        assert.deepEqual(repository.batches.slice(0, 3).map(batch => batch.length), [200, 200, 51]);
         assert.ok(repository.batches[0]!.every(write => write.path.includes('/chunks/')));
         assert.ok(repository.batches[1]!.every(write => write.path.includes('/chunks/')));
     });
@@ -219,6 +226,33 @@ describe('Noor corpus ingestion', () => {
         });
         assert.equal(resumed.complete, true);
         assert.equal(resumed.skipped, 2);
+    });
+
+    it('stops after a sanitized chunk write failure and clears stale failures on retry', async () => {
+        const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
+        const repository = new FakeRepository({
+            [manifestPath]: { status: 'incomplete', failedWrites: ['stale/provider/path'] },
+        });
+        repository.failBatchAt = 1;
+
+        const failed = await ingestCorpus({
+            options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
+            artifacts: artifacts(), repository, embedder, report: () => undefined,
+        });
+
+        assert.equal(failed.complete, false);
+        assert.deepEqual(failed.failedWrites, ['chunk-batch:write_failed']);
+        assert.equal(repository.batches.length, 1);
+
+        repository.failBatchAt = undefined;
+        const resumed = await ingestCorpus({
+            options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
+            artifacts: artifacts(), repository, embedder, report: () => undefined,
+        });
+
+        assert.equal(resumed.complete, true);
+        assert.deepEqual(resumed.failedWrites, []);
+        assert.deepEqual(repository.document(manifestPath)?.failedWrites, []);
     });
 
     it('never exceeds 450 deterministic upserts in one repository batch', async () => {
