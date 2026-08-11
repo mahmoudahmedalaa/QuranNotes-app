@@ -9,7 +9,7 @@ export type NoorPolicyCategory =
 
 const PROMPT_INJECTION = /(?:ignore|disregard|override|bypass|reveal|show|repeat).{0,100}(?:system|developer|hidden|prior).{0,40}(?:instruction|prompt|message|rule)|jailbreak|prompt\s+injection/i;
 const MEDICAL_LEGAL_CRISIS = /(?:overdos|suicid|self[- ]harm|medical emergency|what medicine|diagnos|legal advice|lawyer|attorney|arrested|court case|criminal charge)/i;
-const UNSAFE_HADITH_INTENT = /(?:(?:invent|fabricate|make up|create|write).{0,60}hadith|(?:authenticate|verify.{0,40}authenticity).{0,40}hadith|is (?:this|the) hadith authentic|(?:اخترع|اختلق|لفق|اصنع).{0,40}حديث|(?:هل.{0,20}الحديث صحيح|تحقق.{0,30}صحة.{0,30}الحديث))/i;
+const UNSAFE_HADITH_INTENT = /(?:(?:write|create|generate|compose|author|produce|invent|fabricate|make up).{0,60}hadith|(?:authenticate|verify.{0,40}authenticity).{0,40}hadith|is (?:this|the) hadith authentic|(?:اكتب|أنشئ|انشئ|ألّف|الف|صغ|ابتكر|اخترع|اختلق|افتر).{0,40}حديث|(?:هل.{0,20}الحديث صحيح|تحقق.{0,30}صحة.{0,30}الحديث))/i;
 const KNOWN_TAFSIR_SOURCE = /(?:ibn kathir|al-sa['’]?di|ابن كثير|السعدي)/i;
 const HADITH_MENTION = /(?:hadith|حديث)/i;
 const CITED_IN_VERSE_CONTEXT = /(?:(?:cit|mention|explain).{0,70}(?:this|the) verse|(?:ذكر|أورد|استشهد|شرح).{0,70}(?:تفسير )?(?:هذه|تلك) الآية|تفسير (?:هذه|تلك) الآية)/i;
