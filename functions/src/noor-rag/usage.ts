@@ -109,9 +109,13 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
 
 function asDate(value: unknown): Date {
     if (value instanceof Date && Number.isFinite(value.getTime())) return new Date(value.getTime());
-    if (isRecord(value) && typeof value.toMillis === 'function') {
-        const millis = (value.toMillis as () => unknown)();
-        if (typeof millis === 'number' && Number.isFinite(millis)) return new Date(millis);
+    try {
+        if (isRecord(value) && typeof value.toMillis === 'function') {
+            const millis = (value.toMillis as () => unknown)();
+            if (typeof millis === 'number' && Number.isFinite(millis)) return new Date(millis);
+        }
+    } catch {
+        return invalidState();
     }
     return invalidState();
 }
@@ -155,7 +159,7 @@ function parseReservation(value: unknown): Reservation {
     return { requestId: value.requestId, ownerId: value.ownerId, expiresAtMs: value.expiresAtMs };
 }
 
-function parseDaily(value: unknown, expectedDate: string, resetAt: Date): DailyState {
+function parseDaily(value: unknown, expectedDate: string, resetAt: Date, nowMs: number): DailyState {
     if (value === null) return { dateUtc: expectedDate, answered: 0, reservations: [], expiresAt: resetAt };
     if (!isRecord(value)
         || !hasExactKeys(value, ['dateUtc', 'answered', 'reservations', 'expiresAt'])
@@ -168,15 +172,19 @@ function parseDaily(value: unknown, expectedDate: string, resetAt: Date): DailyS
         || value.reservations.length > DAILY_ANSWER_LIMITS.owner_qa) return invalidState();
     const expiresAt = asDate(value.expiresAt);
     if (expiresAt.getTime() !== resetAt.getTime()) return invalidState();
+    const reservations = value.reservations.map(parseReservation);
+    if (reservations.some((reservation) => reservation.expiresAtMs > nowMs + LEASE_DURATION_MS)) {
+        return invalidState();
+    }
     return {
         dateUtc: expectedDate,
         answered: value.answered,
-        reservations: value.reservations.map(parseReservation),
+        reservations,
         expiresAt,
     };
 }
 
-function parseRate(value: unknown, defaultExpiry: Date): RateState {
+function parseRate(value: unknown, defaultExpiry: Date, nowMs: number): RateState {
     if (value === null) return { attemptsMs: [], expiresAt: defaultExpiry };
     if (!isRecord(value)
         || !hasExactKeys(value, ['attemptsMs', 'expiresAt'])
@@ -187,10 +195,38 @@ function parseRate(value: unknown, defaultExpiry: Date): RateState {
     for (let index = 1; index < attemptsMs.length; index += 1) {
         if ((attemptsMs[index - 1] ?? 0) > (attemptsMs[index] ?? 0)) return invalidState();
     }
-    return { attemptsMs, expiresAt: asDate(value.expiresAt) };
+    if (attemptsMs.some((attempt) => attempt > nowMs)) return invalidState();
+    const expiresAt = asDate(value.expiresAt);
+    const newestAttempt = attemptsMs[attemptsMs.length - 1];
+    if (newestAttempt !== undefined && expiresAt.getTime() !== newestAttempt + RATE_LIMIT_WINDOW_MS) {
+        return invalidState();
+    }
+    return { attemptsMs, expiresAt };
 }
 
-function parseIdempotency(value: unknown): IdempotencyState | null {
+function boundedCodePointLength(value: string, maximum: number): boolean {
+    let length = 0;
+    for (const _codePoint of value) {
+        length += 1;
+        if (length > maximum) return false;
+    }
+    return true;
+}
+
+function parseBoundedAnswer(value: unknown): NoorAnswer {
+    let response: NoorAnswer;
+    try { response = parseNoorAnswer(value); } catch { return invalidState(); }
+    if (!boundedCodePointLength(response.answer, 8_000) || response.citations.length > 8) return invalidState();
+    for (const citation of response.citations) {
+        if (!boundedCodePointLength(citation.chunkId, 256)
+            || !boundedCodePointLength(citation.canonicalUnitId, 256)
+            || !boundedCodePointLength(citation.corpusVersion, 256)
+            || !boundedCodePointLength(citation.sourceTitle, 128)) return invalidState();
+    }
+    return response;
+}
+
+function parseIdempotency(value: unknown, nowMs: number): IdempotencyState | null {
     if (value === null) return null;
     if (!isRecord(value) || typeof value.status !== 'string') return invalidState();
     if (value.status === 'pending') {
@@ -200,6 +236,7 @@ function parseIdempotency(value: unknown): IdempotencyState | null {
             || !/^\d{4}-\d{2}-\d{2}$/.test(value.usageDateUtc)
             || typeof value.leaseExpiresAtMs !== 'number'
             || !Number.isSafeInteger(value.leaseExpiresAtMs)) return invalidState();
+        if (value.leaseExpiresAtMs > nowMs + LEASE_DURATION_MS) return invalidState();
         try { parseIdentifier(value.ownerId); } catch { return invalidState(); }
         if (asDate(value.expiresAt).getTime() !== value.leaseExpiresAtMs) return invalidState();
         return {
@@ -212,10 +249,10 @@ function parseIdempotency(value: unknown): IdempotencyState | null {
             || typeof value.finalizedBy !== 'string'
             || typeof value.responseExpiresAtMs !== 'number'
             || !Number.isSafeInteger(value.responseExpiresAtMs)) return invalidState();
+        if (value.responseExpiresAtMs > nowMs + COMPLETED_REPLAY_MS) return invalidState();
         try { parseIdentifier(value.finalizedBy); } catch { return invalidState(); }
         if (asDate(value.expiresAt).getTime() !== value.responseExpiresAtMs) return invalidState();
-        let response: NoorAnswer;
-        try { response = parseNoorAnswer(value.response); } catch { return invalidState(); }
+        const response = parseBoundedAnswer(value.response);
         return {
             status: 'completed', finalizedBy: value.finalizedBy, response,
             responseExpiresAtMs: value.responseExpiresAtMs, expiresAt: new Date(value.responseExpiresAtMs),
@@ -251,9 +288,9 @@ export async function claimRequest(input: ClaimInput): Promise<ClaimResult> {
             transaction.get(documentPaths.rate),
             transaction.get(documentPaths.idempotency),
         ]);
-        const daily = parseDaily(dailyValue, dateUtc, resetAt);
-        const rate = parseRate(rateValue, new Date(nowMs + RATE_LIMIT_WINDOW_MS));
-        const idempotency = parseIdempotency(idempotencyValue);
+        const daily = parseDaily(dailyValue, dateUtc, resetAt, nowMs);
+        const rate = parseRate(rateValue, new Date(nowMs + RATE_LIMIT_WINDOW_MS), nowMs);
+        const idempotency = parseIdempotency(idempotencyValue, nowMs);
         const reservations = daily.reservations.filter((reservation) => reservation.expiresAtMs > nowMs);
         const attemptsMs = rate.attemptsMs.filter((attempt) => attempt > nowMs - RATE_LIMIT_WINDOW_MS);
         const persistPruning = (): void => {
@@ -261,7 +298,8 @@ export async function claimRequest(input: ClaimInput): Promise<ClaimResult> {
                 transaction.set(documentPaths.daily, { ...daily, reservations, expiresAt: resetAt } satisfies DailyState);
             }
             if (attemptsMs.length !== rate.attemptsMs.length) {
-                const expiryMs = attemptsMs[0] === undefined ? nowMs : attemptsMs[0] + RATE_LIMIT_WINDOW_MS;
+                const newestAttempt = attemptsMs[attemptsMs.length - 1];
+                const expiryMs = newestAttempt === undefined ? nowMs : newestAttempt + RATE_LIMIT_WINDOW_MS;
                 transaction.set(documentPaths.rate, { attemptsMs, expiresAt: new Date(expiryMs) } satisfies RateState);
             }
         };
@@ -297,7 +335,7 @@ export async function claimRequest(input: ClaimInput): Promise<ClaimResult> {
             status: 'pending', ownerId: invocationId, usageDateUtc: dateUtc,
             leaseExpiresAtMs, expiresAt: new Date(leaseExpiresAtMs),
         };
-        transaction.set(documentPaths.rate, { attemptsMs, expiresAt: new Date(attemptsMs[0]! + RATE_LIMIT_WINDOW_MS) } satisfies RateState);
+        transaction.set(documentPaths.rate, { attemptsMs, expiresAt: new Date(attemptsMs[attemptsMs.length - 1]! + RATE_LIMIT_WINDOW_MS) } satisfies RateState);
         transaction.set(documentPaths.daily, { ...daily, reservations, expiresAt: resetAt } satisfies DailyState);
         transaction.set(documentPaths.idempotency, pending);
         return { kind: 'claimed', leaseOwnerId: invocationId, leaseExpiresAt: new Date(leaseExpiresAtMs).toISOString() };
@@ -306,7 +344,7 @@ export async function claimRequest(input: ClaimInput): Promise<ClaimResult> {
 
 function assertFinalizeStatus(response: NoorAnswer, expectedAnswered: boolean): NoorAnswer {
     let parsed: NoorAnswer;
-    try { parsed = parseNoorAnswer(response); } catch { throw new Error('Invalid Noor final response'); }
+    try { parsed = parseBoundedAnswer(response); } catch { throw new Error('Invalid Noor final response'); }
     if ((parsed.status === 'answered') !== expectedAnswered) throw new Error('Invalid Noor final response status');
     return parsed;
 }
@@ -322,7 +360,7 @@ async function finalize(input: FinalizeInput, expectedAnswered: boolean): Promis
     const idempotencyPath = `noorIdempotency/${uid}_${requestId}`;
 
     return input.repository.runTransaction(async (transaction): Promise<FinalizeResult> => {
-        const idempotency = parseIdempotency(await transaction.get(idempotencyPath));
+        const idempotency = parseIdempotency(await transaction.get(idempotencyPath), nowMs);
         if (idempotency?.status === 'completed') {
             if (idempotency.finalizedBy === invocationId) return { kind: 'already_finalized' };
             return invalidLease();
@@ -334,7 +372,7 @@ async function finalize(input: FinalizeInput, expectedAnswered: boolean): Promis
         const resetAt = new Date(`${idempotency.usageDateUtc}T00:00:00.000Z`);
         resetAt.setUTCDate(resetAt.getUTCDate() + 1);
         const dailyPath = `noorUsage/${uid}_${idempotency.usageDateUtc}`;
-        const daily = parseDaily(await transaction.get(dailyPath), idempotency.usageDateUtc, resetAt);
+        const daily = parseDaily(await transaction.get(dailyPath), idempotency.usageDateUtc, resetAt, nowMs);
         const matchingReservations = daily.reservations.filter((reservation) => (
             reservation.requestId === requestId && reservation.ownerId === invocationId
         ));
