@@ -32,19 +32,29 @@ export interface TafsirChunk {
     surah: number;
     verseStart: number;
     verseEnd: number;
-    originalCharacterStart: number;
-    originalCharacterEnd: number;
+    originalStart: number;
+    originalEnd: number;
     originalText: string;
     retrievalText: string;
     corpusVersion: string;
     contentHash: string;
+    tokenCount: number;
     embeddingModel: string;
     embeddingDimension: number;
-    embedding: number[];
+    embedding?: number[];
 }
 
-export interface RetrievedEvidence {
+export interface ExactRetrievedEvidence {
+    kind: 'exact';
+    promptSourceId: string;
+    chunk: TafsirChunk;
+}
+
+export interface SemanticRetrievedEvidence {
+    kind: 'semantic';
     promptSourceId: string;
     chunk: TafsirChunk;
     similarity: number;
 }
+
+export type RetrievedEvidence = ExactRetrievedEvidence | SemanticRetrievedEvidence;
