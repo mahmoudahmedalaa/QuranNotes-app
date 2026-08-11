@@ -641,21 +641,76 @@ export async function promoteCorpusWithExactTokenCounts(
         throw new Error('Exact token promotion requires a local deterministic corpus and Vertex counter');
     }
     const counts = await Promise.all(artifacts.chunks.map(chunk => tokenCounter.countTokens(chunk.originalText)));
-    const chunks = artifacts.chunks.map((chunk, index) => {
-        const tokenCount = counts[index];
+    const changedUnits = new Set<string>();
+    const exactCount = (chunkId: string, tokenCount: number | undefined): number => {
         if (!Number.isSafeInteger(tokenCount) || tokenCount === undefined || tokenCount < 1) {
-            throw new Error(`Chunk ${chunk.chunkId} has an invalid exact token count`);
+            throw new Error(`Chunk ${chunkId} has an invalid exact token count`);
         }
-        if (tokenCount > artifacts.manifest.hardMaxTokens) {
-            throw new Error(`Chunk ${chunk.chunkId} exceeds the hard maximum token count`);
+        return tokenCount;
+    };
+    const splitOffset = (text: string): number => {
+        const midpoint = text.length / 2;
+        const sentence = candidateEnds(text, 0)
+            .filter(end => end < text.length)
+            .sort((left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint))[0];
+        if (sentence !== undefined) return sentence;
+        const whitespace = [...text.matchAll(/\s+/gu)]
+            .map(match => match.index + match[0].length)
+            .filter(end => end < text.length)
+            .sort((left, right) => Math.abs(left - midpoint) - Math.abs(right - midpoint))[0];
+        if (whitespace !== undefined) return whitespace;
+        const offset = Math.floor(midpoint);
+        return /[\uD800-\uDBFF]/u.test(text[offset - 1] ?? '')
+            && /[\uDC00-\uDFFF]/u.test(text[offset] ?? '') ? offset - 1 : offset;
+    };
+    const split = async (chunk: CorpusChunk, tokenCount: number): Promise<CorpusChunk[]> => {
+        if (tokenCount <= artifacts.manifest.hardMaxTokens) {
+            return [{ ...chunk, tokenCount }];
         }
-        return { ...chunk, tokenCount };
+        changedUnits.add(chunk.canonicalUnitId);
+        const offset = splitOffset(chunk.originalText);
+        if (offset < 1 || offset >= chunk.originalText.length) {
+            throw new Error(`Chunk ${chunk.chunkId} exceeds the hard maximum and cannot be split safely`);
+        }
+        const children = [
+            { ...chunk, originalEnd: chunk.originalStart + offset, originalText: chunk.originalText.slice(0, offset) },
+            { ...chunk, originalStart: chunk.originalStart + offset, originalText: chunk.originalText.slice(offset) },
+        ].map(child => ({
+            ...child,
+            retrievalText: normalizeRetrievalText(child.originalText),
+            contentHash: sha256(child.originalText),
+        }));
+        const childCounts = await Promise.all(children.map(child => tokenCounter.countTokens(child.originalText)));
+        return (await Promise.all(children.map((child, index) => (
+            split(child, exactCount(chunk.chunkId, childCounts[index]))
+        )))).flat();
+    };
+    const splitChunks = (await Promise.all(artifacts.chunks.map((chunk, index) => (
+        split(chunk, exactCount(chunk.chunkId, counts[index]))
+    )))).flat();
+    const chunksByUnit = new Map<string, CorpusChunk[]>();
+    const chunks = splitChunks.map(chunk => {
+        if (!changedUnits.has(chunk.canonicalUnitId)) return chunk;
+        const grouped = chunksByUnit.get(chunk.canonicalUnitId) ?? [];
+        const chunkIndex = grouped.length;
+        const rebuilt = {
+            ...chunk,
+            chunkIndex,
+            chunkId: `c_${chunk.canonicalUnitId.slice(2)}_${String(chunkIndex).padStart(3, '0')}_${chunk.contentHash.slice(0, 12)}`,
+        };
+        grouped.push(rebuilt);
+        chunksByUnit.set(chunk.canonicalUnitId, grouped);
+        return rebuilt;
     });
-    const hashes = artifactHashes(artifacts.units, chunks, artifacts.lookups);
+    const lookups = artifacts.lookups.map(lookup => changedUnits.has(lookup.canonicalUnitId) ? {
+        ...lookup,
+        chunkIds: (chunksByUnit.get(lookup.canonicalUnitId) ?? []).map(chunk => chunk.chunkId),
+    } : lookup);
+    const hashes = artifactHashes(artifacts.units, chunks, lookups);
     return {
         units: artifacts.units,
         chunks,
-        lookups: artifacts.lookups,
+        lookups,
         manifest: {
             ...artifacts.manifest,
             tokenizerMode: 'vertex-validated-deterministic',
@@ -665,6 +720,7 @@ export async function promoteCorpusWithExactTokenCounts(
                 location,
                 validatedChunkCount: chunks.length,
             },
+            chunkCount: chunks.length,
             artifactSha256: hashes,
             aggregateSha256: aggregateSha256(hashes),
         },
