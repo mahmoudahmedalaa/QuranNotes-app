@@ -52,6 +52,7 @@ android/.gradle/
 functions/lib/
 functions/node_modules/
 functions/.generated/noor-corpus/
+functions/lib-scripts/
 .firebase/
 
 
