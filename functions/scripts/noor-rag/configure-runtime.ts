@@ -109,8 +109,18 @@ function assertReviewedDarkConfig(value: unknown): NoorRuntimeConfig {
     return config;
 }
 
-function same(left: unknown, right: unknown): boolean {
-    return JSON.stringify(left) === JSON.stringify(right);
+function canonical(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (typeof value === 'object' && value !== null) {
+        return Object.fromEntries(Object.keys(value as Record<string, unknown>).sort().map(key => [
+            key, canonical((value as Record<string, unknown>)[key]),
+        ]));
+    }
+    return value;
+}
+
+export function sameRuntimeState(left: unknown, right: unknown): boolean {
+    return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 }
 
 function ownerProof(uid: string): string {
@@ -164,7 +174,7 @@ async function createRepository(options: RuntimeOptions): Promise<RuntimeConfigR
         compareAndSet: async (expected, next) => firestore.runTransaction(async transaction => {
             const snapshot = await transaction.get(reference);
             const current = snapshot.exists ? snapshot.data() ?? null : null;
-            if (!same(current, expected)) throw new Error('Runtime config changed during compare-and-set');
+            if (!sameRuntimeState(current, expected)) throw new Error('Runtime config changed during compare-and-set');
             transaction.set(reference, next, { merge: false });
         }),
     };

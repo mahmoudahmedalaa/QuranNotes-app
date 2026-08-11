@@ -6,6 +6,7 @@ import {
     LOCKED_PROJECT,
     configureRuntime,
     parseRuntimeArguments,
+    sameRuntimeState,
     type RuntimeConfigRepository,
 } from '../../scripts/noor-rag/configure-runtime';
 
@@ -32,6 +33,13 @@ class FakeRepository implements RuntimeConfigRepository {
 }
 
 describe('Noor runtime configuration', () => {
+    it('compares Firestore state independent of field insertion order', () => {
+        assert.equal(sameRuntimeState(
+            { enabled: false, publicEnabled: false, activeCorpusVersion: 'none', ownerUids: [] },
+            { ownerUids: [], activeCorpusVersion: 'none', publicEnabled: false, enabled: false },
+        ), true);
+    });
+
     it('requires locked project/version and an explicit safe mode', () => {
         assert.throws(() => parseRuntimeArguments([]), /project/);
         assert.throws(() => parseRuntimeArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`]), /mode/);
