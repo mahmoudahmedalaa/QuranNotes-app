@@ -34,6 +34,7 @@ export interface RepositoryWrite {
 }
 
 export interface IngestRepository {
+    readManifest(path: string): Promise<Record<string, unknown> | null>;
     readChunkMetadata(path: string): Promise<Record<string, unknown> | null>;
     writeBatch(writes: readonly RepositoryWrite[]): Promise<void>;
     writeManifest(path: string, data: Readonly<Record<string, unknown>>): Promise<void>;
@@ -273,11 +274,13 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
     }
     assertProductionArtifact(input.artifacts.manifest);
 
+    const manifestPath = `corpusManifests/${input.options.version}`;
+    const existingManifest = await input.repository.readManifest(manifestPath);
     const skippedIds = new Set<string>();
     const pending: CorpusChunk[] = [];
     for (const chunk of input.artifacts.chunks) {
         const path = `corpora/${input.options.version}/chunks/${chunk.chunkId}`;
-        if (canSkipChunk(chunk, await input.repository.readChunkMetadata(path))) {
+        if (existingManifest !== null && canSkipChunk(chunk, await input.repository.readChunkMetadata(path))) {
             skippedIds.add(chunk.chunkId);
         } else {
             pending.push(chunk);
@@ -292,46 +295,55 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
         resumed: skippedIds.size,
     });
 
-    const embedded = await embedWithConcurrency(pending.map(
-        chunk => formatEmbeddingDocument(chunk.sourceTitle, chunk.retrievalText),
-    ), input.embedder);
     const failedChunks: string[] = [];
-    const chunkWrites: RepositoryWrite[] = [];
-    embedded.forEach((result, index) => {
-        const chunk = pending[index];
-        if (!chunk) {
-            return;
-        }
-        if (result.ok) {
-            chunkWrites.push(chunkWrite(input.options.version, chunk, result.embedding));
-        } else {
-            failedChunks.push(chunk.chunkId);
-        }
-    });
-    const operations = [
+    const remainingWrites = [
         ...input.artifacts.units.map(unit => unitWrite(input.options.version, unit)),
-        ...chunkWrites,
         ...input.artifacts.lookups.map(lookup => lookupWrite(input.options.version, lookup)),
     ];
-    const batchCount = Math.ceil(operations.length / MAX_BATCH_WRITES);
+    const plannedDataWrites = pending.length + remainingWrites.length;
+    const batchCount = Math.ceil(pending.length / MAX_BATCH_WRITES)
+        + Math.ceil(remainingWrites.length / MAX_BATCH_WRITES);
     safeReport(input, 'pre-mutation', {
         counts,
-        plannedDataWrites: operations.length,
+        plannedDataWrites,
         plannedManifestWrites: batchCount + 2,
-        plannedTotalWrites: operations.length + batchCount + 2,
-        failed: failedChunks.length,
+        plannedTotalWrites: plannedDataWrites + batchCount + 2,
+        failed: 0,
         skipped: skippedIds.size,
         resumed: skippedIds.size,
     });
 
-    const manifestPath = `corpusManifests/${input.options.version}`;
     const failedWrites: string[] = [];
     let written = 0;
     await input.repository.writeManifest(manifestPath, manifestData(
         input.artifacts, 'in_progress', skippedIds.size, written, failedChunks, failedWrites,
     ));
-    for (let start = 0; start < operations.length; start += MAX_BATCH_WRITES) {
-        const batch = operations.slice(start, start + MAX_BATCH_WRITES);
+    for (let start = 0; start < pending.length; start += MAX_BATCH_WRITES) {
+        const chunks = pending.slice(start, start + MAX_BATCH_WRITES);
+        const embedded = await embedWithConcurrency(chunks.map(
+            chunk => formatEmbeddingDocument(chunk.sourceTitle, chunk.retrievalText),
+        ), input.embedder);
+        const batch: RepositoryWrite[] = [];
+        embedded.forEach((result, index) => {
+            const chunk = chunks[index];
+            if (!chunk) return;
+            if (result.ok) batch.push(chunkWrite(input.options.version, chunk, result.embedding));
+            else failedChunks.push(chunk.chunkId);
+        });
+        try {
+            if (batch.length > 0) {
+                await input.repository.writeBatch(batch);
+                written += batch.length;
+            }
+        } catch {
+            failedWrites.push(...batch.map(write => write.path));
+        }
+        await input.repository.writeManifest(manifestPath, manifestData(
+            input.artifacts, 'in_progress', skippedIds.size, written, failedChunks, failedWrites,
+        ));
+    }
+    for (let start = 0; start < remainingWrites.length; start += MAX_BATCH_WRITES) {
+        const batch = remainingWrites.slice(start, start + MAX_BATCH_WRITES);
         try {
             await input.repository.writeBatch(batch);
             written += batch.length;
@@ -344,7 +356,7 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
     }
     const complete = failedChunks.length === 0
         && failedWrites.length === 0
-        && written === operations.length;
+        && written === plannedDataWrites;
     await input.repository.writeManifest(manifestPath, manifestData(
         input.artifacts, complete ? 'complete' : 'incomplete',
         skippedIds.size, written, failedChunks, failedWrites,
@@ -398,6 +410,10 @@ async function productionAdapters(options: IngestOptions): Promise<{
     return {
         embedder: createVertexEmbedder(client.models),
         repository: {
+            readManifest: async (path: string): Promise<Record<string, unknown> | null> => {
+                const snapshot = await firestore.doc(path).get();
+                return snapshot.exists ? (snapshot.data() ?? null) : null;
+            },
             readChunkMetadata: async (path: string): Promise<Record<string, unknown> | null> => {
                 const snapshot = await firestore.doc(path).get();
                 return snapshot.exists ? (snapshot.data() ?? null) : null;

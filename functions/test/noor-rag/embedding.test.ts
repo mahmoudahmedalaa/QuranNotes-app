@@ -44,7 +44,7 @@ describe('Noor corpus embeddings', () => {
         assert.deepEqual(captured, {
             model: 'gemini-embedding-2',
             contents: 'title: Tafsir Ibn Kathir | text: Exact retrieval text',
-            config: { outputDimensionality: 768 },
+            config: { outputDimensionality: 768, autoTruncate: false },
         });
         const config = (captured as { config: Record<string, unknown> }).config;
         assert.equal(Object.prototype.hasOwnProperty.call(config, 'taskType'), false);
@@ -57,7 +57,7 @@ describe('Noor corpus embeddings', () => {
         assert.throws(() => validateEmbedding([...Array<number>(767).fill(0), Number.POSITIVE_INFINITY]), /finite/);
     });
 
-    it('preserves deterministic order while bounding concurrency at four', async () => {
+    it('preserves deterministic order while bounding concurrency at sixteen', async () => {
         let active = 0;
         let maximumActive = 0;
         const embedder: Embedder = {
@@ -70,9 +70,10 @@ describe('Noor corpus embeddings', () => {
             },
         };
 
-        const results = await embedWithConcurrency(['0', '1', '2', '3', '4', '5'], embedder);
+        const texts = Array.from({ length: 20 }, (_, index) => String(index));
+        const results = await embedWithConcurrency(texts, embedder);
 
-        assert.equal(maximumActive, 4);
-        assert.deepEqual(results.map(result => result.ok ? result.embedding[0] : 'failed'), [0, 1, 2, 3, 4, 5]);
+        assert.equal(maximumActive, 16);
+        assert.deepEqual(results.map(result => result.ok ? result.embedding[0] : 'failed'), texts.map(Number));
     });
 });

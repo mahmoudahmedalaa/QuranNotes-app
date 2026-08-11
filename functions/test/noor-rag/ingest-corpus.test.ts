@@ -50,17 +50,30 @@ function artifacts(tokenizerMode = 'vertex-validated-deterministic'): IngestArti
 class FakeRepository implements IngestRepository {
     readonly calls: string[] = [];
     readonly batches: RepositoryWrite[][] = [];
-    constructor(private readonly existing: Readonly<Record<string, unknown>> = {}) {}
+    private readonly documents = new Map<string, Record<string, unknown>>();
+    constructor(existing: Readonly<Record<string, unknown>> = {}) {
+        Object.entries(existing).forEach(([path, data]) => {
+            if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+                this.documents.set(path, data as Record<string, unknown>);
+            }
+        });
+    }
+    async readManifest(path: string): Promise<Record<string, unknown> | null> {
+        this.calls.push(`read-manifest:${path}`);
+        return this.documents.get(path) ?? null;
+    }
     async readChunkMetadata(path: string): Promise<Record<string, unknown> | null> {
         this.calls.push(`read:${path}`);
-        return (this.existing[path] as Record<string, unknown> | undefined) ?? null;
+        return this.documents.get(path) ?? null;
     }
     async writeBatch(writes: readonly RepositoryWrite[]): Promise<void> {
         this.calls.push('batch');
         this.batches.push([...writes]);
+        writes.forEach(write => this.documents.set(write.path, { ...write.data }));
     }
     async writeManifest(path: string, data: Readonly<Record<string, unknown>>): Promise<void> {
         this.calls.push(`manifest:${path}:${String(data.status)}`);
+        this.documents.set(path, { ...data });
     }
 }
 
@@ -90,8 +103,10 @@ describe('Noor corpus ingestion', () => {
     });
 
     it('skips only complete matching vectors and resumes deterministic versioned paths', async () => {
+        const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
         const chunkPath = `corpora/${LOCKED_CORPUS_VERSION}/chunks/c_0`;
         const repository = new FakeRepository({
+            [manifestPath]: { status: 'incomplete' },
             [chunkPath]: {
                 contentHash: 'hash-0', embeddingModel: 'gemini-embedding-2', embeddingDimension: 768,
                 embeddingComplete: true,
@@ -112,12 +127,60 @@ describe('Noor corpus ingestion', () => {
         ]);
         const paths = repository.batches.flat().map(write => write.path);
         assert.deepEqual(paths, [
-            `corpora/${LOCKED_CORPUS_VERSION}/units/u_1`,
             `corpora/${LOCKED_CORPUS_VERSION}/chunks/c_1`,
             `corpora/${LOCKED_CORPUS_VERSION}/chunks/c_2`,
+            `corpora/${LOCKED_CORPUS_VERSION}/units/u_1`,
             `corpora/${LOCKED_CORPUS_VERSION}/verseLookup/al_sadi_ar_1_1`,
         ]);
         assert.ok(paths.every(path => !path.includes('activeCorpusVersion') && !path.startsWith('noorConfig/')));
+    });
+
+    it('treats a missing manifest as a fresh ingest without per-chunk reads', async () => {
+        const repository = new FakeRepository();
+
+        await ingestCorpus({
+            options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
+            artifacts: artifacts(), repository, embedder, report: () => undefined,
+        });
+
+        assert.deepEqual(repository.calls.filter(call => call.startsWith('read')), [
+            `read-manifest:corpusManifests/${LOCKED_CORPUS_VERSION}`,
+        ]);
+    });
+
+    it('writes and checkpoints each chunk group before embedding the next group', async () => {
+        const many = artifacts();
+        const template = many.chunks[0]!;
+        many.chunks = Array.from({ length: 451 }, (_, index) => ({
+            ...template,
+            chunkId: `c_${String(index).padStart(3, '0')}`,
+            chunkIndex: index,
+            contentHash: `hash-${index}`,
+            retrievalText: `retrieval ${index}`,
+        }));
+        many.manifest.chunkCount = many.chunks.length;
+        many.manifest.tokenValidation!.validatedChunkCount = many.chunks.length;
+        const repository = new FakeRepository();
+        let sawFirstGroupCheckpoint = false;
+
+        const result = await ingestCorpus({
+            options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
+            artifacts: many, repository,
+            embedder: { embed: async (text) => {
+                if (text.endsWith('retrieval 450')) {
+                    sawFirstGroupCheckpoint = repository.calls.filter(call => call === 'batch').length === 1
+                        && repository.calls.filter(call => call.endsWith(':in_progress')).length >= 2;
+                }
+                return embedder.embed(text);
+            } },
+            report: () => undefined,
+        });
+
+        assert.equal(result.complete, true);
+        assert.equal(sawFirstGroupCheckpoint, true);
+        assert.deepEqual(repository.batches.slice(0, 2).map(batch => batch.length), [450, 1]);
+        assert.ok(repository.batches[0]!.every(write => write.path.includes('/chunks/')));
+        assert.ok(repository.batches[1]!.every(write => write.path.includes('/chunks/')));
     });
 
     it('requires the exact global Vertex location before production adapter creation', () => {
@@ -149,6 +212,13 @@ describe('Noor corpus ingestion', () => {
         assert.deepEqual(result.failedChunks, ['c_1']);
         assert.equal(result.exitCode, 1);
         assert.ok(repository.calls.some(call => call === `manifest:corpusManifests/${LOCKED_CORPUS_VERSION}:incomplete`));
+
+        const resumed = await ingestCorpus({
+            options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
+            artifacts: artifacts(), repository, embedder, report: () => undefined,
+        });
+        assert.equal(resumed.complete, true);
+        assert.equal(resumed.skipped, 2);
     });
 
     it('never exceeds 450 deterministic upserts in one repository batch', async () => {

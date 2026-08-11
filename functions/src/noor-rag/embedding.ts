@@ -1,6 +1,6 @@
 export const EMBEDDING_MODEL = 'gemini-embedding-2' as const;
 export const EMBEDDING_DIMENSION = 768 as const;
-export const EMBEDDING_CONCURRENCY = 4 as const;
+export const EMBEDDING_CONCURRENCY = 16 as const;
 
 export interface Embedder {
     embed(text: string): Promise<readonly number[]>;
@@ -11,6 +11,7 @@ export interface VertexEmbeddingRequest {
     contents: string;
     config: {
         outputDimensionality: typeof EMBEDDING_DIMENSION;
+        autoTruncate: false;
     };
 }
 
@@ -38,7 +39,7 @@ export function createVertexEmbedder(client: VertexEmbeddingClient): Embedder {
             const response = await client.embedContent({
                 model: EMBEDDING_MODEL,
                 contents: text,
-                config: { outputDimensionality: EMBEDDING_DIMENSION },
+                config: { outputDimensionality: EMBEDDING_DIMENSION, autoTruncate: false },
             });
             return response.embeddings?.[0]?.values ?? [];
         },
