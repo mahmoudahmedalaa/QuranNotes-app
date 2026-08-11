@@ -3,6 +3,8 @@ const path = require('node:path');
 
 const APP_INFO_PLIST = 'QuranNotes/Info.plist';
 const WIDGET_INFO_PLIST = 'targets/widget/Info.plist';
+const IOS_MARKETING_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+const IOS_BUILD_NUMBER_PATTERN = /^\d+(?:\.\d+){0,2}$/;
 
 function stripBuildSettingQuotes(value) {
   const trimmedValue = value.trim();
@@ -19,38 +21,124 @@ function extractBuildSetting(buildSettings, name) {
   return match ? stripBuildSettingQuotes(match[1]) : undefined;
 }
 
-function extractTargetConfigurations(projectContents) {
-  const configurations = [];
+function extractBuildConfigurations(projectContents) {
+  const configurationsById = new Map();
   const configurationPattern =
-    /isa = XCBuildConfiguration;[\s\S]*?buildSettings = \{([\s\S]*?)\n\s*\};\s*name = ([^;]+);/g;
+    /([A-Za-z0-9]+)\s*\/\*\s*[^*]+?\s*\*\/\s*=\s*\{\s*isa = XCBuildConfiguration;[\s\S]*?buildSettings = \{([\s\S]*?)\n\s*\};\s*name = ([^;]+);\s*\};/g;
   let match = configurationPattern.exec(projectContents);
 
   while (match) {
-    const buildSettings = match[1];
+    const buildSettings = match[2];
     const infoPlist = extractBuildSetting(buildSettings, 'INFOPLIST_FILE');
     const normalizedInfoPlist = infoPlist
       ? infoPlist.replace(/^\.\.\//, '')
       : undefined;
 
-    if (
-      normalizedInfoPlist === APP_INFO_PLIST ||
-      normalizedInfoPlist === WIDGET_INFO_PLIST
-    ) {
-      configurations.push({
-        build: extractBuildSetting(
-          buildSettings,
-          'CURRENT_PROJECT_VERSION',
-        ),
-        configuration: stripBuildSettingQuotes(match[2]),
-        infoPlist: normalizedInfoPlist,
-        version: extractBuildSetting(buildSettings, 'MARKETING_VERSION'),
-      });
-    }
+    configurationsById.set(match[1], {
+      build: extractBuildSetting(buildSettings, 'CURRENT_PROJECT_VERSION'),
+      configuration: stripBuildSettingQuotes(match[3]),
+      infoPlist: normalizedInfoPlist,
+      version: extractBuildSetting(buildSettings, 'MARKETING_VERSION'),
+    });
 
     match = configurationPattern.exec(projectContents);
   }
 
-  return configurations;
+  return configurationsById;
+}
+
+function extractNativeTargetConfigurationLists(projectContents) {
+  const configurationListByTarget = new Map();
+  const targetPattern =
+    /[A-Za-z0-9]+\s*\/\*\s*[^*]+?\s*\*\/\s*=\s*\{\s*isa = PBXNativeTarget;\s*buildConfigurationList = ([A-Za-z0-9]+)[^;]*;[\s\S]*?\n\s*name = ([^;]+);/g;
+  let match = targetPattern.exec(projectContents);
+
+  while (match) {
+    configurationListByTarget.set(
+      stripBuildSettingQuotes(match[2]),
+      match[1],
+    );
+    match = targetPattern.exec(projectContents);
+  }
+
+  return configurationListByTarget;
+}
+
+function extractConfigurationIds(projectContents, configurationListId) {
+  const configurationListPattern = new RegExp(
+    `^\\s*${configurationListId}\\s*\\/\\*[^\\n]*\\*\\/\\s*=\\s*\\{\\s*isa = XCConfigurationList;\\s*buildConfigurations = \\(([\\s\\S]*?)\\);`,
+    'm',
+  );
+  const configurationList = projectContents.match(configurationListPattern);
+  if (!configurationList) {
+    return [];
+  }
+
+  return Array.from(
+    configurationList[1].matchAll(/([A-Za-z0-9]+)\s*\/\*[^*]+\*\//g),
+    (match) => match[1],
+  );
+}
+
+function extractTargetConfigurations(projectContents) {
+  const configurationsById = extractBuildConfigurations(projectContents);
+  const configurationListByTarget =
+    extractNativeTargetConfigurationLists(projectContents);
+  const targetDefinitions = [
+    {
+      expectedInfoPlist: APP_INFO_PLIST,
+      projectName: 'QuranNotes',
+      targetName: 'app',
+    },
+    {
+      expectedInfoPlist: WIDGET_INFO_PLIST,
+      projectName: 'widget',
+      targetName: 'widget',
+    },
+  ];
+  const targetConfigurations = [];
+
+  for (const target of targetDefinitions) {
+    const configurationListId = configurationListByTarget.get(
+      target.projectName,
+    );
+    if (!configurationListId) {
+      throw new Error(
+        `The Xcode project must define the ${target.targetName} target.`,
+      );
+    }
+
+    const configurationIds = extractConfigurationIds(
+      projectContents,
+      configurationListId,
+    );
+    if (configurationIds.length === 0) {
+      throw new Error(
+        `The ${target.targetName} target must reference build configurations.`,
+      );
+    }
+
+    for (const configurationId of configurationIds) {
+      const configuration = configurationsById.get(configurationId);
+      if (!configuration) {
+        throw new Error(
+          `The ${target.targetName} target references a missing build configuration.`,
+        );
+      }
+      if (configuration.infoPlist !== target.expectedInfoPlist) {
+        throw new Error(
+          `The ${target.targetName} ${configuration.configuration} configuration must use ${target.expectedInfoPlist}.`,
+        );
+      }
+
+      targetConfigurations.push({
+        ...configuration,
+        targetName: target.targetName,
+      });
+    }
+  }
+
+  return targetConfigurations;
 }
 
 function extractPlistString(plistContents, key) {
@@ -59,10 +147,6 @@ function extractPlistString(plistContents, key) {
     new RegExp(`<key>${escapedKey}<\\/key>\\s*<string>([^<]+)<\\/string>`),
   );
   return match ? match[1].trim() : undefined;
-}
-
-function targetNameForInfoPlist(infoPlist) {
-  return infoPlist === APP_INFO_PLIST ? 'app' : 'widget';
 }
 
 function assertPlistMetadata({ build, contents, name, version }) {
@@ -101,6 +185,16 @@ function validateReleaseMetadataSources({
   if (!version || !build) {
     throw new Error('app.json must define expo.version and expo.ios.buildNumber.');
   }
+  if (!IOS_MARKETING_VERSION_PATTERN.test(version)) {
+    throw new Error(
+      'app.json expo.version must be a valid iOS marketing version with three numeric components.',
+    );
+  }
+  if (!IOS_BUILD_NUMBER_PATTERN.test(build)) {
+    throw new Error(
+      'app.json expo.ios.buildNumber must be a valid iOS build number with one to three numeric components.',
+    );
+  }
 
   const hasApprovedVersion = Boolean(approvedVersion);
   const hasApprovedBuild = Boolean(approvedBuild);
@@ -122,28 +216,36 @@ function validateReleaseMetadataSources({
 
   const targetConfigurations = extractTargetConfigurations(projectContents);
   const appConfigurations = targetConfigurations.filter(
-    ({ infoPlist }) => infoPlist === APP_INFO_PLIST,
+    ({ targetName }) => targetName === 'app',
   );
   const widgetConfigurations = targetConfigurations.filter(
-    ({ infoPlist }) => infoPlist === WIDGET_INFO_PLIST,
+    ({ targetName }) => targetName === 'widget',
   );
 
-  if (appConfigurations.length === 0 || widgetConfigurations.length === 0) {
-    throw new Error(
-      'The Xcode project must define release metadata for the app and widget targets.',
-    );
+  for (const [targetName, configurations] of [
+    ['app', appConfigurations],
+    ['widget', widgetConfigurations],
+  ]) {
+    if (
+      !configurations.some(
+        ({ configuration }) => configuration === 'Release',
+      )
+    ) {
+      throw new Error(
+        `The ${targetName} target must define a Release configuration.`,
+      );
+    }
   }
 
   for (const configuration of targetConfigurations) {
-    const targetName = targetNameForInfoPlist(configuration.infoPlist);
     if (configuration.version !== version) {
       throw new Error(
-        `${targetName} ${configuration.configuration} MARKETING_VERSION ${configuration.version || 'missing'} does not equal ${version}.`,
+        `${configuration.targetName} ${configuration.configuration} MARKETING_VERSION ${configuration.version || 'missing'} does not equal ${version}.`,
       );
     }
     if (configuration.build !== build) {
       throw new Error(
-        `${targetName} ${configuration.configuration} CURRENT_PROJECT_VERSION ${configuration.build || 'missing'} does not equal ${build}.`,
+        `${configuration.targetName} ${configuration.configuration} CURRENT_PROJECT_VERSION ${configuration.build || 'missing'} does not equal ${build}.`,
       );
     }
   }

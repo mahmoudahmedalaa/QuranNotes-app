@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { parseEnv } = require('node:util');
 
 const FIREBASE_PUBLIC_CLIENT_VARIABLES = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
@@ -17,35 +18,7 @@ const REVENUECAT_VARIABLE_BY_PLATFORM = {
 };
 
 function parseEnvironmentFile(contents) {
-  const parsed = {};
-
-  for (const rawLine of contents.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) {
-      continue;
-    }
-
-    const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) {
-      continue;
-    }
-
-    const [, name, rawValue] = match;
-    let value = rawValue.trim();
-    const firstCharacter = value.at(0);
-    const lastCharacter = value.at(-1);
-    if (
-      value.length >= 2 &&
-      ((firstCharacter === '"' && lastCharacter === '"') ||
-        (firstCharacter === "'" && lastCharacter === "'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    parsed[name] = value;
-  }
-
-  return parsed;
+  return parseEnv(contents);
 }
 
 function readOptionalEnvironmentFile(filePath, readFile) {

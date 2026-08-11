@@ -1,8 +1,11 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const {
   loadReleaseEnvironment,
+  parseEnvironmentFile,
   runReleaseEnvironmentValidation,
   validateReleaseEnvironment,
 } = require('./validate-release-environment');
@@ -42,27 +45,120 @@ function createMetadataFixture(overrides = {}) {
   const version = overrides.version || '2.2.2';
   const build = overrides.build || '50';
   const widgetBuild = overrides.widgetBuild || build;
+  const widgetReleaseBuild = overrides.widgetReleaseBuild || widgetBuild;
+  const appConfigurations = [
+    {
+      build,
+      id: 'AAAAAAAAAAAAAAAAAAAAAAA1',
+      name: 'Debug',
+      version,
+    },
+    ...(!overrides.omitAppRelease
+      ? [
+          {
+            build,
+            id: 'AAAAAAAAAAAAAAAAAAAAAAA2',
+            name: 'Release',
+            version,
+          },
+        ]
+      : []),
+  ];
+  const widgetConfigurations = [
+    {
+      build: widgetBuild,
+      id: 'BBBBBBBBBBBBBBBBBBBBBBB1',
+      name: 'Debug',
+      version,
+    },
+    {
+      build: widgetReleaseBuild,
+      id: 'BBBBBBBBBBBBBBBBBBBBBBB2',
+      name: 'Release',
+      version,
+    },
+  ];
+
+  function configurationBlock(configuration, infoPlist) {
+    return `
+      ${configuration.id} /* ${configuration.name} */ = {
+        isa = XCBuildConfiguration;
+        baseConfigurationReference = FIXTURE /* generated xcconfig */;
+        buildSettings = {
+          CURRENT_PROJECT_VERSION = ${configuration.build};
+          INFOPLIST_FILE = ${infoPlist};
+          MARKETING_VERSION = ${configuration.version};
+        };
+        name = ${configuration.name};
+      };`;
+  }
+
+  function configurationListBlock(id, targetName, configurations) {
+    const references = configurations
+      .map(
+        (configuration) =>
+          `${configuration.id} /* ${configuration.name} */,`,
+      )
+      .join('\n');
+    return `
+      ${id} /* Build configuration list for PBXNativeTarget "${targetName}" */ = {
+        isa = XCConfigurationList;
+        buildConfigurations = (
+          ${references}
+        );
+        defaultConfigurationIsVisible = 0;
+        defaultConfigurationName = Release;
+      };`;
+  }
+
+  const unrelatedConfiguration = overrides.includeUnrelatedMismatch
+    ? configurationBlock(
+        {
+          build: '999',
+          id: 'CCCCCCCCCCCCCCCCCCCCCCC1',
+          name: 'Release',
+          version,
+        },
+        'QuranNotes/Info.plist',
+      )
+    : '';
 
   return {
     appJsonContents: JSON.stringify({
       expo: { version, ios: { buildNumber: build } },
     }),
     projectContents: `
-      isa = XCBuildConfiguration;
-      baseConfigurationReference = FIXTURE /* Pods-QuranNotes.release.xcconfig */;
-      buildSettings = {
-        CURRENT_PROJECT_VERSION = ${build};
-        INFOPLIST_FILE = QuranNotes/Info.plist;
-        MARKETING_VERSION = ${version};
+      DDDDDDDDDDDDDDDDDDDDDDD1 /* QuranNotes */ = {
+        isa = PBXNativeTarget;
+        buildConfigurationList = AAAAAAAAAAAAAAAAAAAAAAA0 /* Build configuration list for PBXNativeTarget "QuranNotes" */;
+        name = QuranNotes;
       };
-      name = Release;
-      isa = XCBuildConfiguration;
-      buildSettings = {
-        CURRENT_PROJECT_VERSION = ${widgetBuild};
-        INFOPLIST_FILE = ../targets/widget/Info.plist;
-        MARKETING_VERSION = ${version};
+      DDDDDDDDDDDDDDDDDDDDDDD2 /* widget */ = {
+        isa = PBXNativeTarget;
+        buildConfigurationList = BBBBBBBBBBBBBBBBBBBBBBB0 /* Build configuration list for PBXNativeTarget "widget" */;
+        name = widget;
       };
-      name = Release;
+      ${appConfigurations
+        .map((configuration) =>
+          configurationBlock(configuration, 'QuranNotes/Info.plist'),
+        )
+        .join('\n')}
+      ${widgetConfigurations
+        .map((configuration) =>
+          configurationBlock(configuration, '../targets/widget/Info.plist'),
+        )
+        .join('\n')}
+      ${unrelatedConfiguration}
+      ${configurationListBlock(
+        'AAAAAAAAAAAAAAAAAAAAAAA0',
+        'QuranNotes',
+        appConfigurations,
+      )}
+      ${configurationListBlock(
+        'BBBBBBBBBBBBBBBBBBBBBBB0',
+        'widget',
+        widgetConfigurations,
+      )}
     `,
     appInfoPlistContents: `
       <key>CFBundleShortVersionString</key>
@@ -127,6 +223,42 @@ test('.env.local takes precedence over .env without reading the live environment
   assert.equal(environment.EXPO_PUBLIC_FIREBASE_PROJECT_ID, 'project-fixture');
 });
 
+test('comment-only values remain missing after dotenv parsing', () => {
+  const environment = loadReleaseEnvironment({
+    cwd: '/virtual-project',
+    inheritedEnvironment: {},
+    readFile: createFileReader({
+      '/virtual-project/.env.local':
+        'EXPO_PUBLIC_FIREBASE_API_KEY= # intentionally unset',
+      '/virtual-project/.env': serializeEnvironment({
+        ...FIREBASE_VARIABLES,
+        EXPO_PUBLIC_REVENUECAT_IOS_KEY: 'revenuecat-ios-fixture',
+      }),
+    }),
+  });
+
+  const result = validateReleaseEnvironment({ environment, platform: 'ios' });
+
+  assert.ok(
+    result.missingVariables.includes('EXPO_PUBLIC_FIREBASE_API_KEY'),
+  );
+});
+
+test('dotenv parsing strips ordinary inline comments', () => {
+  const environment = parseEnvironmentFile('FIXTURE=value # explanation');
+
+  assert.equal(environment.FIXTURE, 'value');
+});
+
+test('dotenv parsing preserves hash characters inside quoted values', () => {
+  const environment = parseEnvironmentFile(
+    'DOUBLE="value # retained"\nSINGLE=\'other # retained\'',
+  );
+
+  assert.equal(environment.DOUBLE, 'value # retained');
+  assert.equal(environment.SINGLE, 'other # retained');
+});
+
 test('CLI-safe reporting never leaks configured values', () => {
   let stdout = '';
   let stderr = '';
@@ -167,6 +299,52 @@ test('metadata validation rejects a native target mismatch', () => {
   );
 });
 
+test('metadata validation requires a Release configuration for every target', () => {
+  assert.throws(
+    () =>
+      validateReleaseMetadataSources(
+        createMetadataFixture({ omitAppRelease: true }),
+      ),
+    /app target.*Release configuration/,
+  );
+});
+
+test('metadata validation rejects a mismatch confined to the widget Release configuration', () => {
+  assert.throws(
+    () =>
+      validateReleaseMetadataSources(
+        createMetadataFixture({ widgetReleaseBuild: '49' }),
+      ),
+    /widget Release CURRENT_PROJECT_VERSION 49.*50/,
+  );
+});
+
+test('metadata validation ignores configurations not associated with either target', () => {
+  const result = validateReleaseMetadataSources(
+    createMetadataFixture({ includeUnrelatedMismatch: true }),
+  );
+
+  assert.deepEqual(result, { build: '50', version: '2.2.2' });
+});
+
+test('metadata validation rejects invalid iOS marketing versions', () => {
+  assert.throws(
+    () =>
+      validateReleaseMetadataSources(
+        createMetadataFixture({ version: '2.2' }),
+      ),
+    /valid iOS marketing version/,
+  );
+});
+
+test('metadata validation rejects invalid iOS build numbers', () => {
+  assert.throws(
+    () =>
+      validateReleaseMetadataSources(createMetadataFixture({ build: '50a' })),
+    /valid iOS build number/,
+  );
+});
+
 test('metadata validation enforces approved release values', () => {
   assert.throws(
     () =>
@@ -177,5 +355,32 @@ test('metadata validation enforces approved release values', () => {
         }),
       ),
     /approved build 51/,
+  );
+});
+
+test('build preparation checks the workspace before metadata validation', () => {
+  const buildScript = fs.readFileSync(
+    path.join(__dirname, '..', 'build-ios.sh'),
+    'utf8',
+  );
+
+  const workspaceCheck = buildScript.indexOf('if [[ ! -d "$WORKSPACE" ]]');
+  const nativeProjectCheck = buildScript.indexOf(
+    'if [[ ! -f "$NATIVE_PROJECT" ]]',
+  );
+  const metadataValidation = buildScript.indexOf(
+    'node scripts/validate-release-metadata.js',
+  );
+
+  assert.ok(workspaceCheck >= 0, 'workspace check must exist');
+  assert.ok(nativeProjectCheck >= 0, 'native project check must exist');
+  assert.ok(metadataValidation >= 0, 'metadata validation must exist');
+  assert.ok(
+    workspaceCheck < metadataValidation,
+    'workspace check must run before metadata validation',
+  );
+  assert.ok(
+    nativeProjectCheck < metadataValidation,
+    'native project check must run before metadata validation',
   );
 });

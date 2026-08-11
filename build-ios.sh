@@ -14,14 +14,20 @@ if [[ -z "${QURANNOTES_RELEASE_BUILD:-}" ]]; then
   exit 1
 fi
 
-node scripts/validate-release-environment.js --platform ios
-node scripts/validate-release-metadata.js
-
 WORKSPACE="ios/QuranNotes.xcworkspace"
 if [[ ! -d "$WORKSPACE" ]]; then
   printf '%s\n' 'Missing iOS workspace. Generate it before preparing a release.' >&2
   exit 1
 fi
+
+NATIVE_PROJECT="ios/QuranNotes.xcodeproj/project.pbxproj"
+if [[ ! -f "$NATIVE_PROJECT" ]]; then
+  printf '%s\n' 'Missing iOS native project metadata. Generate it before preparing a release.' >&2
+  exit 1
+fi
+
+node scripts/validate-release-environment.js --platform ios
+node scripts/validate-release-metadata.js
 
 printf 'Validated QuranNotes release %s (%s). Opening Xcode for the human-controlled build.\n' \
   "$QURANNOTES_RELEASE_VERSION" \
