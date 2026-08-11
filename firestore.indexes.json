@@ -1,4 +1,14 @@
 {
-    "indexes": [],
+    "indexes": [
+        {
+            "collectionGroup": "chunks",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "corpusVersion", "order": "ASCENDING" },
+                { "fieldPath": "source", "order": "ASCENDING" },
+                { "fieldPath": "embedding", "vectorConfig": { "dimension": 768, "flat": {} } }
+            ]
+        }
+    ],
     "fieldOverrides": []
 }

@@ -8,6 +8,7 @@
         "test": "npm run build:test && node --test lib-test/test/noor-rag/*.test.js",
         "noor:corpus:build": "npm run build:scripts && node lib-scripts/scripts/noor-rag/build-corpus.js",
         "noor:corpus:validate": "npm run build:scripts && node lib-scripts/scripts/noor-rag/validate-corpus.js",
+        "noor:corpus:ingest": "npm run build:scripts && node lib-scripts/scripts/noor-rag/ingest-corpus.js",
         "contract:check": "node ../scripts/generate-noor-contract.js --check",
         "build:watch": "tsc --watch",
         "serve": "npm run build && firebase emulators:start --only functions",
