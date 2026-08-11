@@ -191,6 +191,27 @@ describe('Noor server entitlement resolution', () => {
         assert.deepEqual(malformedCache, { class: 'none', expiresAt: null, source: 'revenuecat' });
     });
 
+    it('does not trust cache for non-timeout fetch failures or externally-originated aborts', async () => {
+        const freshCache = {
+            [`noorEntitlementCache/${UID}`]: {
+                class: 'paid', expiresAt: null, cachedAt: '2026-08-11T12:00:00.000Z',
+                validUntil: '2026-08-11T12:05:00.000Z',
+            },
+        };
+        const failures = [
+            new TypeError('DNS, TLS, or programming failure'),
+            new DOMException('external abort', 'AbortError'),
+        ];
+        for (const failure of failures) {
+            const repository = new FakeRepository(freshCache);
+            const result = await resolveNoorEntitlement(input(repository, async () => {
+                throw failure;
+            }));
+            assert.deepEqual(result, { class: 'none', expiresAt: null, source: 'revenuecat' });
+            assert.equal(repository.reads.includes(`noorEntitlementCache/${UID}`), false);
+        }
+    });
+
     it('short-circuits active owner QA without RevenueCat and ignores inactive owner QA', async () => {
         let fetchCount = 0;
         const owner = await resolveNoorEntitlement(input(new FakeRepository({

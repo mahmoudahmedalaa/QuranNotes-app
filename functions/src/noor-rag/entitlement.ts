@@ -105,7 +105,11 @@ async function queryRevenueCat(input: ResolveNoorEntitlementInput, now: Date): P
     const controller = new AbortController();
     const requestedTimeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const timeoutMs = Math.max(1, Math.min(requestedTimeout, MAX_TIMEOUT_MS));
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timeoutFired = false;
+    const timeout = setTimeout(() => {
+        timeoutFired = true;
+        controller.abort();
+    }, timeoutMs);
     try {
         const providerResponse = await input.fetcher(
             `${REVENUECAT_SUBSCRIBER_URL}${encodeURIComponent(input.firebaseUid)}`,
@@ -128,7 +132,7 @@ async function queryRevenueCat(input: ResolveNoorEntitlementInput, now: Date): P
         const decision = parseRevenueCatDecision(body, now);
         return decision === null ? { kind: 'fail_closed' } : { kind: 'decision', decision };
     } catch {
-        return { kind: 'cache_eligible_failure' };
+        return timeoutFired ? { kind: 'cache_eligible_failure' } : { kind: 'fail_closed' };
     } finally {
         clearTimeout(timeout);
     }
