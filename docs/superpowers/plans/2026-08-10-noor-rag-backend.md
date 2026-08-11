@@ -6,7 +6,7 @@
 
 **Architecture:** Pure modules perform validation, corpus construction, retrieval, entitlement/quota control, prompt construction, and citation validation. A thin Gen2 callable composes those modules and fails closed. Corpus creation is deterministic and production upload/activation is a separate owner-approved operation.
 
-**Tech Stack:** Node 20, TypeScript, Firebase Functions Gen2, Firebase Admin/Firestore vector search, Vertex AI `gemini-embedding-2` and `gemini-2.5-flash`, Node test runner.
+**Tech Stack:** Node 20, TypeScript, Firebase Functions Gen2, Firebase Admin/Firestore vector search, Vertex AI `gemini-embedding-2` and GA `gemini-3.5-flash-lite` at `global`, Node test runner.
 
 ---
 
@@ -101,7 +101,7 @@ export const APP_TO_CORPUS_SOURCE = {
 } as const;
 ```
 
-Define `NoorRuntimeConfig` with exactly: `enabled`, `publicEnabled`, `ownerUids`, `activeCorpusVersion`, `promptVersion`, `generationModel`, `embeddingModel`, `embeddingDimension`, `pseudonymKeyVersion`, per-source thresholds, `maxChunksPerSource`, and `maxEvidenceCharacters`. `pseudonymKeyVersion` is a required non-secret identifier for the active HMAC secret generation. Parse `noorConfig/runtime` without defaults for safety-critical fields; missing or malformed values fail closed. Lock this release to `gemini-2.5-flash`, `gemini-embedding-2`, and 768 dimensions.
+Define `NoorRuntimeConfig` with exactly: `enabled`, `publicEnabled`, `ownerUids`, `activeCorpusVersion`, `promptVersion`, `generationModel`, `embeddingModel`, `embeddingDimension`, `pseudonymKeyVersion`, per-source thresholds, `maxChunksPerSource`, and `maxEvidenceCharacters`. `pseudonymKeyVersion` is a required non-secret identifier for the active HMAC secret generation. Parse `noorConfig/runtime` without defaults for safety-critical fields; missing or malformed values fail closed. Lock this release to GA `gemini-3.5-flash-lite` at `global`, `gemini-embedding-2`, and 768 dimensions. The generation model supports structured output and `countTokens`, and its published retirement is July 2027 or later.
 
 - [ ] **Step 4: Run green and commit**
 
@@ -179,7 +179,7 @@ Canonical ID input is exactly:
 
 Hash with SHA-256 hex and prefix IDs with `u_`; chunk IDs are `c_${canonicalUnitId.slice(2)}_${String(index).padStart(3, '0')}_${chunkHash.slice(0, 12)}`. `originalText` is the untouched bundled string used for content hashing. Chunk boundaries are chosen against that raw string, and every chunk stores raw `originalStart`/`originalEnd` offsets. A separate `retrievalText` decodes entities, normalizes NFC/whitespace, retains Al-Sa'di Arabic, and may remove deterministic embedded Arabic repetitions from Ibn Kathir only; normalization never overwrites `originalText`.
 
-Use an injected `TokenCounter` interface. Production ingestion calls Vertex `countTokens` with locked model `gemini-2.5-flash`; the manifest records `tokenizerModel` and `chunkingVersion`. Build paragraph/sentence candidates toward 900 counted tokens, split further until every chunk is at most 1,400 counted tokens, and apply an 80-counted-token raw-text overlap without crossing the unit. Unit tests use a fixed deterministic counter to prove boundaries and offsets; the production validator re-counts every finalized chunk through Vertex before activation.
+Use an injected `TokenCounter` interface. Production ingestion calls Vertex `countTokens` at `global` with locked model `gemini-3.5-flash-lite`; the manifest records `tokenizerModel` and `chunkingVersion`. Build paragraph/sentence candidates toward 900 counted tokens, split further until every chunk is at most 1,400 counted tokens, and apply an 80-counted-token raw-text overlap without crossing the unit. Unit tests use a fixed deterministic counter to prove boundaries and offsets; the production validator re-counts every finalized chunk through Vertex before activation.
 
 - [ ] **Step 3: Add artifact scripts and run twice**
 
@@ -330,7 +330,7 @@ Return typed statuses without calling the model when the request is excluded or 
 
 - [ ] **Step 3: Implement a bounded structured prompt**
 
-System instructions identify the evidence blocks as untrusted source data, allow English paraphrase of Arabic Al-Sa'di without claiming quotation, forbid outside knowledge, require `[S1]` markers in every substantive paragraph, and request JSON with `answer` and `citationIds`. History/question are placed in explicit XML-style data tags after the fixed instructions. Use temperature 0.2 and 800 output tokens.
+System instructions identify the evidence blocks as untrusted source data, allow English paraphrase of Arabic Al-Sa'di without claiming quotation, forbid outside knowledge, require `[S1]` markers in every substantive paragraph, and request JSON with `answer` and `citationIds`. History/question are placed in explicit XML-style data tags after the fixed instructions. Use 800 output tokens and do not send custom temperature, top-K, or top-P because `gemini-3.5-flash-lite` ignores those controls.
 
 - [ ] **Step 4: Validate output and retry once**
 

@@ -259,11 +259,11 @@ Every substantive answer paragraph must contain at least one accepted citation m
 - Timeout: 30 seconds.
 - Maximum instances: 10.
 - Concurrency: 20 requests per instance.
-- Generation model: stable `gemini-2.5-flash` for this release.
+- Generation model: GA `gemini-3.5-flash-lite` for this release, available on Vertex AI at `global`, with structured output and `countTokens` support; its published retirement is July 2027 or later.
 - Embedding model: GA `gemini-embedding-2`, 768 auto-normalized dimensions.
-- Generation: temperature 0.2, maximum 800 output tokens.
+- Generation: maximum 800 output tokens. Do not send custom temperature, top-K, or top-P because this model ignores those controls.
 - Retrieval: at most four accepted chunks per source and a bounded combined evidence budget.
-- Retry: one retry only for explicitly retryable provider errors; citation/schema regeneration uses the same evidence and consumes the single retry budget.
+- Retry: one regeneration only after malformed schema or invalid citations, using the exact same evidence. Provider timeouts and errors fail calmly without retry.
 
 Model, prompt, threshold, and corpus versions are server configuration, never client constants. Changing a model or embedding dimension requires the corresponding evaluation and, for embeddings, a new corpus version.
 

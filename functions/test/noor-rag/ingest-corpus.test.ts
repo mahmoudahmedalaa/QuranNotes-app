@@ -34,7 +34,7 @@ function artifacts(tokenizerMode = 'vertex-production'): IngestArtifacts {
             schemaVersion: 1, corpusVersion: LOCKED_CORPUS_VERSION,
             normalizationVersion: 'html-entities-nfc-whitespace-v1',
             chunkingVersion: 'raw-paragraph-sentence-900-1400-overlap-80-v1',
-            tokenizerMode, tokenizerModel: 'gemini-2.5-flash', targetTokens: 900,
+            tokenizerMode, tokenizerModel: 'gemini-3.5-flash-lite', targetTokens: 900,
             hardMaxTokens: 1400, overlapTokens: 80, sourceCounts: [], unitCount: 1,
             chunkCount: 3, lookupCount: 1, artifactSha256: { units: 'u', chunks: 'c', lookups: 'l' },
             aggregateSha256: 'aggregate',

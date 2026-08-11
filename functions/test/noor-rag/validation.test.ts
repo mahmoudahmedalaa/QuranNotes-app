@@ -25,7 +25,7 @@ const VALID_CONFIG: NoorRuntimeConfig = {
     ownerUids: ['owner_QuranNotes-1'],
     activeCorpusVersion: 'noor-corpus-v1',
     promptVersion: 'noor-prompt-v1',
-    generationModel: 'gemini-2.5-flash',
+    generationModel: 'gemini-3.5-flash-lite',
     embeddingModel: 'gemini-embedding-2',
     embeddingDimension: 768,
     pseudonymKeyVersion: 'hmac-v1',

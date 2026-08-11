@@ -23,7 +23,7 @@ function config(overrides: Partial<NoorRuntimeConfig> = {}): NoorRuntimeConfig {
         ownerUids: [],
         activeCorpusVersion: VERSION,
         promptVersion: 'v1',
-        generationModel: 'gemini-2.5-flash',
+        generationModel: 'gemini-3.5-flash-lite',
         embeddingModel: 'gemini-embedding-2',
         embeddingDimension: EMBEDDING_DIMENSION,
         pseudonymKeyVersion: 'v1',

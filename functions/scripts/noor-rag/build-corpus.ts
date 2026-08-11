@@ -9,7 +9,7 @@ import {
     type TokenCounter,
 } from '../../src/noor-rag/corpus';
 
-const GENERATION_MODEL = 'gemini-2.5-flash';
+const GENERATION_MODEL = 'gemini-3.5-flash-lite';
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 function argument(name: string): string | undefined {

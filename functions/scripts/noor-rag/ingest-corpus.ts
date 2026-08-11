@@ -17,7 +17,7 @@ import type { CorpusArtifacts, CorpusChunk, CorpusManifest } from '../../src/noo
 export const LOCKED_PROJECT = 'qurannotes-9f7a1' as const;
 export const LOCKED_CORPUS_VERSION = '2026-08-10-v1' as const;
 export const VERTEX_LOCATION = 'global' as const;
-const GENERATION_MODEL = 'gemini-2.5-flash';
+const GENERATION_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BATCH_WRITES = 450;
 
 export type IngestArtifacts = CorpusArtifacts;

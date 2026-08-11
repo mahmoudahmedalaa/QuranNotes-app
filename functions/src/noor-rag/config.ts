@@ -1,7 +1,7 @@
 import type { NoorSource } from './generatedContract';
 import { EMBEDDING_DIMENSION, EMBEDDING_MODEL } from './embedding';
 
-const GENERATION_MODEL = 'gemini-2.5-flash';
+const GENERATION_MODEL = 'gemini-3.5-flash-lite';
 const MAX_OWNER_UIDS = 100;
 const MAX_VERSION_CHARACTERS = 128;
 const MAX_CHUNKS_PER_SOURCE = 4;
