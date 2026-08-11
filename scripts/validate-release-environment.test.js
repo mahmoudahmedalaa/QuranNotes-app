@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const Module = require('node:module');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -39,6 +40,34 @@ function createFileReader(files) {
 
     return files[filePath];
   };
+}
+
+function loadValidatorWithoutNativeParseEnv() {
+  const validatorPath = require.resolve('./validate-release-environment');
+  const cachedValidator = require.cache[validatorPath];
+  const originalLoad = Module._load;
+
+  delete require.cache[validatorPath];
+  Module._load = function loadWithoutNativeParseEnv(
+    request,
+    parent,
+    isMain,
+  ) {
+    if (request === 'node:util') {
+      return {};
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    return require(validatorPath);
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[validatorPath];
+    if (cachedValidator) {
+      require.cache[validatorPath] = cachedValidator;
+    }
+  }
 }
 
 function createMetadataFixture(overrides = {}) {
@@ -257,6 +286,40 @@ test('dotenv parsing preserves hash characters inside quoted values', () => {
 
   assert.equal(environment.DOUBLE, 'value # retained');
   assert.equal(environment.SINGLE, 'other # retained');
+});
+
+test('dotenv fallback supports all required behavior when util.parseEnv is unavailable', () => {
+  const fallbackValidator = loadValidatorWithoutNativeParseEnv();
+  const environment = fallbackValidator.loadReleaseEnvironment({
+    cwd: '/virtual-project',
+    inheritedEnvironment: {},
+    readFile: createFileReader({
+      '/virtual-project/.env.local': [
+        'EXPO_PUBLIC_FIREBASE_API_KEY= # intentionally unset',
+        'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN="local # retained"',
+        'EXPO_PUBLIC_FIREBASE_PROJECT_ID=local-project # explanation',
+      ].join('\n'),
+      '/virtual-project/.env': serializeEnvironment({
+        ...FIREBASE_VARIABLES,
+        EXPO_PUBLIC_REVENUECAT_IOS_KEY: 'revenuecat-ios-fixture',
+      }),
+    }),
+  });
+
+  const result = fallbackValidator.validateReleaseEnvironment({
+    environment,
+    platform: 'ios',
+  });
+
+  assert.equal(environment.EXPO_PUBLIC_FIREBASE_API_KEY, '');
+  assert.equal(
+    environment.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    'local # retained',
+  );
+  assert.equal(environment.EXPO_PUBLIC_FIREBASE_PROJECT_ID, 'local-project');
+  assert.deepEqual(result.missingVariables, [
+    'EXPO_PUBLIC_FIREBASE_API_KEY',
+  ]);
 });
 
 test('CLI-safe reporting never leaks configured values', () => {
