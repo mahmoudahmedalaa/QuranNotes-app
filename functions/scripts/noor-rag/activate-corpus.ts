@@ -38,6 +38,12 @@ export interface ActivationRepository {
     activate(expectedCurrent: string, version: string): Promise<void>;
 }
 
+export interface ActivationPreflightResult {
+    ready: boolean;
+    exitCode: 0 | 1;
+    blockers: string[];
+}
+
 function valueArgument(args: readonly string[], name: string): string | undefined {
     const prefix = `--${name}=`;
     return args.find(value => value.startsWith(prefix))?.slice(prefix.length);
@@ -60,6 +66,16 @@ export function parseActivationArguments(args: readonly string[]): ActivationOpt
         project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, expectedCurrent,
         execute: args.includes('--execute-production-write'),
     };
+}
+
+export function parseActivationPreflightArguments(args: readonly string[]): ActivationOptions {
+    if (args.filter(value => value === '--preflight').length !== 1) {
+        throw new Error('Activation preflight requires exactly one --preflight flag');
+    }
+    if (args.includes('--execute-production-write')) {
+        throw new Error('Activation preflight is always zero-write');
+    }
+    return parseActivationArguments(args.filter(value => value !== '--preflight'));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -130,6 +146,63 @@ export async function activateCorpus(input: {
     return { dryRun: !input.options.execute, version: LOCKED_CORPUS_VERSION };
 }
 
+export async function preflightActivation(input: {
+    options: ActivationOptions;
+    repository: ActivationRepository;
+    expectedManifest: ExpectedManifest;
+    publicActivationApproved: boolean;
+    provenanceBlockers: readonly string[];
+    probeIndex(source: NoorSource): Promise<boolean>;
+}): Promise<ActivationPreflightResult> {
+    const blockers: string[] = [];
+    const provenanceBlockers = [...new Set(input.provenanceBlockers)];
+    if (!input.publicActivationApproved || provenanceBlockers.length > 0) {
+        blockers.push(...(provenanceBlockers.length > 0
+            ? provenanceBlockers.map(blocker => `provenance:${blocker}`)
+            : ['provenance:public_activation_not_approved']));
+    }
+
+    let localManifestValid = true;
+    try {
+        assertExpectedManifest(input.expectedManifest, input.options.version);
+    } catch {
+        localManifestValid = false;
+        blockers.push('locked_local_corpus_manifest_invalid');
+    }
+
+    let config: ReturnType<typeof parseNoorRuntimeConfig> | undefined;
+    try {
+        config = parseNoorRuntimeConfig(await input.repository.readRuntimeConfig());
+        if (config.enabled || config.publicEnabled || config.ownerUids.length !== 0
+            || config.activeCorpusVersion !== input.options.expectedCurrent) {
+            blockers.push('runtime_config_not_disabled_private_owner_empty_or_expected_current');
+        }
+    } catch {
+        blockers.push('runtime_config_missing_or_invalid');
+    }
+
+    if (localManifestValid) {
+        try {
+            assertProductionManifest(await input.repository.readManifest(input.options.version), input.expectedManifest);
+        } catch {
+            blockers.push('production_ingestion_manifest_incomplete_or_mismatched');
+        }
+        if (config && config.maxEvidenceCharacters < input.expectedManifest.largestChunkCharacters) {
+            blockers.push('runtime_evidence_budget_smaller_than_largest_chunk');
+        }
+    }
+
+    for (const source of LOCKED_SOURCES) {
+        try {
+            if (!await input.probeIndex(source)) blockers.push(`vector_index_not_ready:${source}`);
+        } catch {
+            blockers.push(`vector_index_not_ready:${source}`);
+        }
+    }
+
+    return { ready: blockers.length === 0, exitCode: blockers.length === 0 ? 0 : 1, blockers };
+}
+
 function readJson(path: string): unknown {
     return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
@@ -178,26 +251,43 @@ async function createRepository(options: ActivationOptions): Promise<ActivationR
 }
 
 async function main(): Promise<void> {
-    const options = parseActivationArguments(process.argv.slice(2));
+    const args = process.argv.slice(2);
+    const preflight = args.includes('--preflight');
+    const options = preflight ? parseActivationPreflightArguments(args) : parseActivationArguments(args);
     const repositoryRoot = resolve(__dirname, '../../../..');
     const provenance = readJson(resolve(repositoryRoot, 'docs/noor-rag/corpus-provenance.json'));
     const approved = isRecord(provenance) && provenance.publicActivationApproved === true;
-    if (!approved) throw new Error('Corpus provenance public activation is not approved');
+    if (!preflight && !approved) throw new Error('Corpus provenance public activation is not approved');
     const indexProbe = await createAdminIndexProbe(options);
     const vector = createDeterministicProbeVector();
+    const repository = await createRepository(options);
+    const expectedManifest = loadExpectedManifest(options.version);
+    const probeIndex = async (source: NoorSource): Promise<boolean> => {
+        try {
+            const response = await indexProbe.query({ ...options, source, vector, limit: 1 });
+            return response.count === 1 && response.corpusVersion === options.version && response.source === source;
+        } catch {
+            return false;
+        }
+    };
+    if (preflight) {
+        const provenanceBlockers = isRecord(provenance) && Array.isArray(provenance.activationBlockers)
+            ? provenance.activationBlockers.filter((value): value is string => typeof value === 'string')
+            : [];
+        const result = await preflightActivation({
+            options, repository, expectedManifest, publicActivationApproved: approved,
+            provenanceBlockers, probeIndex,
+        });
+        process.stdout.write(`${JSON.stringify(result, undefined, 2)}\n`);
+        process.exitCode = result.exitCode;
+        return;
+    }
     const result = await activateCorpus({
         options,
-        repository: await createRepository(options),
-        expectedManifest: loadExpectedManifest(options.version),
+        repository,
+        expectedManifest,
         publicActivationApproved: approved,
-        probeIndex: async source => {
-            try {
-                const response = await indexProbe.query({ ...options, source, vector, limit: 1 });
-                return response.count === 1 && response.corpusVersion === options.version && response.source === source;
-            } catch {
-                return false;
-            }
-        },
+        probeIndex,
     });
     process.stdout.write(`${JSON.stringify(result)}\n`);
 }

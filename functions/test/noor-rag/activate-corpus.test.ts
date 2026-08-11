@@ -6,6 +6,8 @@ import {
     LOCKED_PROJECT,
     activateCorpus,
     parseActivationArguments,
+    parseActivationPreflightArguments,
+    preflightActivation,
     type ActivationRepository,
 } from '../../scripts/noor-rag/activate-corpus';
 
@@ -36,6 +38,78 @@ class FakeRepository implements ActivationRepository {
 }
 
 describe('Noor corpus activation', () => {
+    it('parses an explicit zero-write preflight and rejects production execution', () => {
+        const args = [
+            `--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`,
+            '--expected-current=none', '--preflight',
+        ];
+        assert.equal(parseActivationPreflightArguments(args).execute, false);
+        assert.throws(() => parseActivationPreflightArguments([
+            ...args, '--execute-production-write',
+        ]), /zero-write/i);
+    });
+
+    it('reports every readiness blocker without activating', async () => {
+        const repository = new FakeRepository(null, MANIFEST);
+        const result = await preflightActivation({
+            options: { project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, expectedCurrent: 'none', execute: false },
+            repository,
+            expectedManifest: EXPECTED,
+            publicActivationApproved: false,
+            provenanceBlockers: ['commercial_redistribution_license_not_proven', 'upstream_corpus_has_known_coverage_gaps'],
+            probeIndex: async () => true,
+        });
+
+        assert.deepEqual(result, {
+            ready: false,
+            exitCode: 1,
+            blockers: [
+                'provenance:commercial_redistribution_license_not_proven',
+                'provenance:upstream_corpus_has_known_coverage_gaps',
+                'runtime_config_missing_or_invalid',
+            ],
+        });
+        assert.deepEqual(repository.activations, []);
+    });
+
+    it('recognizes a fully ready state without writing', async () => {
+        const repository = new FakeRepository();
+        const result = await preflightActivation({
+            options: { project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, expectedCurrent: 'none', execute: false },
+            repository,
+            expectedManifest: EXPECTED,
+            publicActivationApproved: true,
+            provenanceBlockers: [],
+            probeIndex: async () => true,
+        });
+
+        assert.deepEqual(result, { ready: true, exitCode: 0, blockers: [] });
+        assert.deepEqual(repository.activations, []);
+    });
+
+    it('reports unsafe runtime, manifest, budget, and index state together', async () => {
+        const repository = new FakeRepository(
+            { ...CONFIG, enabled: true, maxEvidenceCharacters: 1000 },
+            { ...MANIFEST, failedWrites: ['write_failed'] },
+        );
+        const result = await preflightActivation({
+            options: { project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, expectedCurrent: 'none', execute: false },
+            repository,
+            expectedManifest: EXPECTED,
+            publicActivationApproved: true,
+            provenanceBlockers: [],
+            probeIndex: async source => source === 'ibn_kathir_en_abridged',
+        });
+
+        assert.deepEqual(result.blockers, [
+            'runtime_config_not_disabled_private_owner_empty_or_expected_current',
+            'production_ingestion_manifest_incomplete_or_mismatched',
+            'runtime_evidence_budget_smaller_than_largest_chunk',
+            'vector_index_not_ready:al_sadi_ar',
+        ]);
+        assert.deepEqual(repository.activations, []);
+    });
+
     it('requires exact project, version, and expected-current gates', () => {
         assert.throws(() => parseActivationArguments([]), /project/);
         assert.throws(() => parseActivationArguments([
