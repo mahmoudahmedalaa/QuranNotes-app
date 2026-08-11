@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="QuranNotes Noor RAG">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="user" value="QuranNotes user&#xa;mobile app" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e7f5ff;strokeColor=#1971c2;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="260" width="180" height="70" as="geometry" /></mxCell>
+        <mxCell id="client" value="React Native client&#xa;Noor chat + verse AI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#a5d8ff;strokeColor=#1971c2;" vertex="1" parent="1"><mxGeometry x="280" y="260" width="210" height="70" as="geometry" /></mxCell>
+        <mxCell id="auth" value="Firebase Auth&#xa;+ App Check" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffc9c9;strokeColor=#e03131;" vertex="1" parent="1"><mxGeometry x="550" y="260" width="180" height="70" as="geometry" /></mxCell>
+        <mxCell id="callable" value="askNoorRagV1&#xa;Gen 2 callable" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0bfff;strokeColor=#7048e8;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="790" y="260" width="200" height="70" as="geometry" /></mxCell>
+        <mxCell id="handler" value="Handler&#xa;validation + policy + runtime" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0bfff;strokeColor=#7048e8;" vertex="1" parent="1"><mxGeometry x="1040" y="260" width="220" height="70" as="geometry" /></mxCell>
+        <mxCell id="entitlement" value="RevenueCat entitlement&#xa;pro_access" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffc9c9;strokeColor=#e03131;" vertex="1" parent="1"><mxGeometry x="1310" y="130" width="210" height="70" as="geometry" /></mxCell>
+        <mxCell id="usage" value="Usage + idempotency&#xa;Firestore transactions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b2f2bb;strokeColor=#2f9e44;" vertex="1" parent="1"><mxGeometry x="1310" y="260" width="210" height="70" as="geometry" /></mxCell>
+        <mxCell id="retrieval" value="Retrieval orchestrator&#xa;exact or semantic" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffa8a8;strokeColor=#c92a2a;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1310" y="390" width="210" height="70" as="geometry" /></mxCell>
+        <mxCell id="firestore" value="Firestore corpus&#xa;units + chunks + verseLookup&#xa;768-D vectors" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#b2f2bb;strokeColor=#2f9e44;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1020" y="520" width="260" height="100" as="geometry" /></mxCell>
+        <mxCell id="runtime" value="noorConfig/runtime&#xa;active version + limits" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#b2f2bb;strokeColor=#2f9e44;" vertex="1" parent="1"><mxGeometry x="1320" y="520" width="210" height="100" as="geometry" /></mxCell>
+        <mxCell id="embedding" value="Gemini Embedding 2&#xa;768 dimensions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e599f7;strokeColor=#9c36b5;" vertex="1" parent="1"><mxGeometry x="700" y="730" width="210" height="70" as="geometry" /></mxCell>
+        <mxCell id="generation" value="Gemini 3.5 Flash Lite&#xa;grounded JSON answer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e599f7;strokeColor=#9c36b5;" vertex="1" parent="1"><mxGeometry x="1040" y="730" width="220" height="70" as="geometry" /></mxCell>
+        <mxCell id="pipeline" value="Offline corpus pipeline&#xa;source → units → chunks → exact counts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="730" width="250" height="70" as="geometry" /></mxCell>
+        <mxCell id="ingest" value="Resumable ingestion&#xa;Firestore batches + manifest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffec99;strokeColor=#f08c00;" vertex="1" parent="1"><mxGeometry x="360" y="730" width="240" height="70" as="geometry" /></mxCell>
+        <mxCell id="citations" value="Citation + response validation&#xa;bounded safe output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0bfff;strokeColor=#7048e8;" vertex="1" parent="1"><mxGeometry x="1320" y="730" width="230" height="70" as="geometry" /></mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="user" target="client"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="client" target="auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="auth" target="callable"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="callable" target="handler"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="handler" target="entitlement"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="handler" target="usage"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="handler" target="retrieval"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="retrieval" target="firestore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="runtime" target="handler"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="retrieval" target="generation"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="generation" target="citations"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="citations" target="client"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="pipeline" target="ingest"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="ingest" target="firestore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="embedding" target="ingest"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="generation" target="embedding"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
