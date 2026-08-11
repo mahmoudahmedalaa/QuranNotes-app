@@ -117,20 +117,49 @@ describe('ProContext RevenueCat identity isolation', () => {
         expect(result.current.isPro).toBe(false);
     });
 
-    it.each(['login failure', 'identity mismatch'])(
-        'fails closed on %s without leaking a prior or anonymous entitlement',
-        async () => {
-            mockCurrentUser = user('locked-user');
-            mockService().ensureUserIdentity.mockRejectedValue(new Error('sanitized identity failure'));
-            mockService().getCustomerInfo.mockResolvedValue(PRO_INFO);
-            const { result } = renderHook(() => usePro(), { wrapper });
+    it('fails closed when the initial RevenueCat login fails', async () => {
+        mockCurrentUser = user('locked-user');
+        mockService().ensureUserIdentity.mockRejectedValue(new Error('sanitized login failure'));
+        mockService().getCustomerInfo.mockResolvedValue(PRO_INFO);
+        const { result } = renderHook(() => usePro(), { wrapper });
 
-            await waitFor(() => expect(result.current.loading).toBe(false));
-            expect(result.current.identityReady).toBe(false);
-            expect(result.current.isPro).toBe(false);
-            expect(mockService().getCustomerInfo).not.toHaveBeenCalled();
-        },
-    );
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.identityReady).toBe(false);
+        expect(result.current.isPro).toBe(false);
+        expect(mockService().getCustomerInfo).not.toHaveBeenCalled();
+    });
+
+    it('fails closed on a new-user identity mismatch without leaking the prior user entitlement', async () => {
+        mockCurrentUser = user('prior-user');
+        mockService().ensureUserIdentity.mockResolvedValue(PRO_INFO);
+        mockService().getCustomerInfo.mockResolvedValue(PRO_INFO);
+        const { result, rerender } = renderHook(() => usePro(), { wrapper });
+        await waitFor(() => expect(result.current.isPro).toBe(true));
+
+        mockService().ensureUserIdentity.mockClear();
+        mockService().getCustomerInfo.mockClear();
+        mockService().ensureUserIdentity.mockRejectedValue(new Error('sanitized identity mismatch'));
+        mockCurrentUser = user('new-user');
+        rerender({});
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(mockService().ensureUserIdentity).toHaveBeenCalledWith('new-user');
+        expect(mockService().getCustomerInfo).not.toHaveBeenCalled();
+        expect(result.current.identityReady).toBe(false);
+        expect(result.current.isPro).toBe(false);
+    });
+
+    it('does not carry an anonymous entitlement through successful Firebase UID binding', async () => {
+        mockCurrentUser = user('firebase-user');
+        mockService().ensureUserIdentity.mockResolvedValue(PRO_INFO);
+        mockService().getCustomerInfo.mockResolvedValue(LOCKED_INFO);
+        const { result } = renderHook(() => usePro(), { wrapper });
+
+        await waitFor(() => expect(result.current.identityReady).toBe(true));
+        expect(mockService().ensureUserIdentity).toHaveBeenCalledWith('firebase-user');
+        expect(mockService().getCustomerInfo).toHaveBeenCalled();
+        expect(result.current.isPro).toBe(false);
+    });
 
     it('keeps the App Review and owner-QA account locked without active pro_access', async () => {
         mockCurrentUser = user('owner-qa', 'mahmoudahmedalaa+review@gmail.com');

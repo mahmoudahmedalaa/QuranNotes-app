@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { PurchasesOffering, PurchasesPackage } from '../infrastructure/RevenueCatService';
 import RamadanPaywallScreen from './RamadanPaywallScreen';
@@ -6,6 +7,7 @@ import { revenueCatService } from '../infrastructure/RevenueCatService';
 
 const mockCheckStatus = jest.fn();
 const mockOnPurchaseSuccess = jest.fn();
+let mockUser: { id: string } | null = { id: 'firebase-user' };
 
 jest.mock('moti', () => ({
     MotiView: 'View',
@@ -20,7 +22,7 @@ jest.mock('../../auth/infrastructure/ProContext', () => ({
     usePro: () => ({ checkStatus: mockCheckStatus }),
 }));
 jest.mock('../../auth/infrastructure/AuthContext', () => ({
-    useAuth: () => ({ user: { id: 'firebase-user' } }),
+    useAuth: () => ({ user: mockUser }),
 }));
 jest.mock('../infrastructure/TelemetryService', () => ({
     TelemetryService: {
@@ -60,11 +62,14 @@ function serviceMock() {
 describe('RamadanPaywallScreen', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockUser = { id: 'firebase-user' };
         serviceMock().getOfferings.mockResolvedValue(offering);
         serviceMock().ensureUserIdentity.mockResolvedValue({ entitlements: { active: {} } });
         serviceMock().purchasePackage.mockResolvedValue({ success: true });
         serviceMock().restorePurchases.mockResolvedValue(true);
         mockCheckStatus.mockResolvedValue(true);
+        jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+        jest.spyOn(console, 'warn').mockImplementation(jest.fn());
     });
 
     it('renders all three current-offering plans with localized prices and fair-use copy', async () => {
@@ -80,17 +85,94 @@ describe('RamadanPaywallScreen', () => {
         expect(screen.getByText('Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.')).toBeTruthy();
     });
 
-    it('purchases Lifetime only after Firebase UID binding and verified entitlement refresh', async () => {
+    it.each([
+        ['Monthly', '$rc_monthly'],
+        ['Annual', '$rc_annual'],
+        ['Lifetime', '$rc_lifetime'],
+    ] as const)('purchases %s only after binding the current Firebase UID and refreshing entitlement', async (label, identifier) => {
         const screen = render(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
-        await waitFor(() => expect(screen.getByLabelText('Select Lifetime plan')).toBeTruthy());
-        fireEvent.press(screen.getByLabelText('Select Lifetime plan'));
+        await waitFor(() => expect(screen.getByLabelText(`Select ${label} plan`)).toBeTruthy());
+        fireEvent.press(screen.getByLabelText(`Select ${label} plan`));
         fireEvent.press(screen.getByLabelText('Purchase selected plan'));
 
         await waitFor(() => expect(serviceMock().purchasePackage).toHaveBeenCalled());
         expect(serviceMock().ensureUserIdentity).toHaveBeenCalledWith('firebase-user');
-        expect(serviceMock().purchasePackage.mock.calls[0][0].identifier).toBe('$rc_lifetime');
+        expect(serviceMock().purchasePackage.mock.calls[0][0].identifier).toBe(identifier);
         expect(mockCheckStatus).toHaveBeenCalled();
         expect(mockOnPurchaseSuccess).toHaveBeenCalled();
+    });
+
+    it('restores only for the current Firebase UID and unlocks after authoritative refresh', async () => {
+        const screen = render(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
+        await waitFor(() => expect(screen.getByText('Restore Purchases')).toBeTruthy());
+        fireEvent.press(screen.getByText('Restore Purchases'));
+
+        await waitFor(() => expect(serviceMock().restorePurchases).toHaveBeenCalled());
+        expect(serviceMock().ensureUserIdentity).toHaveBeenCalledWith('firebase-user');
+        expect(mockCheckStatus).toHaveBeenCalled();
+        expect(mockOnPurchaseSuccess).toHaveBeenCalled();
+    });
+
+    it('uses the newly switched Firebase UID for the next purchase', async () => {
+        mockUser = { id: 'prior-user' };
+        const screen = render(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+
+        mockUser = { id: 'current-user' };
+        screen.rerender(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
+        serviceMock().ensureUserIdentity.mockClear();
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+        await waitFor(() => expect(serviceMock().purchasePackage).toHaveBeenCalled());
+        expect(serviceMock().ensureUserIdentity).toHaveBeenCalledWith('current-user');
+        expect(serviceMock().ensureUserIdentity).not.toHaveBeenCalledWith('prior-user');
+    });
+
+    it('keeps signed-out purchase and restore attempts locked', async () => {
+        mockUser = null;
+        const screen = render(<RamadanPaywallScreen />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+        fireEvent.press(screen.getByText('Restore Purchases'));
+
+        expect(serviceMock().ensureUserIdentity).not.toHaveBeenCalled();
+        expect(serviceMock().purchasePackage).not.toHaveBeenCalled();
+        expect(serviceMock().restorePurchases).not.toHaveBeenCalled();
+        expect(Alert.alert).toHaveBeenCalledWith('Sign In Required', expect.any(String));
+    });
+
+    it('fails closed when Firebase UID binding fails', async () => {
+        serviceMock().ensureUserIdentity.mockRejectedValue(new Error('sanitized identity failure'));
+        const screen = render(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+        await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Error', 'Something went wrong. Please try again.'));
+        expect(serviceMock().ensureUserIdentity).toHaveBeenCalledWith('firebase-user');
+        expect(serviceMock().purchasePackage).not.toHaveBeenCalled();
+        expect(mockOnPurchaseSuccess).not.toHaveBeenCalled();
+    });
+
+    it('keeps cancellation silent', async () => {
+        serviceMock().purchasePackage.mockResolvedValue({ success: false, userCancelled: true });
+        const screen = render(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+        await waitFor(() => expect(serviceMock().purchasePackage).toHaveBeenCalled());
+        expect(Alert.alert).not.toHaveBeenCalled();
+        expect(mockOnPurchaseSuccess).not.toHaveBeenCalled();
+    });
+
+    it('stays locked when the authoritative entitlement refresh returns false', async () => {
+        mockCheckStatus.mockResolvedValue(false);
+        const screen = render(<RamadanPaywallScreen onPurchaseSuccess={mockOnPurchaseSuccess} />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+        await waitFor(() => expect(mockCheckStatus).toHaveBeenCalled());
+        expect(mockOnPurchaseSuccess).not.toHaveBeenCalled();
+        expect(Alert.alert).toHaveBeenCalledWith('Purchase Pending', expect.any(String));
     });
 
     it('does not render or substitute a missing Lifetime package', async () => {

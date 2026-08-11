@@ -1,7 +1,8 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import fs from 'fs';
 import path from 'path';
+import { revenueCatService } from '../../features/payments/infrastructure/RevenueCatService';
 // Mocks must use require inside the factory to avoid hoisting issues
 jest.mock('moti', () => {
     const { View } = require('react-native');
@@ -12,7 +13,7 @@ jest.mock('moti', () => {
 });
 
 // Import after mocks
-import { View, Text } from 'react-native';
+import { Alert, View, Text } from 'react-native';
 import PaywallScreen from '../../features/payments/presentation/PaywallScreen';
 import OnboardingPremium from '../../../app/onboarding/premium';
 import { ProProvider } from '../../features/auth/infrastructure/ProContext';
@@ -22,10 +23,17 @@ import { Colors, Spacing } from '../../core/theme/DesignSystem';
 // --- MOCKS ---
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
+const mockDismissAll = jest.fn();
+let mockAppUser: { id: string; email: string } | null = {
+    id: 'current-firebase-user',
+    email: 'current@example.com',
+};
 jest.mock('expo-router', () => ({
     useRouter: () => ({
         push: mockPush,
-        replace: jest.fn(),
+        replace: mockReplace,
+        dismissAll: mockDismissAll,
         back: jest.fn(),
     }),
     useLocalSearchParams: () => ({ id: '1' }),
@@ -46,6 +54,12 @@ jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock
 jest.mock('expo-haptics', () => ({
     impactAsync: jest.fn(),
     notificationAsync: jest.fn(),
+    ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' },
+    NotificationFeedbackType: { Success: 'success' },
+}));
+
+jest.mock('../../features/auth/infrastructure/AuthContext', () => ({
+    useAuth: () => ({ user: mockAppUser }),
 }));
 
 jest.mock('../../features/payments/infrastructure/RevenueCatService', () => ({
@@ -97,6 +111,13 @@ jest.mock('../../features/payments/infrastructure/useSubscriptionAccess', () => 
     useSubscriptionAccess: () => ({ requiresSubscription: false }),
 }));
 
+jest.mock('../../features/payments/infrastructure/TelemetryService', () => ({
+    TelemetryService: {
+        trackPaywallView: jest.fn().mockResolvedValue(undefined),
+        trackSubscriptionEvent: jest.fn().mockResolvedValue(undefined),
+    },
+}));
+
 jest.mock('expo-av', () => ({
     Audio: {
         Sound: { createAsync: jest.fn().mockResolvedValue({ sound: { playAsync: jest.fn(), unloadAsync: jest.fn() } }) },
@@ -108,6 +129,34 @@ jest.mock('expo-av', () => ({
 jest.mock('../../core/utils/ramadanUtils', () => ({
     isRamadanSeason: jest.fn().mockReturnValue(false),
 }));
+
+function appRevenueMock() {
+    return revenueCatService as unknown as {
+        ensureUserIdentity: jest.Mock;
+        getCustomerInfo: jest.Mock;
+        getOfferings: jest.Mock;
+        purchasePackage: jest.Mock;
+        restorePurchases: jest.Mock;
+        isPro: jest.Mock;
+    };
+}
+
+function resetAppPurchaseMocks() {
+    mockAppUser = { id: 'current-firebase-user', email: 'current@example.com' };
+    appRevenueMock().ensureUserIdentity.mockResolvedValue({ entitlements: { active: {} } });
+    appRevenueMock().getCustomerInfo.mockResolvedValue({
+        entitlements: { active: { pro_access: { identifier: 'pro_access' } } },
+    });
+    appRevenueMock().getOfferings.mockResolvedValue({
+        monthly: { identifier: 'pro_monthly', product: { priceString: '$4.99', introPrice: null } },
+        annual: { identifier: 'pro_annual', product: { priceString: '$35.99', introPrice: null } },
+        lifetime: { identifier: 'pro_lifetime', product: { priceString: 'US$79.99', introPrice: null } },
+    });
+    appRevenueMock().purchasePackage.mockResolvedValue({ success: true });
+    appRevenueMock().restorePurchases.mockResolvedValue(true);
+    appRevenueMock().isPro.mockReturnValue(true);
+    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+}
 
 
 describe('Comprehensive App Flow (50 Checks)', () => {
@@ -252,6 +301,11 @@ describe('Comprehensive App Flow (50 Checks)', () => {
     });
 
     describe('7. Purchase identity wiring', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+            resetAppPurchaseMocks();
+        });
+
         it('51. Settings restore does not bypass secured ProContext identity handling', () => {
             const settingsSource = fs.readFileSync(path.join(process.cwd(), 'app/(tabs)/settings.tsx'), 'utf8');
             expect(settingsSource).not.toContain('revenueCatService.restorePurchases()');
@@ -282,6 +336,117 @@ describe('Comprehensive App Flow (50 Checks)', () => {
             );
             expect(tafsirSource).not.toMatch(/Unlimited AI|unlimited AI-powered/);
             expect(tafsirSource).toContain('Noor AI & Quran Explanations');
+        });
+
+        it.each([
+            ['Monthly', 'pro_monthly'],
+            ['Annual', 'pro_annual'],
+            ['Lifetime', 'pro_lifetime'],
+        ] as const)('54. Onboarding purchases %s for the current Firebase UID', async (label, identifier) => {
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+
+            await waitFor(() => expect(screen.getByLabelText(`Select ${label} plan`)).toBeTruthy());
+            fireEvent.press(screen.getByLabelText(`Select ${label} plan`));
+            fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+            await waitFor(() => expect(appRevenueMock().purchasePackage).toHaveBeenCalled());
+            expect(appRevenueMock().ensureUserIdentity).toHaveBeenCalledWith('current-firebase-user');
+            expect(appRevenueMock().purchasePackage.mock.calls[0][0].identifier).toBe(identifier);
+            await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+        });
+
+        it('55. Onboarding restore targets the current Firebase UID and waits for authoritative Pro', async () => {
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+            await waitFor(() => expect(screen.getByText('Restore Purchases')).toBeTruthy());
+            fireEvent.press(screen.getByText('Restore Purchases'));
+
+            await waitFor(() => expect(appRevenueMock().restorePurchases).toHaveBeenCalled());
+            expect(appRevenueMock().ensureUserIdentity).toHaveBeenCalledWith('current-firebase-user');
+            await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+        });
+
+        it('56. Onboarding keeps signed-out purchase and restore attempts locked', async () => {
+            mockAppUser = null;
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+            fireEvent.press(screen.getByText('Restore Purchases'));
+
+            expect(appRevenueMock().purchasePackage).not.toHaveBeenCalled();
+            expect(appRevenueMock().restorePurchases).not.toHaveBeenCalled();
+            expect(Alert.alert).toHaveBeenCalledWith('Sign In Required', expect.any(String));
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('57. Onboarding fails closed when current Firebase UID binding fails', async () => {
+            appRevenueMock().ensureUserIdentity.mockRejectedValue(new Error('sanitized identity failure'));
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+            await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Error', 'Something went wrong. Please try again.'));
+            expect(appRevenueMock().ensureUserIdentity).toHaveBeenCalledWith('current-firebase-user');
+            expect(appRevenueMock().purchasePackage).not.toHaveBeenCalled();
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('58. Onboarding keeps purchase cancellation silent', async () => {
+            appRevenueMock().purchasePackage.mockResolvedValue({ success: false, userCancelled: true });
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+            await waitFor(() => expect(appRevenueMock().purchasePackage).toHaveBeenCalled());
+            expect(Alert.alert).not.toHaveBeenCalled();
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('59. Onboarding does not navigate when authoritative entitlement refresh stays locked', async () => {
+            appRevenueMock().isPro.mockReturnValue(false);
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+            await waitFor(() => expect(appRevenueMock().purchasePackage).toHaveBeenCalled());
+            expect(mockReplace).not.toHaveBeenCalled();
+            expect(mockDismissAll).not.toHaveBeenCalled();
+            expect(Alert.alert).toHaveBeenCalledWith('Purchase Pending', expect.any(String));
         });
     });
 
