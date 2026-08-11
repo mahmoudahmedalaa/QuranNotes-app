@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "publicEnabled": false,
+  "ownerUids": [],
+  "activeCorpusVersion": "none",
+  "promptVersion": "noor-prompt-v1",
+  "generationModel": "gemini-3.5-flash-lite",
+  "embeddingModel": "gemini-embedding-2",
+  "embeddingDimension": 768,
+  "pseudonymKeyVersion": "hmac-v1",
+  "sourceThresholds": {
+    "ibn_kathir_en_abridged": 0.72,
+    "al_sadi_ar": 0.76
+  },
+  "maxChunksPerSource": 4,
+  "maxEvidenceCharacters": 24000
+}
