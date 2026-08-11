@@ -127,10 +127,18 @@ function exactRepository(options: {
     storedUnit?: TafsirUnit;
 } = {}): FakeRepository {
     const source = options.source ?? 'al_sadi_ar';
-    const storedUnit = options.storedUnit ?? unit(source, `u_${source}`);
+    const storedUnit = options.storedUnit ?? {
+        ...unit(source, `u_${source}`),
+        originalText: '1112222',
+        retrievalText: '1112222',
+    };
     const chunks = options.chunks ?? [
         chunk(source, 'c1', storedUnit.canonicalUnitId, '111'),
-        chunk(source, 'c2', storedUnit.canonicalUnitId, '2222'),
+        {
+            ...chunk(source, 'c2', storedUnit.canonicalUnitId, '2222'),
+            originalStart: 3,
+            originalEnd: 7,
+        },
     ];
     const chunkIds = options.chunkIds ?? chunks.map(value => value.chunkId);
     const lookupId = `${source}_1_2`;
@@ -197,7 +205,11 @@ describe('Noor exact verse retrieval', () => {
             chunkIds: ['c2', 'c1'],
             chunks: [
                 chunk('al_sadi_ar', 'c1', 'u_al_sadi_ar', '1'),
-                chunk('al_sadi_ar', 'c2', 'u_al_sadi_ar', '2222'),
+                {
+                    ...chunk('al_sadi_ar', 'c2', 'u_al_sadi_ar', '2222'),
+                    originalStart: 3,
+                    originalEnd: 7,
+                },
             ],
         });
         const stopped = await retrieveExactVerse({
@@ -231,6 +243,30 @@ describe('Noor exact verse retrieval', () => {
         ] });
         await assert.rejects(() => retrieveExactVerse({
             source: 'al_sadi_ar', surah: 1, verse: 2, config: config(), repository: wrongRange,
+        }), /chunk/i);
+    });
+
+    it('fails closed when chunk offsets extend beyond the loaded canonical unit', async () => {
+        const outsideUnit = exactRepository({ chunks: [{
+            ...chunk('al_sadi_ar', 'c1', 'u_al_sadi_ar', 'text'),
+            originalStart: 8,
+            originalEnd: 12,
+        }] });
+
+        await assert.rejects(() => retrieveExactVerse({
+            source: 'al_sadi_ar', surah: 1, verse: 2, config: config(), repository: outsideUnit,
+        }), /chunk/i);
+    });
+
+    it('fails closed when valid-length offsets do not reproduce the stored chunk text', async () => {
+        const wrongText = exactRepository({ chunks: [{
+            ...chunk('al_sadi_ar', 'c1', 'u_al_sadi_ar', 'xxxx'),
+            originalStart: 0,
+            originalEnd: 4,
+        }] });
+
+        await assert.rejects(() => retrieveExactVerse({
+            source: 'al_sadi_ar', surah: 1, verse: 2, config: config(), repository: wrongText,
         }), /chunk/i);
     });
 });

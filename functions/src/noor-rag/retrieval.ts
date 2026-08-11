@@ -227,7 +227,9 @@ function assertExactRelationships(
             || chunk.corpusVersion !== unit.corpusVersion
             || chunk.surah !== unit.surah
             || chunk.verseStart !== unit.verseStart
-            || chunk.verseEnd !== unit.verseEnd)) {
+            || chunk.verseEnd !== unit.verseEnd
+            || chunk.originalEnd > unit.originalText.length
+            || unit.originalText.slice(chunk.originalStart, chunk.originalEnd) !== chunk.originalText)) {
         throw new Error('Invalid exact unit or chunk relationship');
     }
 }
