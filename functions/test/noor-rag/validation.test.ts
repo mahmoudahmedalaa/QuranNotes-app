@@ -26,7 +26,7 @@ const VALID_CONFIG: NoorRuntimeConfig = {
     activeCorpusVersion: 'noor-corpus-v1',
     promptVersion: 'noor-prompt-v1',
     generationModel: 'gemini-2.5-flash',
-    embeddingModel: 'gemini-embedding-001',
+    embeddingModel: 'gemini-embedding-2',
     embeddingDimension: 768,
     pseudonymKeyVersion: 'hmac-v1',
     sourceThresholds: {

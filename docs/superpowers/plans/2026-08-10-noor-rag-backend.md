@@ -6,7 +6,7 @@
 
 **Architecture:** Pure modules perform validation, corpus construction, retrieval, entitlement/quota control, prompt construction, and citation validation. A thin Gen2 callable composes those modules and fails closed. Corpus creation is deterministic and production upload/activation is a separate owner-approved operation.
 
-**Tech Stack:** Node 20, TypeScript, Firebase Functions Gen2, Firebase Admin/Firestore vector search, Vertex AI `gemini-embedding-001` and `gemini-2.5-flash`, Node test runner.
+**Tech Stack:** Node 20, TypeScript, Firebase Functions Gen2, Firebase Admin/Firestore vector search, Vertex AI `gemini-embedding-2` and `gemini-2.5-flash`, Node test runner.
 
 ---
 
@@ -101,7 +101,7 @@ export const APP_TO_CORPUS_SOURCE = {
 } as const;
 ```
 
-Define `NoorRuntimeConfig` with exactly: `enabled`, `publicEnabled`, `ownerUids`, `activeCorpusVersion`, `promptVersion`, `generationModel`, `embeddingModel`, `embeddingDimension`, `pseudonymKeyVersion`, per-source thresholds, `maxChunksPerSource`, and `maxEvidenceCharacters`. `pseudonymKeyVersion` is a required non-secret identifier for the active HMAC secret generation. Parse `noorConfig/runtime` without defaults for safety-critical fields; missing or malformed values fail closed. Lock this release to `gemini-2.5-flash`, `gemini-embedding-001`, and 768 dimensions.
+Define `NoorRuntimeConfig` with exactly: `enabled`, `publicEnabled`, `ownerUids`, `activeCorpusVersion`, `promptVersion`, `generationModel`, `embeddingModel`, `embeddingDimension`, `pseudonymKeyVersion`, per-source thresholds, `maxChunksPerSource`, and `maxEvidenceCharacters`. `pseudonymKeyVersion` is a required non-secret identifier for the active HMAC secret generation. Parse `noorConfig/runtime` without defaults for safety-critical fields; missing or malformed values fail closed. Lock this release to `gemini-2.5-flash`, `gemini-embedding-2`, and 768 dimensions.
 
 - [ ] **Step 4: Run green and commit**
 

@@ -7,6 +7,7 @@ import {
     LOCKED_PROJECT,
     ingestCorpus,
     parseIngestArguments,
+    requireProductionVertexConfig,
     type IngestArtifacts,
     type IngestRepository,
     type RepositoryWrite,
@@ -87,20 +88,23 @@ describe('Noor corpus ingestion', () => {
         const chunkPath = `corpora/${LOCKED_CORPUS_VERSION}/chunks/c_0`;
         const repository = new FakeRepository({
             [chunkPath]: {
-                contentHash: 'hash-0', embeddingModel: 'gemini-embedding-001', embeddingDimension: 768,
+                contentHash: 'hash-0', embeddingModel: 'gemini-embedding-2', embeddingDimension: 768,
                 embeddingComplete: true,
-                embeddingMetadata: { model: 'gemini-embedding-001', dimension: 768, complete: true },
+                embeddingMetadata: { model: 'gemini-embedding-2', dimension: 768, complete: true },
             },
         });
-        let embedCalls = 0;
+        const embeddedTexts: string[] = [];
         const result = await ingestCorpus({
             options: parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']),
             artifacts: artifacts(), repository,
-            embedder: { embed: async () => { embedCalls += 1; return embedder.embed('x'); } }, report: () => undefined,
+            embedder: { embed: async (text) => { embeddedTexts.push(text); return embedder.embed(text); } }, report: () => undefined,
         });
         assert.equal(result.skipped, 1);
         assert.equal(result.resumed, 1);
-        assert.equal(embedCalls, 2);
+        assert.deepEqual(embeddedTexts, [
+            "title: Tafsir Al-Sa'di | text: retrieval 1",
+            "title: Tafsir Al-Sa'di | text: retrieval 2",
+        ]);
         const paths = repository.batches.flat().map(write => write.path);
         assert.deepEqual(paths, [
             `corpora/${LOCKED_CORPUS_VERSION}/units/u_1`,
@@ -109,6 +113,21 @@ describe('Noor corpus ingestion', () => {
             `corpora/${LOCKED_CORPUS_VERSION}/verseLookup/al_sadi_ar_1_1`,
         ]);
         assert.ok(paths.every(path => !path.includes('activeCorpusVersion') && !path.startsWith('noorConfig/')));
+    });
+
+    it('requires the exact global Vertex location before production adapter creation', () => {
+        const options = parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']);
+        assert.deepEqual(requireProductionVertexConfig({
+            GOOGLE_CLOUD_PROJECT: LOCKED_PROJECT,
+            GOOGLE_CLOUD_LOCATION: 'global',
+        }, options), { project: LOCKED_PROJECT, location: 'global' });
+        assert.throws(() => requireProductionVertexConfig({
+            GOOGLE_CLOUD_PROJECT: LOCKED_PROJECT,
+            GOOGLE_CLOUD_LOCATION: 'us-central1',
+        }, options), /global/);
+        assert.throws(() => requireProductionVertexConfig({
+            GOOGLE_CLOUD_PROJECT: LOCKED_PROJECT,
+        }, options), /global/);
     });
 
     it('records failures as incomplete and returns nonzero semantics', async () => {

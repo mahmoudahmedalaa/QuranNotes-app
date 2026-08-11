@@ -4,15 +4,50 @@ import { describe, it } from 'node:test';
 import {
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
+    createVertexEmbedder,
     embedWithConcurrency,
+    formatEmbeddingDocument,
+    formatEmbeddingQuery,
     validateEmbedding,
     type Embedder,
 } from '../../src/noor-rag/embedding';
 
 describe('Noor corpus embeddings', () => {
     it('locks the production model and output dimension', () => {
-        assert.equal(EMBEDDING_MODEL, 'gemini-embedding-001');
+        assert.equal(EMBEDDING_MODEL, 'gemini-embedding-2');
         assert.equal(EMBEDDING_DIMENSION, 768);
+    });
+
+    it('formats asymmetric document and query inputs exactly', () => {
+        assert.equal(
+            formatEmbeddingDocument("Tafsir Al-Sa'di", 'Commentary text.'),
+            "title: Tafsir Al-Sa'di | text: Commentary text.",
+        );
+        assert.equal(
+            formatEmbeddingQuery('What does this verse teach?'),
+            'task: question answering | query: What does this verse teach?',
+        );
+    });
+
+    it('builds the Gemini Embedding 2 request without a legacy task type', async () => {
+        let captured: unknown;
+        const embedder = createVertexEmbedder({
+            embedContent: async (request) => {
+                captured = request;
+                return { embeddings: [{ values: Array<number>(768).fill(0.5) }] };
+            },
+        });
+        const document = formatEmbeddingDocument('Tafsir Ibn Kathir', 'Exact retrieval text');
+
+        await embedder.embed(document);
+
+        assert.deepEqual(captured, {
+            model: 'gemini-embedding-2',
+            contents: 'title: Tafsir Ibn Kathir | text: Exact retrieval text',
+            config: { outputDimensionality: 768 },
+        });
+        const config = (captured as { config: Record<string, unknown> }).config;
+        assert.equal(Object.prototype.hasOwnProperty.call(config, 'taskType'), false);
     });
 
     it('rejects empty, wrong-length, NaN, and infinite vectors', () => {

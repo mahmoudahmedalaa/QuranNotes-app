@@ -7,13 +7,16 @@ import { resolve } from 'node:path';
 import {
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
+    createVertexEmbedder,
     embedWithConcurrency,
+    formatEmbeddingDocument,
     type Embedder,
 } from '../../src/noor-rag/embedding';
 import type { CorpusArtifacts, CorpusChunk, CorpusManifest } from '../../src/noor-rag/corpus';
 
 export const LOCKED_PROJECT = 'qurannotes-9f7a1' as const;
 export const LOCKED_CORPUS_VERSION = '2026-08-10-v1' as const;
+export const VERTEX_LOCATION = 'global' as const;
 const GENERATION_MODEL = 'gemini-2.5-flash';
 const MAX_BATCH_WRITES = 450;
 
@@ -96,6 +99,19 @@ export function parseIngestArguments(args: readonly string[]): IngestOptions {
         project: LOCKED_PROJECT,
         version: LOCKED_CORPUS_VERSION,
     };
+}
+
+export function requireProductionVertexConfig(
+    environment: Readonly<Record<string, string | undefined>>,
+    options: IngestOptions,
+): { project: typeof LOCKED_PROJECT; location: typeof VERTEX_LOCATION } {
+    if (environment.GOOGLE_CLOUD_PROJECT !== options.project) {
+        throw new Error(`Production ingestion requires GOOGLE_CLOUD_PROJECT=${LOCKED_PROJECT}`);
+    }
+    if (environment.GOOGLE_CLOUD_LOCATION !== VERTEX_LOCATION) {
+        throw new Error(`Production ingestion requires GOOGLE_CLOUD_LOCATION=${VERTEX_LOCATION}`);
+    }
+    return { project: LOCKED_PROJECT, location: VERTEX_LOCATION };
 }
 
 function assertArtifactShape(artifacts: IngestArtifacts, version: string): void {
@@ -272,7 +288,9 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
         resumed: skippedIds.size,
     });
 
-    const embedded = await embedWithConcurrency(pending.map(chunk => chunk.retrievalText), input.embedder);
+    const embedded = await embedWithConcurrency(pending.map(
+        chunk => formatEmbeddingDocument(chunk.sourceTitle, chunk.retrievalText),
+    ), input.embedder);
     const failedChunks: string[] = [];
     const chunkWrites: RepositoryWrite[] = [];
     embedded.forEach((result, index) => {
@@ -367,27 +385,14 @@ async function productionAdapters(options: IngestOptions): Promise<{
     embedder: Embedder;
     repository: IngestRepository;
 }> {
-    const project = process.env.GOOGLE_CLOUD_PROJECT;
-    const location = process.env.GOOGLE_CLOUD_LOCATION;
-    if (project !== options.project || !location) {
-        throw new Error('Production ingestion requires matching GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION');
-    }
+    const { project, location } = requireProductionVertexConfig(process.env, options);
     const credential = applicationDefault();
     await credential.getAccessToken();
     const app = initializeApp({ credential, projectId: project }, `noor-ingest-${Date.now()}`);
     const firestore = getFirestore(app);
     const client = new GoogleGenAI({ vertexai: true, project, location });
     return {
-        embedder: {
-            embed: async (text: string): Promise<readonly number[]> => {
-                const response = await client.models.embedContent({
-                    model: EMBEDDING_MODEL,
-                    contents: text,
-                    config: { taskType: 'RETRIEVAL_DOCUMENT', outputDimensionality: EMBEDDING_DIMENSION },
-                });
-                return response.embeddings?.[0]?.values ?? [];
-            },
-        },
+        embedder: createVertexEmbedder(client.models),
         repository: {
             readChunkMetadata: async (path: string): Promise<Record<string, unknown> | null> => {
                 const snapshot = await firestore.doc(path).get();

@@ -1,4 +1,4 @@
-export const EMBEDDING_MODEL = 'gemini-embedding-001' as const;
+export const EMBEDDING_MODEL = 'gemini-embedding-2' as const;
 export const EMBEDDING_DIMENSION = 768 as const;
 export const EMBEDDING_CONCURRENCY = 4 as const;
 
@@ -6,9 +6,44 @@ export interface Embedder {
     embed(text: string): Promise<readonly number[]>;
 }
 
+export interface VertexEmbeddingRequest {
+    model: typeof EMBEDDING_MODEL;
+    contents: string;
+    config: {
+        outputDimensionality: typeof EMBEDDING_DIMENSION;
+    };
+}
+
+export interface VertexEmbeddingClient {
+    embedContent(request: VertexEmbeddingRequest): Promise<{
+        embeddings?: Array<{ values?: number[] }>;
+    }>;
+}
+
 export type EmbeddingResult =
     | { ok: true; embedding: number[] }
     | { ok: false; error: string };
+
+export function formatEmbeddingDocument(sourceTitle: string, retrievalText: string): string {
+    return `title: ${sourceTitle} | text: ${retrievalText}`;
+}
+
+export function formatEmbeddingQuery(content: string): string {
+    return `task: question answering | query: ${content}`;
+}
+
+export function createVertexEmbedder(client: VertexEmbeddingClient): Embedder {
+    return {
+        embed: async (text: string): Promise<readonly number[]> => {
+            const response = await client.embedContent({
+                model: EMBEDDING_MODEL,
+                contents: text,
+                config: { outputDimensionality: EMBEDDING_DIMENSION },
+            });
+            return response.embeddings?.[0]?.values ?? [];
+        },
+    };
+}
 
 export function validateEmbedding(value: readonly number[]): number[] {
     if (value.length !== EMBEDDING_DIMENSION) {

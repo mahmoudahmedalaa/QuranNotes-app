@@ -90,7 +90,7 @@ All production AI resources live in the existing `qurannotes-9f7a1` Firebase/Goo
 
 Firestore does not create embeddings. A controlled ingestion command reads the checked-in corpus, chunks it deterministically, asks Vertex AI for embeddings, and stores the resulting vectors in Firestore.
 
-The release locks `gemini-embedding-001` at 768 output dimensions. This supports multilingual retrieval, stays below Firestore's 2,048-dimension limit, and avoids storing the model's maximum 3,072-dimensional output. A future dimensionality change requires a new corpus version and retrieval evaluation.
+The release locks the GA `gemini-embedding-2` model at 768 output dimensions. Vertex supports the model in `global`, `us`, and `eu`; production ingestion uses `global` for the simplest high-availability path. The recommended 768-dimensional output is auto-normalized and stays below Firestore's 2,048-dimension limit. A future dimensionality change requires a new corpus version and retrieval evaluation.
 
 The checked-in data represents 12,472 verse-to-commentary associations across both sources, but repeated members of shared verse ranges resolve to the same commentary. Ingestion therefore creates canonical units instead of embedding duplicate text for every verse:
 
@@ -260,7 +260,7 @@ Every substantive answer paragraph must contain at least one accepted citation m
 - Maximum instances: 10.
 - Concurrency: 20 requests per instance.
 - Generation model: stable `gemini-2.5-flash` for this release.
-- Embedding model: `gemini-embedding-001`, 768 dimensions.
+- Embedding model: GA `gemini-embedding-2`, 768 auto-normalized dimensions.
 - Generation: temperature 0.2, maximum 800 output tokens.
 - Retrieval: at most four accepted chunks per source and a bounded combined evidence budget.
 - Retry: one retry only for explicitly retryable provider errors; citation/schema regeneration uses the same evidence and consumes the single retry budget.
