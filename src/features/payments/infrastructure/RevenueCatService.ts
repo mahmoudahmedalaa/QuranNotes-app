@@ -15,6 +15,7 @@ const API_KEYS = {
 class RevenueCatService {
     private static instance: RevenueCatService;
     private isInitialized = false;
+    private identityUserId: string | null = null;
 
     private constructor() { }
 
@@ -25,7 +26,7 @@ class RevenueCatService {
         return RevenueCatService.instance;
     }
 
-    async initialize() {
+    async initialize(): Promise<void> {
         if (this.isInitialized) return;
 
         const apiKey = Platform.OS === 'ios' ? API_KEYS.ios : API_KEYS.android;
@@ -78,20 +79,14 @@ class RevenueCatService {
                 return { success: false, userCancelled: true };
             }
 
-            // Sanitize Error Message
-            let cleanMessage = 'Could not complete purchase.';
-            if (err.message) {
-                // Remove RevenueCat prefixes like "[RevenueCat] 🍎‼️"
-                cleanMessage = err.message.replace(/\[RevenueCat\]|🍎|‼️/g, '').trim();
-                // Fix capitalization
-                cleanMessage = cleanMessage.charAt(0).toUpperCase() + cleanMessage.slice(1);
-            }
+            let cleanMessage = 'Could not complete purchase. Please try again.';
 
             // Map common error codes to friendly messages
-            if (err.code === 2) cleanMessage = 'Store problem. Please try again later.'; // StoreProblemError
-            if (err.code === 3) cleanMessage = 'Purchase not allowed on this device.'; // PurchaseNotAllowedError
-            if (err.code === 4) cleanMessage = 'Invalid purchase configuration.'; // InvalidPurchaseError
-            if (err.code === 10) cleanMessage = 'Network error. Please check your connection.'; // NetworkError
+            const errorCode = Number(err.code);
+            if (errorCode === 2) cleanMessage = 'Store problem. Please try again later.'; // StoreProblemError
+            if (errorCode === 3) cleanMessage = 'Purchase not allowed on this device.'; // PurchaseNotAllowedError
+            if (errorCode === 4) cleanMessage = 'Purchase is temporarily unavailable.'; // InvalidPurchaseError
+            if (errorCode === 10) cleanMessage = 'Network error. Please check your connection.'; // NetworkError
 
             if (__DEV__) console.warn('[RevenueCat] Return user-friendly error:', cleanMessage);
             return { success: false, userCancelled: false, error: cleanMessage };
@@ -116,22 +111,36 @@ class RevenueCatService {
         return await Purchases.getCustomerInfo();
     }
 
-    /**
-     * Sync RevenueCat user identity with app auth state.
-     * Must be called on every login/signup so entitlements are user-scoped.
-     */
-    async loginUser(appUserId: string): Promise<CustomerInfo | null> {
-        if (!this.isInitialized) {
-            await this.initialize();
-        }
+    async ensureUserIdentity(firebaseUid: string): Promise<CustomerInfo> {
+        const identityError = 'Could not verify your purchase account. Please sign in again and retry.';
+        this.identityUserId = null;
+
         try {
-            const { customerInfo } = await Purchases.logIn(appUserId);
-            if (__DEV__) console.log('[RevenueCat] logIn success for:', appUserId, 'isPro:', this.isPro(customerInfo));
+            if (!firebaseUid.trim()) throw new Error(identityError);
+            await this.initialize();
+
+            const currentAppUserId = await Purchases.getAppUserID();
+            let customerInfo: CustomerInfo;
+            if (currentAppUserId === firebaseUid) {
+                customerInfo = await Purchases.getCustomerInfo();
+            } else {
+                const loginResult = await Purchases.logIn(firebaseUid);
+                customerInfo = loginResult.customerInfo;
+            }
+
+            const verifiedAppUserId = await Purchases.getAppUserID();
+            if (verifiedAppUserId !== firebaseUid) throw new Error(identityError);
+
+            this.identityUserId = firebaseUid;
             return customerInfo;
-        } catch (e) {
-            if (__DEV__) console.warn('[RevenueCat] logIn error:', e);
-            return null;
+        } catch {
+            this.identityUserId = null;
+            throw new Error(identityError);
         }
+    }
+
+    isIdentityReady(firebaseUid: string): boolean {
+        return this.identityUserId === firebaseUid;
     }
 
     /**
@@ -139,6 +148,7 @@ class RevenueCatService {
      * to prevent entitlement leaking to the next account.
      */
     async logoutUser(): Promise<void> {
+        this.identityUserId = null;
         if (!this.isInitialized) return;
         try {
             const customerInfo = await Purchases.logOut();

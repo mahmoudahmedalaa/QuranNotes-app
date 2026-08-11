@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import PaywallScreen from '../../features/payments/presentation/PaywallScreen';
 import { ProProvider } from '../../features/auth/infrastructure/ProContext';
 import { PaperProvider } from 'react-native-paper';
@@ -15,6 +15,7 @@ jest.mock('moti', () => ({
 jest.mock('../../features/payments/infrastructure/RevenueCatService', () => ({
     revenueCatService: {
         initialize: jest.fn().mockResolvedValue(undefined),
+        ensureUserIdentity: jest.fn().mockResolvedValue({ entitlements: { active: {} } }),
         loginUser: jest.fn().mockResolvedValue(null),
         logoutUser: jest.fn().mockResolvedValue(undefined),
         getCustomerInfo: jest.fn().mockResolvedValue({
@@ -36,6 +37,14 @@ jest.mock('../../features/payments/infrastructure/RevenueCatService', () => ({
                     title: 'Pro Annual',
                     description: 'Unlock everything',
                     priceString: '$35.99',
+                },
+            },
+            lifetime: {
+                identifier: 'pro_lifetime',
+                product: {
+                    title: 'Pro Lifetime',
+                    description: 'Unlock everything',
+                    priceString: '$79.99',
                 },
             },
         }),

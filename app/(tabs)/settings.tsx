@@ -21,7 +21,6 @@ import {
 import * as Haptics from 'expo-haptics';
 import { usePro } from '../../src/features/auth/infrastructure/ProContext';
 import { useAuth } from '../../src/features/auth/infrastructure/AuthContext';
-import { revenueCatService } from '../../src/features/payments/infrastructure/RevenueCatService';
 
 
 import { NotificationService } from '../../src/features/notifications/infrastructure/NotificationService';
@@ -45,7 +44,7 @@ export default function SettingsScreen() {
     const router = useRouter();
     const { settings, updateSettings } = useSettings();
 
-    const { isPro } = usePro();
+    const { isPro, restorePurchases: restoreProPurchases } = usePro();
     const { user, logout, deleteAccount, deleteAccountWithPassword } = useAuth();
     const [reciterPickerVisible, setReciterPickerVisible] = useState(false);
     const [translationPickerExpanded, setTranslationPickerExpanded] = useState(false);
@@ -227,7 +226,7 @@ export default function SettingsScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setRestoringPurchases(true);
         try {
-            const success = await revenueCatService.restorePurchases();
+            const success = await restoreProPurchases();
             if (success) {
                 Alert.alert('Restored', 'Your purchases have been restored successfully.');
             } else {

@@ -20,13 +20,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { ramadanCountdownText } from '../../../core/utils/ramadanUtils';
 import { TelemetryService } from '../infrastructure/TelemetryService';
+import {
+    BillingPeriod,
+    getAvailableBillingPeriods,
+    getBillingPeriodUnit,
+    getDefaultBillingPeriod,
+    getSelectedPackage,
+} from './paywallOfferUtils';
 
-
-
-const ORIGINAL_ANNUAL_PRICE = 35.99;
-const RAMADAN_PRICE = 17.99;
-const MONTHLY_PRICE = 4.99;
-const SAVINGS_PERCENT = Math.round((1 - RAMADAN_PRICE / ORIGINAL_ANNUAL_PRICE) * 100);
+const PLAN_LABELS: Record<BillingPeriod, string> = {
+    monthly: 'Monthly',
+    annual: 'Annual',
+    lifetime: 'Lifetime',
+};
 
 const FEATURES = [
     { icon: 'infinity', title: 'Unlimited Recordings', description: 'Capture every reflection' },
@@ -62,7 +68,7 @@ export default function RamadanPaywallScreen({
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
     const [countdown, setCountdown] = useState(ramadanCountdownText());
-    const [isAnnual, setIsAnnual] = useState(true);
+    const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('annual');
 
     useEffect(() => {
         loadOfferings();
@@ -87,6 +93,8 @@ export default function RamadanPaywallScreen({
         try {
             const current = await revenueCatService.getOfferings();
             setOffering(current);
+            const defaultPeriod = getDefaultBillingPeriod(current);
+            if (defaultPeriod) setSelectedPeriod(defaultPeriod);
         } catch (e) {
             if (__DEV__) console.warn('Failed to load offerings:', e);
         } finally {
@@ -95,12 +103,17 @@ export default function RamadanPaywallScreen({
     };
 
     const handlePurchase = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in before making a purchase.');
+            return;
+        }
+
         if (!offering) {
             Alert.alert('Error', 'Could not load products. Please try again.');
             return;
         }
 
-        const packageToBuy = isAnnual ? offering.annual : offering.monthly;
+        const packageToBuy = getSelectedPackage(offering, selectedPeriod);
         if (!packageToBuy) {
             Alert.alert('Error', 'Product not available.');
             return;
@@ -110,26 +123,27 @@ export default function RamadanPaywallScreen({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
-            if (user) {
-                await TelemetryService.trackSubscriptionEvent(user.id, {
-                    location,
-                    outcome: 'started',
-                    hardPaywall: !allowDismiss,
-                    reason: 'ramadan-paywall',
-                });
-            }
+            await revenueCatService.ensureUserIdentity(user.id);
+            await TelemetryService.trackSubscriptionEvent(user.id, {
+                location,
+                outcome: 'started',
+                hardPaywall: !allowDismiss,
+                reason: 'ramadan-paywall',
+            });
 
             const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
             if (success) {
-                await checkStatus();
-                if (user) {
-                    await TelemetryService.trackSubscriptionEvent(user.id, {
-                        location,
-                        outcome: 'success',
-                        hardPaywall: !allowDismiss,
-                        reason: 'ramadan-paywall',
-                    });
+                const entitlementActive = await checkStatus();
+                if (!entitlementActive) {
+                    Alert.alert('Purchase Pending', 'Your purchase could not be verified yet. Please try Restore Purchases.');
+                    return;
                 }
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location,
+                    outcome: 'success',
+                    hardPaywall: !allowDismiss,
+                    reason: 'ramadan-paywall',
+                });
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 if (onPurchaseSuccess) {
                     onPurchaseSuccess();
@@ -178,19 +192,27 @@ export default function RamadanPaywallScreen({
     };
 
     const handleRestore = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in before restoring purchases.');
+            return;
+        }
+
         setPurchasing(true);
         try {
+            await revenueCatService.ensureUserIdentity(user.id);
             const success = await revenueCatService.restorePurchases();
             if (success) {
-                await checkStatus();
-                if (user) {
-                    await TelemetryService.trackSubscriptionEvent(user.id, {
-                        location,
-                        outcome: 'restored',
-                        hardPaywall: !allowDismiss,
-                        reason: 'ramadan-paywall',
-                    });
+                const entitlementActive = await checkStatus();
+                if (!entitlementActive) {
+                    Alert.alert('Restore Unavailable', 'No active QuranNotes Pro purchase was found for this account.');
+                    return;
                 }
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location,
+                    outcome: 'restored',
+                    hardPaywall: !allowDismiss,
+                    reason: 'ramadan-paywall',
+                });
                 Alert.alert('Restored', 'Your purchases have been restored.');
                 if (onPurchaseSuccess) onPurchaseSuccess(); else router.back();
             } else {
@@ -220,6 +242,10 @@ export default function RamadanPaywallScreen({
             </LinearGradient>
         );
     }
+
+    const availablePeriods = getAvailableBillingPeriods(offering);
+    const selectedPackage = getSelectedPackage(offering, selectedPeriod);
+    const billingUnit = getBillingPeriodUnit(selectedPeriod);
 
     return (
         <LinearGradient
@@ -283,65 +309,40 @@ export default function RamadanPaywallScreen({
                         transition={{ type: 'spring', delay: 400 }}
                         style={styles.planSelector}>
 
-                        {/* Annual Plan — the star */}
-                        <Pressable
-                            onPress={() => setIsAnnual(true)}
-                            style={[
-                                styles.planCard,
-                                isAnnual && styles.planCardSelected,
-                            ]}>
-                            {isAnnual && (
-                                <View style={styles.bestValueBadge}>
-                                    <Text style={styles.bestValueText}>BEST VALUE</Text>
-                                </View>
-                            )}
-                            <View style={styles.planHeader}>
-                                <View style={[styles.planRadio, isAnnual && styles.planRadioSelected]}>
-                                    {isAnnual && <View style={styles.planRadioDot} />}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.planName, isAnnual && styles.planNameSelected]}>Annual</Text>
-                                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                                        <Text style={[styles.planOriginalPrice, isAnnual && { color: 'rgba(255,255,255,0.4)' }]}>
-                                            ${ORIGINAL_ANNUAL_PRICE.toFixed(2)}
-                                        </Text>
-                                        <Text style={[styles.planPrice, isAnnual && styles.planPriceSelected]}>
-                                            ${RAMADAN_PRICE.toFixed(2)}/yr
-                                        </Text>
+                        {availablePeriods.map(period => {
+                            const planPackage = getSelectedPackage(offering, period);
+                            const selected = period === selectedPeriod;
+                            return (
+                                <Pressable
+                                    key={period}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Select ${PLAN_LABELS[period]} plan`}
+                                    accessibilityState={{ selected }}
+                                    onPress={() => setSelectedPeriod(period)}
+                                    style={[styles.planCard, selected && styles.planCardSelected]}>
+                                    <View style={styles.planHeader}>
+                                        <View style={[styles.planRadio, selected && styles.planRadioSelected]}>
+                                            {selected && <View style={styles.planRadioDot} />}
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.planName, selected && styles.planNameSelected]}>
+                                                {PLAN_LABELS[period]}
+                                            </Text>
+                                            <Text style={[styles.planPrice, selected && styles.planPriceSelected]}>
+                                                {planPackage?.product.priceString}
+                                            </Text>
+                                            <Text style={styles.planDetail}>
+                                                {period === 'lifetime' ? 'One-time purchase' : `${PLAN_LABELS[period]} subscription`}
+                                            </Text>
+                                        </View>
                                     </View>
-                                </View>
-                                <View style={styles.discountBadge}>
-                                    <Text style={styles.discountBadgeText}>{SAVINGS_PERCENT}% OFF</Text>
-                                </View>
-                            </View>
-                            <Text style={[styles.planDetail, isAnnual && { color: 'rgba(212,175,55,0.8)' }]}>
-                                Just ${(RAMADAN_PRICE / 12).toFixed(2)}/mo • Ramadan Special
-                            </Text>
-                        </Pressable>
-
-                        {/* Monthly Plan */}
-                        <Pressable
-                            onPress={() => setIsAnnual(false)}
-                            style={[
-                                styles.planCard,
-                                !isAnnual && styles.planCardSelected,
-                            ]}>
-                            <View style={styles.planHeader}>
-                                <View style={[styles.planRadio, !isAnnual && styles.planRadioSelected]}>
-                                    {!isAnnual && <View style={styles.planRadioDot} />}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.planName, !isAnnual && styles.planNameSelected]}>Monthly</Text>
-                                    <Text style={[styles.planPrice, !isAnnual && styles.planPriceSelected]}>
-                                        ${MONTHLY_PRICE.toFixed(2)}/mo
-                                    </Text>
-                                </View>
-                            </View>
-                        </Pressable>
+                                </Pressable>
+                            );
+                        })}
                     </MotiView>
 
                     {/* Countdown Timer */}
-                    {isAnnual && (
+                    {selectedPeriod === 'annual' && (
                         <View style={[styles.countdownRow, { alignSelf: 'center', marginBottom: Spacing.sm }]}>
                             <Ionicons name="time-outline" size={14} color="#D4AF37" />
                             <Text style={styles.countdownText}>
@@ -378,6 +379,9 @@ export default function RamadanPaywallScreen({
                             </MotiView>
                         ))}
                     </MotiView>
+                    <Text style={styles.fairUseText}>
+                        Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.
+                    </Text>
                 </ScrollView>
 
                 {/* CTA Section */}
@@ -390,6 +394,7 @@ export default function RamadanPaywallScreen({
                     {/* Main CTA */}
                     <Pressable
                         onPress={handlePurchase}
+                        accessibilityLabel="Purchase selected plan"
                         disabled={purchasing}
                         style={({ pressed }) => [
                             styles.ctaButton,
@@ -405,10 +410,10 @@ export default function RamadanPaywallScreen({
                             ) : (
                                 <>
                                     <Text style={styles.ctaText}>
-                                        {isAnnual ? 'Start Your Ramadan Journey' : 'Subscribe Monthly'}
+                                        {selectedPeriod === 'lifetime' ? 'Unlock Lifetime Access' : `Choose ${PLAN_LABELS[selectedPeriod]}`}
                                     </Text>
                                     <Text style={styles.ctaSubtext}>
-                                        {isAnnual ? '50% off — Limited time' : `$${MONTHLY_PRICE.toFixed(2)}/month`}
+                                        {selectedPackage?.product.priceString}{billingUnit}
                                     </Text>
                                 </>
                             )}
@@ -426,15 +431,13 @@ export default function RamadanPaywallScreen({
                     </Pressable>
 
                     {/* Disclosure */}
-                    <Text style={styles.disclosureText}>
-                        {isAnnual
-                            ? `Ramadan offer: $${RAMADAN_PRICE.toFixed(2)} for the first year, then $${ORIGINAL_ANNUAL_PRICE.toFixed(2)}/year. `
-                            : `$${MONTHLY_PRICE.toFixed(2)}/month. `
-                        }
-                        Payment will be charged to your Apple ID account. Subscription automatically renews unless
-                        cancelled at least 24 hours before the end of the current period.
-                        Manage in Settings → Apple ID → Subscriptions.
-                    </Text>
+                    {selectedPackage && (
+                        <Text style={styles.disclosureText}>
+                            {selectedPeriod === 'lifetime'
+                                ? `Lifetime: ${selectedPackage.product.priceString}. One-time purchase. Payment will be charged to your Apple ID account.`
+                                : `${PLAN_LABELS[selectedPeriod]} subscription: ${selectedPackage.product.priceString}${billingUnit}. Payment will be charged to your Apple ID account. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage in Settings → Apple ID → Subscriptions.`}
+                        </Text>
+                    )}
 
                     {/* Legal Links */}
                     <View style={styles.legalRow}>
@@ -675,6 +678,14 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: 'rgba(255,255,255,0.55)',
         marginTop: 1,
+    },
+    fairUseText: {
+        color: 'rgba(255,255,255,0.72)',
+        fontSize: 12,
+        lineHeight: 17,
+        marginHorizontal: Spacing.xl,
+        marginTop: Spacing.md,
+        textAlign: 'center',
     },
     // CTA
     ctaContainer: {

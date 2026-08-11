@@ -1,24 +1,23 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { revenueCatService } from '../../payments/infrastructure/RevenueCatService';
 import { useAuth } from './AuthContext';
-
-// Apple App Store review account — always granted Pro access
-const REVIEW_ACCOUNT_EMAIL = 'mahmoudahmedalaa+review@gmail.com';
 
 // REAL PRO CONTEXT (RevenueCat)
 
 interface ProContextType {
     isPro: boolean;
     loading: boolean;
-    restorePurchases: () => Promise<void>;
-    checkStatus: () => Promise<void>;
+    identityReady: boolean;
+    restorePurchases: () => Promise<boolean>;
+    checkStatus: () => Promise<boolean>;
 }
 
 const ProContext = createContext<ProContextType>({
     isPro: false,
     loading: true,
-    restorePurchases: async () => { },
-    checkStatus: async () => { },
+    identityReady: false,
+    restorePurchases: async () => false,
+    checkStatus: async () => false,
 });
 
 export const usePro = () => useContext(ProContext);
@@ -26,95 +25,88 @@ export const usePro = () => useContext(ProContext);
 export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [isPro, setIsPro] = useState(false);
     const [loading, setLoading] = useState(true); // Start loading until RevenueCat checked
+    const [identityReady, setIdentityReady] = useState(false);
     const { user } = useAuth();
-    const prevUserIdRef = useRef<string | null | undefined>(undefined);
+    const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+    activeUserIdRef.current = user?.id ?? null;
 
-    // Check if this is the Apple review account
-    const isReviewAccount = user?.email?.toLowerCase() === REVIEW_ACCOUNT_EMAIL;
-
-    const checkStatus = async () => {
+    const checkStatus = useCallback(async (): Promise<boolean> => {
+        const targetUserId = activeUserIdRef.current;
         setLoading(true);
-        try {
-            // Auto-grant Pro for Apple review account
-            if (isReviewAccount) {
-                if (__DEV__) console.log('[ProContext] Review account detected — granting Pro');
-                setIsPro(true);
-                return;
-            }
+        setIsPro(false);
+        setIdentityReady(false);
 
-            // Initialize RevenueCat if needed (first launch)
-            await revenueCatService.initialize();
-
-            const customerInfo = await revenueCatService.getCustomerInfo();
-            const isProStatus = revenueCatService.isPro(customerInfo);
-
-            if (__DEV__) {
-                if (__DEV__) console.log('[ProContext] checkStatus result:', {
-                    isPro: isProStatus,
-                    userId: user?.id ?? 'anonymous',
-                    activeEntitlements: Object.keys(customerInfo.entitlements.active),
-                });
-            }
-
-            setIsPro(isProStatus);
-        } catch (e) {
-            if (__DEV__) console.warn('[ProContext] Error checking pro status:', e);
-            // SECURE DEFAULT: deny Pro access on error
-            setIsPro(false);
-        } finally {
+        if (!targetUserId) {
             setLoading(false);
+            return false;
         }
-    };
 
-    // Sync RevenueCat user identity on auth state changes, then check status
+        try {
+            await revenueCatService.ensureUserIdentity(targetUserId);
+            const customerInfo = await revenueCatService.getCustomerInfo();
+            const proStatus = revenueCatService.isPro(customerInfo);
+            if (activeUserIdRef.current !== targetUserId) return false;
+
+            setIdentityReady(true);
+            setIsPro(proStatus);
+            return proStatus;
+        } catch {
+            if (activeUserIdRef.current !== targetUserId) return false;
+            setIdentityReady(false);
+            setIsPro(false);
+            return false;
+        } finally {
+            if (activeUserIdRef.current === targetUserId) setLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         const currentUserId = user?.id ?? null;
+        let cancelled = false;
 
-        // Skip first render (initial mount handled separately)
-        if (prevUserIdRef.current === undefined) {
-            prevUserIdRef.current = currentUserId;
-            // Initial check on mount
-            (async () => {
-                await revenueCatService.initialize();
-                if (currentUserId) {
-                    await revenueCatService.loginUser(currentUserId);
-                }
-                await checkStatus();
-            })();
-            return;
-        }
-
-        // User changed — sync identity
-        if (currentUserId !== prevUserIdRef.current) {
-            prevUserIdRef.current = currentUserId;
-            (async () => {
-                if (currentUserId) {
-                    // New user logged in — sync their identity
-                    await revenueCatService.loginUser(currentUserId);
-                } else {
-                    // User signed out — reset to anonymous
-                    await revenueCatService.logoutUser();
-                }
-                await checkStatus();
-            })();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user]);
-
-    const restorePurchases = async () => {
+        setIsPro(false);
+        setIdentityReady(false);
         setLoading(true);
+
+        (async () => {
+            if (currentUserId) {
+                await checkStatus();
+            } else {
+                try {
+                    await revenueCatService.logoutUser();
+                } finally {
+                    if (!cancelled && activeUserIdRef.current === null) setLoading(false);
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.id, checkStatus]);
+
+    const restorePurchases = async (): Promise<boolean> => {
+        const currentUserId = activeUserIdRef.current;
+        setLoading(true);
+        setIsPro(false);
+        setIdentityReady(false);
         try {
-            const isProStatus = await revenueCatService.restorePurchases();
-            setIsPro(isProStatus);
-        } catch (e) {
-            if (__DEV__) console.warn('[ProContext] Error restoring purchases:', e);
+            if (!currentUserId) return false;
+            await revenueCatService.ensureUserIdentity(currentUserId);
+            const restored = await revenueCatService.restorePurchases();
+            if (!restored) return false;
+            return await checkStatus();
+        } catch {
+            setIsPro(false);
+            setIdentityReady(false);
+            return false;
         } finally {
-            setLoading(false);
+            if (activeUserIdRef.current === currentUserId) setLoading(false);
         }
     };
 
     return (
-        <ProContext.Provider value={{ isPro, loading, restorePurchases, checkStatus }}>
+        <ProContext.Provider value={{ isPro, loading, identityReady, restorePurchases, checkStatus }}>
             {children}
         </ProContext.Provider>
     );

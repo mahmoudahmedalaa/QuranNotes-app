@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Pressable, Switch, Linking } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Pressable, Linking } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { useRouter, useLocalSearchParams, Redirect } from 'expo-router';
 import { revenueCatService, PurchasesOffering } from '../infrastructure/RevenueCatService';
@@ -13,7 +13,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { isRamadanSeason } from '../../../core/utils/ramadanUtils';
 import { TelemetryService } from '../infrastructure/TelemetryService';
-import { getSelectedPackage, getTrialBadgeText, getTrialCtaText } from './paywallOfferUtils';
+import {
+    BillingPeriod,
+    getAvailableBillingPeriods,
+    getBillingPeriodUnit,
+    getDefaultBillingPeriod,
+    getSelectedPackage,
+    getTrialBadgeText,
+    getTrialCtaText,
+} from './paywallOfferUtils';
 
 
 const FEATURES = [
@@ -28,11 +36,14 @@ const FEATURES = [
     { icon: 'refresh', title: 'Unlimited Hadith Refresh', description: 'Discover new hadiths anytime' },
     { icon: 'bell-ring', title: 'Daily Hadith Notifications', description: 'Prophetic wisdom every morning' },
     { icon: 'image-multiple', title: 'Premium Share Templates', description: 'Beautiful cards for social sharing' },
-    { icon: 'auto-fix', title: 'Unlimited AI Quran Insights', description: 'AI-powered verse explanations & Q&A' },
+    { icon: 'auto-fix', title: 'Noor AI & Quran Explanations', description: 'Source-grounded verse explanations & Q&A' },
 ];
 
-const MONTHLY_PRICE = 4.99;
-const ANNUAL_PRICE = 35.99;
+const PLAN_LABELS: Record<BillingPeriod, string> = {
+    monthly: 'Monthly',
+    annual: 'Annual',
+    lifetime: 'Lifetime',
+};
 
 export default function PaywallScreen() {
     const router = useRouter();
@@ -42,7 +53,7 @@ export default function PaywallScreen() {
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
-    const [isAnnual, setIsAnnual] = useState(true);
+    const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('annual');
     const isHardPaywall = hard === '1';
 
     useEffect(() => {
@@ -63,6 +74,8 @@ export default function PaywallScreen() {
         try {
             const current = await revenueCatService.getOfferings();
             setOffering(current);
+            const defaultPeriod = getDefaultBillingPeriod(current);
+            if (defaultPeriod) setSelectedPeriod(defaultPeriod);
         } catch (e) {
             if (__DEV__) console.error('Failed to load offerings:', e);
         } finally {
@@ -135,8 +148,8 @@ export default function PaywallScreen() {
                 };
             case 'ai-tafsir':
                 return {
-                    title: 'Unlock Unlimited AI Insights',
-                    subtitle: "You've used your free AI explanations for today. Upgrade to Pro for unlimited AI-powered verse insights and Q&A.",
+                    title: 'Access Noor AI & Quran Explanations',
+                    subtitle: 'Upgrade to Pro for source-grounded verse explanations and Q&A.',
                     highlightIndex: 11
                 };
             default:
@@ -153,13 +166,18 @@ export default function PaywallScreen() {
     const contextMessage = getMessage();
 
     const handlePurchase = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in before making a purchase.');
+            return;
+        }
+
         let currentOffering = offering;
         if (!currentOffering) {
             currentOffering = await revenueCatService.getOfferings();
             setOffering(currentOffering);
         }
 
-        const packageToBuy = getSelectedPackage(currentOffering, isAnnual);
+        const packageToBuy = getSelectedPackage(currentOffering, selectedPeriod);
         if (!packageToBuy) {
             Alert.alert(
                 'Subscription Unavailable',
@@ -172,27 +190,28 @@ export default function PaywallScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
-            if (user) {
-                await TelemetryService.trackSubscriptionEvent(user.id, {
-                    location: 'modal',
-                    outcome: 'started',
-                    hardPaywall: isHardPaywall,
-                    reason,
-                });
-            }
+            await revenueCatService.ensureUserIdentity(user.id);
+            await TelemetryService.trackSubscriptionEvent(user.id, {
+                location: 'modal',
+                outcome: 'started',
+                hardPaywall: isHardPaywall,
+                reason,
+            });
 
             const { success, userCancelled, error } = await revenueCatService.purchasePackage(packageToBuy);
 
             if (success) {
-                await checkStatus();
-                if (user) {
-                    await TelemetryService.trackSubscriptionEvent(user.id, {
-                        location: 'modal',
-                        outcome: 'success',
-                        hardPaywall: isHardPaywall,
-                        reason,
-                    });
+                const entitlementActive = await checkStatus();
+                if (!entitlementActive) {
+                    Alert.alert('Purchase Pending', 'Your purchase could not be verified yet. Please try Restore Purchases.');
+                    return;
                 }
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'modal',
+                    outcome: 'success',
+                    hardPaywall: isHardPaywall,
+                    reason,
+                });
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 if (isHardPaywall) {
                     router.replace('/');
@@ -241,19 +260,27 @@ export default function PaywallScreen() {
     };
 
     const handleRestore = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in before restoring purchases.');
+            return;
+        }
+
         setPurchasing(true);
         try {
+            await revenueCatService.ensureUserIdentity(user.id);
             const success = await revenueCatService.restorePurchases();
             if (success) {
-                await checkStatus();
-                if (user) {
-                    await TelemetryService.trackSubscriptionEvent(user.id, {
-                        location: 'modal',
-                        outcome: 'restored',
-                        hardPaywall: isHardPaywall,
-                        reason,
-                    });
+                const entitlementActive = await checkStatus();
+                if (!entitlementActive) {
+                    Alert.alert('Restore Unavailable', 'No active QuranNotes Pro purchase was found for this account.');
+                    return;
                 }
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'modal',
+                    outcome: 'restored',
+                    hardPaywall: isHardPaywall,
+                    reason,
+                });
                 if (isHardPaywall) {
                     Alert.alert('Restored', 'Your purchases have been restored.');
                     router.replace('/');
@@ -279,13 +306,11 @@ export default function PaywallScreen() {
         }
     };
 
-    const selectedPackage = getSelectedPackage(offering, isAnnual);
-    const fallbackPrice = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
-    const price = selectedPackage?.product.price ?? fallbackPrice;
-    const priceString = selectedPackage?.product.priceString ?? `$${price.toFixed(2)}`;
-    const trialBadgeText = getTrialBadgeText(selectedPackage);
-    const ctaText = getTrialCtaText(selectedPackage, 'Unlock Full Access');
-    const savings = isAnnual ? Math.round((1 - ANNUAL_PRICE / 12 / MONTHLY_PRICE) * 100) : 0;
+    const availablePeriods = getAvailableBillingPeriods(offering);
+    const selectedPackage = getSelectedPackage(offering, selectedPeriod);
+    const trialBadgeText = getTrialBadgeText(selectedPackage, selectedPeriod);
+    const ctaText = getTrialCtaText(selectedPackage, 'Unlock Full Access', selectedPeriod);
+    const billingUnit = getBillingPeriodUnit(selectedPeriod);
 
     if (loading) {
         return (
@@ -345,45 +370,49 @@ export default function PaywallScreen() {
                         ))}
                     </MotiView>
 
-                    {/* Pricing Toggle */}
+                    {/* Pricing Selector */}
                     <MotiView
                         from={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ type: 'timing', delay: 800 }}
                         style={styles.pricingContainer}>
-                        <View style={styles.toggleRow}>
-                            <Text style={styles.toggleLabel}>Monthly</Text>
-                            <Switch
-                                value={isAnnual}
-                                onValueChange={setIsAnnual}
-                                trackColor={{
-                                    false: 'rgba(255,255,255,0.3)',
-                                    true: 'rgba(255,255,255,0.5)',
-                                }}
-                                thumbColor="#FFFFFF"
-                            />
-                            <View style={styles.annualLabel}>
-                                <Text style={styles.toggleLabel}>Annual</Text>
-                                {isAnnual && (
-                                    <View style={styles.savingsBadge}>
-                                        <Text style={styles.savingsText}>-{savings}%</Text>
-                                    </View>
-                                )}
-                            </View>
+                        <View style={styles.planSelector}>
+                            {availablePeriods.map(period => {
+                                const planPackage = getSelectedPackage(offering, period);
+                                const selected = period === selectedPeriod;
+                                return (
+                                    <Pressable
+                                        key={period}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Select ${PLAN_LABELS[period]} plan`}
+                                        accessibilityState={{ selected }}
+                                        onPress={() => setSelectedPeriod(period)}
+                                        style={[styles.planOption, selected && styles.planOptionSelected]}>
+                                        <Text style={[styles.planName, selected && styles.planNameSelected]}>
+                                            {PLAN_LABELS[period]}
+                                        </Text>
+                                        <Text style={[styles.planPrice, selected && styles.planNameSelected]}>
+                                            {planPackage?.product.priceString}
+                                        </Text>
+                                        <Text style={styles.planDetail}>
+                                            {period === 'lifetime' ? 'One-time purchase' : `${PLAN_LABELS[period]} subscription`}
+                                        </Text>
+                                    </Pressable>
+                                );
+                            })}
                         </View>
 
-                        <View style={styles.priceDisplay}>
-                            <Text style={styles.price}>{priceString}</Text>
-                            <Text style={styles.priceUnit}>/{isAnnual ? 'year' : 'month'}</Text>
-                        </View>
-                        {isAnnual && (
-                            <Text style={styles.priceNote}>
-                                Just ${(ANNUAL_PRICE / 12).toFixed(2)}/month
-                            </Text>
-                        )}
+                        <Text style={styles.selectedPlanSummary}>
+                            {selectedPeriod === 'lifetime'
+                                ? 'Lifetime · One-time purchase'
+                                : `${PLAN_LABELS[selectedPeriod]} subscription${billingUnit ? ` · ${billingUnit}` : ''}`}
+                        </Text>
                         {trialBadgeText && (
                             <Text style={styles.trialText}>{trialBadgeText}</Text>
                         )}
+                        <Text style={styles.fairUseText}>
+                            Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.
+                        </Text>
                     </MotiView>
                 </ScrollView>
 
@@ -396,6 +425,7 @@ export default function PaywallScreen() {
                     <Button
                         mode="contained"
                         onPress={() => handlePurchase()}
+                        accessibilityLabel="Purchase selected plan"
                         style={styles.ctaButton}
                         labelStyle={styles.ctaLabel}
                         buttonColor="#FFFFFF"
@@ -416,14 +446,14 @@ export default function PaywallScreen() {
                     </Pressable>
 
                     {/* Subscription Disclosure */}
-                    <Text style={styles.disclosureText}>
-                        {trialBadgeText ? `${trialBadgeText}. ` : ''}
-                        {isAnnual
-                            ? `Annual subscription: ${selectedPackage?.product.priceString ?? `$${ANNUAL_PRICE.toFixed(2)}`}/year ($${(ANNUAL_PRICE / 12).toFixed(2)}/mo).`
-                            : `Monthly subscription: ${selectedPackage?.product.priceString ?? `$${MONTHLY_PRICE.toFixed(2)}`}/month.`
-                        }{' '}
-                        Payment will be charged to your Apple ID account. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage in Settings → Apple ID → Subscriptions.
-                    </Text>
+                    {selectedPackage && (
+                        <Text style={styles.disclosureText}>
+                            {trialBadgeText ? `${trialBadgeText}. ` : ''}
+                            {selectedPeriod === 'lifetime'
+                                ? `Lifetime: ${selectedPackage.product.priceString}. One-time purchase. Payment will be charged to your Apple ID account.`
+                                : `${PLAN_LABELS[selectedPeriod]} subscription: ${selectedPackage.product.priceString}${billingUnit}. Payment will be charged to your Apple ID account. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage in Settings → Apple ID → Subscriptions.`}
+                        </Text>
+                    )}
 
                     {/* Legal Links */}
                     <View style={styles.legalRow}>
@@ -509,6 +539,56 @@ const styles = StyleSheet.create({
     pricingContainer: {
         alignItems: 'center',
         paddingVertical: Spacing.xl,
+        paddingHorizontal: Spacing.lg,
+    },
+    planSelector: {
+        width: '100%',
+        gap: Spacing.sm,
+    },
+    planOption: {
+        minHeight: 64,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.25)',
+        borderRadius: BorderRadius.md,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    planOptionSelected: {
+        borderColor: '#FFFFFF',
+        backgroundColor: 'rgba(255,255,255,0.18)',
+    },
+    planName: {
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    planNameSelected: {
+        color: '#FFFFFF',
+    },
+    planPrice: {
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 18,
+        fontWeight: '800',
+        marginTop: 2,
+    },
+    planDetail: {
+        color: 'rgba(255,255,255,0.65)',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    selectedPlanSummary: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+        marginTop: Spacing.md,
+    },
+    fairUseText: {
+        color: 'rgba(255,255,255,0.75)',
+        fontSize: 12,
+        lineHeight: 17,
+        marginTop: Spacing.md,
+        textAlign: 'center',
     },
     toggleRow: {
         flexDirection: 'row',

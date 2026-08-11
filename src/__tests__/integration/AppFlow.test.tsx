@@ -1,5 +1,7 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
+import fs from 'fs';
+import path from 'path';
 // Mocks must use require inside the factory to avoid hoisting issues
 jest.mock('moti', () => {
     const { View } = require('react-native');
@@ -12,6 +14,7 @@ jest.mock('moti', () => {
 // Import after mocks
 import { View, Text } from 'react-native';
 import PaywallScreen from '../../features/payments/presentation/PaywallScreen';
+import OnboardingPremium from '../../../app/onboarding/premium';
 import { ProProvider } from '../../features/auth/infrastructure/ProContext';
 import { PaperProvider } from 'react-native-paper';
 import { Colors, Spacing } from '../../core/theme/DesignSystem';
@@ -48,6 +51,7 @@ jest.mock('expo-haptics', () => ({
 jest.mock('../../features/payments/infrastructure/RevenueCatService', () => ({
     revenueCatService: {
         initialize: jest.fn().mockResolvedValue(undefined),
+        ensureUserIdentity: jest.fn().mockResolvedValue({ entitlements: { active: {} } }),
         loginUser: jest.fn().mockResolvedValue(null),
         logoutUser: jest.fn().mockResolvedValue(undefined),
         getCustomerInfo: jest.fn().mockResolvedValue({
@@ -70,11 +74,27 @@ jest.mock('../../features/payments/infrastructure/RevenueCatService', () => ({
                     priceString: '$35.99',
                 },
             },
+            lifetime: {
+                identifier: 'pro_lifetime',
+                product: {
+                    title: 'Pro Lifetime',
+                    description: 'Unlock everything',
+                    priceString: 'US$79.99',
+                },
+            },
         }),
         purchasePackage: jest.fn().mockResolvedValue({ success: true }),
         restorePurchases: jest.fn().mockResolvedValue(true),
         isPro: jest.fn().mockReturnValue(false),
     },
+}));
+
+jest.mock('../../features/onboarding/infrastructure/OnboardingContext', () => ({
+    useOnboarding: () => ({ completeOnboarding: jest.fn().mockResolvedValue(undefined) }),
+}));
+
+jest.mock('../../features/payments/infrastructure/useSubscriptionAccess', () => ({
+    useSubscriptionAccess: () => ({ requiresSubscription: false }),
 }));
 
 jest.mock('expo-av', () => ({
@@ -229,6 +249,40 @@ describe('Comprehensive App Flow (50 Checks)', () => {
         it('48. Audio permissions checked', () => expect(true).toBe(true));
         it('49. Rec recording permissions checked', () => expect(true).toBe(true));
         it('50. Data reset clears storage', () => expect(true).toBe(true));
+    });
+
+    describe('7. Purchase identity wiring', () => {
+        it('51. Settings restore does not bypass secured ProContext identity handling', () => {
+            const settingsSource = fs.readFileSync(path.join(process.cwd(), 'app/(tabs)/settings.tsx'), 'utf8');
+            expect(settingsSource).not.toContain('revenueCatService.restorePurchases()');
+            expect(settingsSource).toContain('restorePurchases: restoreProPurchases');
+        });
+
+        it('52. Onboarding renders all three current-offering plans and fair-use copy', async () => {
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            expect(screen.getByLabelText('Select Monthly plan')).toBeTruthy();
+            expect(screen.getByLabelText('Select Lifetime plan')).toBeTruthy();
+            expect(screen.getByText('US$79.99')).toBeTruthy();
+            expect(screen.getByText('One-time purchase')).toBeTruthy();
+            expect(screen.getByText('Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.')).toBeTruthy();
+        });
+
+        it('53. Tafsir purchase prompts do not promise uncapped AI', () => {
+            const tafsirSource = fs.readFileSync(
+                path.join(process.cwd(), 'src/features/tafsir/presentation/TafsirBottomSheet.tsx'),
+                'utf8',
+            );
+            expect(tafsirSource).not.toMatch(/Unlimited AI|unlimited AI-powered/);
+            expect(tafsirSource).toContain('Noor AI & Quran Explanations');
+        });
     });
 
 });

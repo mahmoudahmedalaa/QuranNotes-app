@@ -320,14 +320,14 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                                             You{"'"}ve used all 3 free AI explanations today
                                         </Text>
                                         <Text style={[styles.gatedSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                                            Upgrade to Pro for unlimited AI-powered verse insights
+                                            Upgrade to Pro for Noor AI & Quran Explanations
                                         </Text>
                                         <Pressable
                                             onPress={() => router.push('/paywall?reason=ai-tafsir' as any)}
                                             style={[styles.unlockButton, { backgroundColor: GOLD }]}
                                         >
                                             <MaterialCommunityIcons name="auto-fix" size={16} color="#FFFFFF" />
-                                            <Text style={styles.unlockButtonText}>Unlock Unlimited AI</Text>
+                                            <Text style={styles.unlockButtonText}>Explore Pro Access</Text>
                                         </Pressable>
                                         <Text style={[styles.gatedReset, { color: theme.colors.onSurfaceVariant }]}>
                                             Resets tomorrow

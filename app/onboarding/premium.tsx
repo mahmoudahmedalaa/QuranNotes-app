@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Pressable, Switch, Alert } from 'react-native';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import { Text, useTheme, Button } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,7 +21,14 @@ import { isRamadanSeason } from '../../src/core/utils/ramadanUtils';
 import RamadanPaywallScreen from '../../src/features/payments/presentation/RamadanPaywallScreen';
 import { useSubscriptionAccess } from '../../src/features/payments/infrastructure/useSubscriptionAccess';
 import { TelemetryService } from '../../src/features/payments/infrastructure/TelemetryService';
-import { getSelectedPackage, getTrialBadgeText, getTrialCtaText } from '../../src/features/payments/presentation/paywallOfferUtils';
+import {
+    BillingPeriod,
+    getAvailableBillingPeriods,
+    getDefaultBillingPeriod,
+    getSelectedPackage,
+    getTrialBadgeText,
+    getTrialCtaText,
+} from '../../src/features/payments/presentation/paywallOfferUtils';
 
 
 
@@ -35,8 +42,11 @@ const FEATURES = [
     { icon: 'file-export', title: 'Data Export', description: 'PDF & JSON downloads' },
 ];
 
-const MONTHLY_PRICE = 4.99;
-const ANNUAL_PRICE = 35.99;
+const PLAN_LABELS: Record<BillingPeriod, string> = {
+    monthly: 'Monthly',
+    annual: 'Annual',
+    lifetime: 'Lifetime',
+};
 
 export default function OnboardingPremium() {
     useTheme();
@@ -46,7 +56,7 @@ export default function OnboardingPremium() {
     const { checkStatus } = usePro();
     const { user } = useAuth();
     const { requiresSubscription } = useSubscriptionAccess();
-    const [isAnnual, setIsAnnual] = useState(true);
+    const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('annual');
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [purchasing, setPurchasing] = useState(false);
 
@@ -83,6 +93,8 @@ export default function OnboardingPremium() {
             try {
                 const current = await revenueCatService.getOfferings();
                 setOffering(current);
+                const defaultPeriod = getDefaultBillingPeriod(current);
+                if (defaultPeriod) setSelectedPeriod(defaultPeriod);
             } catch {
                 // Offerings may fail on simulator — still allow free start
             }
@@ -112,13 +124,18 @@ export default function OnboardingPremium() {
     }
 
     const handleSubscribe = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in before making a purchase.');
+            return;
+        }
+
         let currentOffering = offering;
         if (!currentOffering) {
             currentOffering = await revenueCatService.getOfferings();
             setOffering(currentOffering);
         }
 
-        const packageToBuy = getSelectedPackage(currentOffering, isAnnual);
+        const packageToBuy = getSelectedPackage(currentOffering, selectedPeriod);
         if (!packageToBuy) {
             Alert.alert(
                 'Subscription Unavailable',
@@ -131,30 +148,27 @@ export default function OnboardingPremium() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         try {
-            if (user) {
-                await TelemetryService.trackSubscriptionEvent(user.id, {
-                    location: 'onboarding',
-                    outcome: 'started',
-                    hardPaywall: isHardPaywall,
-                    reason: 'onboarding-premium',
-                });
-            }
+            await revenueCatService.ensureUserIdentity(user.id);
+            await TelemetryService.trackSubscriptionEvent(user.id, {
+                location: 'onboarding',
+                outcome: 'started',
+                hardPaywall: isHardPaywall,
+                reason: 'onboarding-premium',
+            });
 
             const { success, userCancelled, error: purchaseError } = await revenueCatService.purchasePackage(packageToBuy);
             if (success) {
-                try {
-                    await checkStatus();
-                } catch {
-                    /* non-critical */
+                const entitlementActive = await checkStatus();
+                if (!entitlementActive) {
+                    Alert.alert('Purchase Pending', 'Your purchase could not be verified yet. Please try Restore Purchases.');
+                    return;
                 }
-                if (user) {
-                    await TelemetryService.trackSubscriptionEvent(user.id, {
-                        location: 'onboarding',
-                        outcome: 'success',
-                        hardPaywall: isHardPaywall,
-                        reason: 'onboarding-premium',
-                    });
-                }
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'onboarding',
+                    outcome: 'success',
+                    hardPaywall: isHardPaywall,
+                    reason: 'onboarding-premium',
+                });
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 try {
                     await completeOnboarding();
@@ -211,24 +225,28 @@ export default function OnboardingPremium() {
     };
 
     const handleRestore = async () => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in before restoring purchases.');
+            return;
+        }
+
         setPurchasing(true);
         try {
+            await revenueCatService.ensureUserIdentity(user.id);
             const success = await revenueCatService.restorePurchases();
 
             if (success) {
-                try {
-                    await checkStatus();
-                } catch {
-                    /* non-critical */
+                const entitlementActive = await checkStatus();
+                if (!entitlementActive) {
+                    Alert.alert('Restore Unavailable', 'No active QuranNotes Pro purchase was found for this account.');
+                    return;
                 }
-                if (user) {
-                    await TelemetryService.trackSubscriptionEvent(user.id, {
-                        location: 'onboarding',
-                        outcome: 'restored',
-                        hardPaywall: isHardPaywall,
-                        reason: 'onboarding-premium',
-                    });
-                }
+                await TelemetryService.trackSubscriptionEvent(user.id, {
+                    location: 'onboarding',
+                    outcome: 'restored',
+                    hardPaywall: isHardPaywall,
+                    reason: 'onboarding-premium',
+                });
                 Alert.alert('Restored', 'Your purchases have been restored.');
                 await handleOnboardingComplete();
             } else {
@@ -249,13 +267,10 @@ export default function OnboardingPremium() {
         }
     };
 
-    const selectedPackage = getSelectedPackage(offering, isAnnual);
-    const fallbackPrice = isAnnual ? ANNUAL_PRICE : MONTHLY_PRICE;
-    const price = selectedPackage?.product.price ?? fallbackPrice;
-    const priceString = selectedPackage?.product.priceString ?? `$${price.toFixed(2)}`;
-    const trialBadgeText = getTrialBadgeText(selectedPackage);
-    const ctaText = getTrialCtaText(selectedPackage, 'Unlock Full Access');
-    const savings = isAnnual ? Math.round((1 - ANNUAL_PRICE / 12 / MONTHLY_PRICE) * 100) : 0;
+    const availablePeriods = getAvailableBillingPeriods(offering);
+    const selectedPackage = getSelectedPackage(offering, selectedPeriod);
+    const trialBadgeText = getTrialBadgeText(selectedPackage, selectedPeriod);
+    const ctaText = getTrialCtaText(selectedPackage, 'Unlock Full Access', selectedPeriod);
 
     return (
         <LinearGradient colors={Gradients.primary} style={{ flex: 1 }}>
@@ -309,42 +324,40 @@ export default function OnboardingPremium() {
                     ))}
                 </MotiView>
 
-                {/* Pricing Toggle */}
+                {/* Pricing Selector */}
                 <MotiView
                     from={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ type: 'timing', delay: 800 }}
                     style={styles.pricingContainer}>
-                    <View style={styles.toggleRow}>
-                        <Text style={styles.toggleLabel}>Monthly</Text>
-                        <Switch
-                            value={isAnnual}
-                            onValueChange={setIsAnnual}
-                            trackColor={{
-                                false: 'rgba(255,255,255,0.3)',
-                                true: 'rgba(255,255,255,0.5)',
-                            }}
-                            thumbColor="#FFFFFF"
-                        />
-                        <View style={styles.annualLabel}>
-                            <Text style={styles.toggleLabel}>Annual</Text>
-                            {isAnnual && (
-                                <View style={styles.savingsBadge}>
-                                    <Text style={styles.savingsText}>-{savings}%</Text>
-                                </View>
-                            )}
-                        </View>
+                    <View style={styles.planSelector}>
+                        {availablePeriods.map(period => {
+                            const planPackage = getSelectedPackage(offering, period);
+                            const selected = period === selectedPeriod;
+                            return (
+                                <Pressable
+                                    key={period}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Select ${PLAN_LABELS[period]} plan`}
+                                    accessibilityState={{ selected }}
+                                    onPress={() => setSelectedPeriod(period)}
+                                    style={[styles.planOption, selected && styles.planOptionSelected]}>
+                                    <Text style={[styles.planName, selected && styles.planNameSelected]}>
+                                        {PLAN_LABELS[period]}
+                                    </Text>
+                                    <Text style={[styles.planPrice, selected && styles.planNameSelected]}>
+                                        {planPackage?.product.priceString}
+                                    </Text>
+                                    <Text style={styles.planDetail}>
+                                        {period === 'lifetime' ? 'One-time purchase' : `${PLAN_LABELS[period]} subscription`}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
                     </View>
-
-                    <View style={styles.priceDisplay}>
-                        <Text style={styles.price}>{priceString}</Text>
-                        <Text style={styles.priceUnit}>/{isAnnual ? 'year' : 'month'}</Text>
-                    </View>
-                    {isAnnual && (
-                        <Text style={styles.priceNote}>
-                            Just ${(ANNUAL_PRICE / 12).toFixed(2)}/month
-                        </Text>
-                    )}
+                    <Text style={styles.fairUseText}>
+                        Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.
+                    </Text>
                 </MotiView>
 
                 {/* CTA Buttons */}
@@ -356,6 +369,7 @@ export default function OnboardingPremium() {
                     <Button
                         mode="contained"
                         onPress={handleSubscribe}
+                        accessibilityLabel="Purchase selected plan"
                         style={styles.ctaButton}
                         labelStyle={styles.ctaLabel}
                         buttonColor="#FFFFFF"
@@ -447,6 +461,50 @@ const styles = StyleSheet.create({
     pricingContainer: {
         alignItems: 'center',
         paddingVertical: Spacing.xl,
+        paddingHorizontal: Spacing.lg,
+    },
+    planSelector: {
+        width: '100%',
+        gap: Spacing.sm,
+    },
+    planOption: {
+        minHeight: 64,
+        borderWidth: 1,
+        borderColor: 'rgba(76,61,122,0.25)',
+        borderRadius: BorderRadius.md,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
+        backgroundColor: 'rgba(255,255,255,0.45)',
+    },
+    planOptionSelected: {
+        borderColor: BrandTokens.light.accentPrimary,
+        backgroundColor: 'rgba(139,92,246,0.12)',
+    },
+    planName: {
+        color: '#4C3D7A',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    planNameSelected: {
+        color: '#1E1B4B',
+    },
+    planPrice: {
+        color: '#4C3D7A',
+        fontSize: 18,
+        fontWeight: '800',
+        marginTop: 2,
+    },
+    planDetail: {
+        color: '#6B5B95',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    fairUseText: {
+        color: '#4C3D7A',
+        fontSize: 12,
+        lineHeight: 17,
+        marginTop: Spacing.md,
+        textAlign: 'center',
     },
     toggleRow: {
         flexDirection: 'row',
