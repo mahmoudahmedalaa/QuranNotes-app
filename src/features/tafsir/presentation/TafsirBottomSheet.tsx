@@ -107,6 +107,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
         let cancelled = false;
         const summaryGeneration = contextGeneration.next();
         questionGeneration.invalidate();
+        setAnswerLoading(false);
 
         setAiExplanation(null);
         setAiLoading(false);

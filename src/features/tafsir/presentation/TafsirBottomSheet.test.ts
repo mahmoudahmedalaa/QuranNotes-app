@@ -14,4 +14,12 @@ describe('TafsirBottomSheet citation state', () => {
         expect(source).toMatch(/contextGeneration\.isCurrent\(questionContextGeneration\)/);
         expect(source).toMatch(/questionGeneration\.isCurrent\(generation\)/);
     });
+
+    it('clears question loading when a new visible context invalidates the pending request', () => {
+        const source = fs.readFileSync(require.resolve('./TafsirBottomSheet'), 'utf8');
+        const effect = source.slice(source.indexOf('// Load tafsir'), source.indexOf('const handleSourceChange'));
+        expect(effect).toMatch(/questionGeneration\.invalidate\(\);[\s\S]*setAnswerLoading\(false\);/);
+        const cleanup = effect.slice(effect.indexOf('return () =>'));
+        expect(cleanup).not.toContain('setAnswerLoading');
+    });
 });
