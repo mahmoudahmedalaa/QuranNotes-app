@@ -11,11 +11,10 @@ const REDISTRIBUTION_STATUS = 'not_proven_for_public_commercial_redistribution';
 
 const REQUIRED_ACTIVATION_BLOCKERS = [
     'translator_publisher_edition_and_revision_not_stated',
-    'local_corpus_retrieval_path_not_reconstructable',
     'content_sync_or_long_term_storage_basis_not_proven',
     'commercial_redistribution_license_not_proven',
     'machine_learning_use_written_consent_not_proven',
-    'local_corpus_not_verified_equal_to_current_api',
+    'upstream_corpus_has_known_coverage_gaps',
 ] as const;
 
 export type CorpusSourceId = 'ibn_kathir_en_abridged' | 'al_sadi_ar';
@@ -36,9 +35,12 @@ export interface RedistributionBasis {
 
 export interface CorpusIntegrityRecord {
     hashScope: 'exact_committed_bytes';
-    currentApiEqualityVerified: false;
+    currentApiEqualityVerified: true;
     affectedFileCount: number;
     replacementCharacterCount: number;
+    mappingCount: number;
+    missingVerseKeyCount: number;
+    coverageReport: 'docs/noor-rag/corpus-coverage.json';
 }
 
 export interface CorpusProvenanceSource {
@@ -81,6 +83,8 @@ interface SourceExpectation {
     corpusPath: string;
     affectedFileCount: number;
     replacementCharacterCount: number;
+    mappingCount: number;
+    missingVerseKeyCount: number;
 }
 
 const SOURCE_EXPECTATIONS: Record<CorpusSourceId, SourceExpectation> = {
@@ -90,8 +94,10 @@ const SOURCE_EXPECTATIONS: Record<CorpusSourceId, SourceExpectation> = {
         resourceId: 169,
         editionLabel: 'Quran.com catalog: Ibn Kathir (Abridged), English; translator, publisher, edition, and revision not stated',
         corpusPath: 'src/features/tafsir/data/tafsir/ibn_kathir',
-        affectedFileCount: 79,
-        replacementCharacterCount: 527,
+        affectedFileCount: 0,
+        replacementCharacterCount: 0,
+        mappingCount: 6236,
+        missingVerseKeyCount: 0,
     },
     al_sadi_ar: {
         sourceTitle: "السعدي Al-Sa'di",
@@ -99,8 +105,10 @@ const SOURCE_EXPECTATIONS: Record<CorpusSourceId, SourceExpectation> = {
         resourceId: 91,
         editionLabel: "Quran.com catalog: السعدي Al-Sa'di, Arabic; translator, publisher, edition, and revision not stated",
         corpusPath: 'src/features/tafsir/data/tafsir/al_sadi',
-        affectedFileCount: 50,
-        replacementCharacterCount: 290,
+        affectedFileCount: 0,
+        replacementCharacterCount: 0,
+        mappingCount: 6177,
+        missingVerseKeyCount: 59,
     },
 };
 
@@ -225,7 +233,7 @@ function parseIntegrity(
     }
     validateFields(
         input,
-        ['hashScope', 'currentApiEqualityVerified', 'affectedFileCount', 'replacementCharacterCount'],
+        ['hashScope', 'currentApiEqualityVerified', 'affectedFileCount', 'replacementCharacterCount', 'mappingCount', 'missingVerseKeyCount', 'coverageReport'],
         context,
         errors,
     );
@@ -233,12 +241,15 @@ function parseIntegrity(
     const currentApiEqualityVerified = input.currentApiEqualityVerified;
     const affectedFileCount = input.affectedFileCount;
     const replacementCharacterCount = input.replacementCharacterCount;
+    const mappingCount = input.mappingCount;
+    const missingVerseKeyCount = input.missingVerseKeyCount;
+    const coverageReport = input.coverageReport;
 
     if (hashScope !== 'exact_committed_bytes') {
         errors.push(`${context}.hashScope must be exact_committed_bytes`);
     }
-    if (currentApiEqualityVerified !== false) {
-        errors.push(`${context}.current API equality is not verified and must be false`);
+    if (currentApiEqualityVerified !== true) {
+        errors.push(`${context}.current API equality must be verified`);
     }
     if (!Number.isInteger(affectedFileCount) || affectedFileCount !== expectation.affectedFileCount) {
         errors.push(`${context}.affectedFileCount does not match the reviewed corpus scan`);
@@ -247,18 +258,27 @@ function parseIntegrity(
         || replacementCharacterCount !== expectation.replacementCharacterCount) {
         errors.push(`${context}.replacementCharacterCount does not match the reviewed corpus scan`);
     }
+    if (mappingCount !== expectation.mappingCount) errors.push(`${context}.mappingCount does not match reviewed coverage`);
+    if (missingVerseKeyCount !== expectation.missingVerseKeyCount) errors.push(`${context}.missingVerseKeyCount does not match reviewed coverage`);
+    if (coverageReport !== 'docs/noor-rag/corpus-coverage.json') errors.push(`${context}.coverageReport must identify the governed coverage report`);
 
     if (hashScope !== 'exact_committed_bytes'
-        || currentApiEqualityVerified !== false
+        || currentApiEqualityVerified !== true
         || affectedFileCount !== expectation.affectedFileCount
-        || replacementCharacterCount !== expectation.replacementCharacterCount) {
+        || replacementCharacterCount !== expectation.replacementCharacterCount
+        || mappingCount !== expectation.mappingCount
+        || missingVerseKeyCount !== expectation.missingVerseKeyCount
+        || coverageReport !== 'docs/noor-rag/corpus-coverage.json') {
         return undefined;
     }
     return {
         hashScope: 'exact_committed_bytes',
-        currentApiEqualityVerified: false,
+        currentApiEqualityVerified: true,
         affectedFileCount: expectation.affectedFileCount,
         replacementCharacterCount: expectation.replacementCharacterCount,
+        mappingCount: expectation.mappingCount,
+        missingVerseKeyCount: expectation.missingVerseKeyCount,
+        coverageReport: 'docs/noor-rag/corpus-coverage.json',
     };
 }
 

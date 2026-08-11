@@ -18,6 +18,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { decodeUtf8Chunks } = require('./tafsir-download-utils');
 
 // ── Config ──
 const SOURCES = [
@@ -50,9 +51,10 @@ const VERSE_COUNTS = [
 function httpGet(url) {
     return new Promise((resolve, reject) => {
         https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
             res.on('end', () => {
+                const data = decodeUtf8Chunks(chunks);
                 if (res.statusCode >= 200 && res.statusCode < 300) {
                     resolve(data);
                 } else {

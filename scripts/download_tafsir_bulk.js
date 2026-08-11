@@ -21,6 +21,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { decodeUtf8Chunks } = require('./tafsir-download-utils');
 
 // ── Config ──
 const CDN_BASE = 'https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir';
@@ -41,9 +42,10 @@ function httpGet(url) {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 return httpGet(res.headers.location).then(resolve).catch(reject);
             }
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
             res.on('end', () => {
+                const data = decodeUtf8Chunks(chunks);
                 if (res.statusCode >= 200 && res.statusCode < 300) {
                     resolve(data);
                 } else {

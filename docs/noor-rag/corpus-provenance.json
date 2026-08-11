@@ -4,11 +4,10 @@
   "publicActivationApproved": false,
   "activationBlockers": [
     "translator_publisher_edition_and_revision_not_stated",
-    "local_corpus_retrieval_path_not_reconstructable",
     "content_sync_or_long_term_storage_basis_not_proven",
     "commercial_redistribution_license_not_proven",
     "machine_learning_use_written_consent_not_proven",
-    "local_corpus_not_verified_equal_to_current_api"
+    "upstream_corpus_has_known_coverage_gaps"
   ],
   "sources": [
     {
@@ -28,469 +27,472 @@
       "corpusPath": "src/features/tafsir/data/tafsir/ibn_kathir",
       "integrity": {
         "hashScope": "exact_committed_bytes",
-        "currentApiEqualityVerified": false,
-        "affectedFileCount": 79,
-        "replacementCharacterCount": 527
+        "currentApiEqualityVerified": true,
+        "affectedFileCount": 0,
+        "replacementCharacterCount": 0,
+        "mappingCount": 6236,
+        "missingVerseKeyCount": 0,
+        "coverageReport": "docs/noor-rag/corpus-coverage.json"
       },
       "files": [
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_001.json",
-          "sha256": "d849a1eca0e403ca81cfe13c5ec77457a57277880b60a0197c90fb3a29c21840"
+          "sha256": "1ee5436d754ab9efbedddba5abc8d15ecfb784db8d61322a217fdcc06aa3d646"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_002.json",
-          "sha256": "84cbffc344ccde24cb9641484abdc195dd03908b8821f29167e67d357d8e687d"
+          "sha256": "22b8da5da040942f151c52c4f6182ee15c629842a43463df93524ad3e8fba5e6"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_003.json",
-          "sha256": "d90c1a6c4b033ba77aa314253232adf5208ff3d3403e5f0d8eef4110c7c042b7"
+          "sha256": "c35b8f213e5689f253249e27453eb0c260f62eaed53cd603c121518892ba2570"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_004.json",
-          "sha256": "3fbf01bace48bc693b66ecac27997c0ae318869dd2c0c461847dfc3644b38394"
+          "sha256": "76ae61dfc8d723f18d840335571b13349c1824ad14b698ca3f430d1141a5f840"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_005.json",
-          "sha256": "d5184555661e6f9b7f33bad566cb2ff13c82ce242c7feaac37e7726f6d1fd37f"
+          "sha256": "0ae3e226b9779b0a3e150ccc4af6db4b9919b2c18fe0a7d0eb465c281ce9fb23"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_006.json",
-          "sha256": "b6aad265bae367693d9481949b62eb5ea85b2b0c58a06aab457509386463fd1f"
+          "sha256": "d43466cf93b9a183c0570dd7b024790e8481c72d96b1f3f758608275e2ffd73b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_007.json",
-          "sha256": "57ac194e0f8f6daa04555de7e533a92299f446b00c6195099426c406c3f3dfd6"
+          "sha256": "bbf86776efdb817ffa4d6139d32261ce59ca15a3ef5722b6fcbceaf7a104c3d7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_008.json",
-          "sha256": "c46c595d6b5b00ff042cf490a502d02bc80995077b6a1cbd7cf12d0d83ca40d7"
+          "sha256": "36bd277982d72f7736456d5e27878072dd75fe276e5dbaec9b27bf26c27f182b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_009.json",
-          "sha256": "2b2e55f6b7de8f3f501c0e4d4b10e4496fcd1b417ae7d2e141fcab7cb433181d"
+          "sha256": "27f3f5a4f223c69121d3c424ea7bcdd50e3c3360da810e666d666c341870d166"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_010.json",
-          "sha256": "d7769c04524aea0cad5491976532d0ff3faf2550ac82769102c30959bbdf8c89"
+          "sha256": "16aaf803689792896617cd919535f8b50fec42deb93991848a6a892261e3bbf2"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_011.json",
-          "sha256": "b8183f1abaadbbd6a4a32b17e488f7242cbb79950bb098d124ba94f418f6ab17"
+          "sha256": "e3f233ed3318981999d2d66cf67600971af4931ea545dabc84f216c07141c054"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_012.json",
-          "sha256": "b8926b315f758c43c478a8cbe88b4756beb9171bf9ea957710445e6df779b713"
+          "sha256": "6b43edd538c7564cd10089e941dfc02a3ec289b1234d79eb7d164bda2c45d23f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_013.json",
-          "sha256": "bf956f272a78112cf88ed10bb85883e9c82859ad3da7deb6d12f5caac16b8927"
+          "sha256": "58a0cb3979f0f1fc46e79550668b444b51b556df877b4b721b8172b9a63376b1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_014.json",
-          "sha256": "2656e55802b206c9fa1e320bc22d6ebd0201ee6347b7b5a758cec14178210901"
+          "sha256": "8fd77e35209e37e553881cc47ed37dd2e499051255109f5c206c0cbe784f80d1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_015.json",
-          "sha256": "9cd0e89515e6df66febe65d91c5d41f3eb9122b9f73d4af6f58f0bb30323050d"
+          "sha256": "85d1b7bc492e726f4633558bb0c343efff96f58e8d3bf6c1c6a45cef345d9074"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_016.json",
-          "sha256": "69c84a54534c34b4d385a61ec0a9422dce583878c22eab716a36e8359fdad0cb"
+          "sha256": "ff668ee828813943e479623d6a9aa2b3e7ed25084268c389d2562365eb3d9ecf"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_017.json",
-          "sha256": "1c177ee7f835bf48abbcd73bca9662d5ed27cfeb22f92788150f52537e3b7191"
+          "sha256": "8dd0abb9f5924134cabb1627d5c6d8b894483df9fc58feb77bf6a52851b6ec55"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_018.json",
-          "sha256": "c75928b1e82030d151f0400eaf3dd3987c9bcaa20e8659e798ff1fe44e2f419b"
+          "sha256": "80a7f1923d92bb58a73fb8c6109a6541d11be5122fd1bac63700154cf6ada8a3"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_019.json",
-          "sha256": "4bfd17bf3195362bb2aad1316586f486722d688f115741701a37125dd7c2738b"
+          "sha256": "b6e9cbbfb51ff02c40972ac701c203f93a6735df1aae6a80efc76fc3edc9e776"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_020.json",
-          "sha256": "32fde34fea75731504de45905d72ca62791d4bb34e0c37fab0ec2c93c31ace8b"
+          "sha256": "520a24d96825ef59f01203f7aa567eb99cc1179fe85b8b56658dd55f38e387cf"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_021.json",
-          "sha256": "9f7337cc42f58b8ac468459dbe8b484ec3143dadd650ed34275480f4a96a3282"
+          "sha256": "3dd200c6b48f9ae724210fd0cb8f2b0611836e0bdd024e79d734b7f17173a3d6"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_022.json",
-          "sha256": "7c20966f8443db4e99532df41cbc5060f8cecce930e16a8f53bbc15c82fb54a8"
+          "sha256": "6f80f067a0a507df4d134706c12a28a23ae9943ac75f6d90add9a961de0317f5"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_023.json",
-          "sha256": "bc5e418e6448b6e363820aa5328880fadd65a26a88aa8f3d5e822c2d938aaab9"
+          "sha256": "d135adb34cc818a9df6efb2f57ba260493833476ca36550dc7285c5c04cdf579"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_024.json",
-          "sha256": "32be2467f67cb9b03c561303aecd81476b7051f907770698aecf5e7279294550"
+          "sha256": "33c08e55b10eb27a283a78266ba168c385d87bd8d9eed62931b313f2107bf7d5"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_025.json",
-          "sha256": "2b9196e7277103cb5ae54666d1e245b2998f11a619344dd184b077e2a2bcc17b"
+          "sha256": "0b0072c71b50c3e9b36e85561f92f585b279660f77c39f05543a2f7c67fa5fff"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_026.json",
-          "sha256": "bc0a16b4c17fb2e5174b5a484b178841c5b130b3ef5792fad826de8fd9ce15b2"
+          "sha256": "7d632358fc4744fc14ee3a2967f00178d5318b478f4152207f8bee43712b43a8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_027.json",
-          "sha256": "12c1f0f524d8ffb2b04246f07baa7a6bb596befbf6c7e34df54bee9d306dea1d"
+          "sha256": "eecb89eb67e4de2351b1b8c59cc2a9b06885523a784c39c0a228c438e7da6c85"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_028.json",
-          "sha256": "228e4075a08e4a33655111ea33042c13b156f1a7551b64f9b305f897ae34feed"
+          "sha256": "f7a43e39780bd3da33b9ffe8fd7721c962932250abaa8a373e833154707a123d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_029.json",
-          "sha256": "78da0ff222aa8f78f9b1c4bcfb69eda1f76e74c918bbba98cd3279c461df0346"
+          "sha256": "bcfa520cbd18e5e17d74756b69c064912ea0b87a9a3d7f25f3faec97bedc2f06"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_030.json",
-          "sha256": "165b88720df7fea6d4b8713c2c850c5701d70ea6e2962b06ad6ef252e86a73a9"
+          "sha256": "490c273295c0bfb7868e1408e639925443e0daff231c0a6747737c14b6c955a8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_031.json",
-          "sha256": "3785c8e838c9bf55ed52694f191eda8240a2c2125e6229f95b100167c8ae1f19"
+          "sha256": "a1d0e3648b602a29723b9182bf3e6ac1387b058146f537c013e8accef05a7e0b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_032.json",
-          "sha256": "596ed84906f8d29b047eff27e7cb15b0e6671e46cf1a5eb6b5db83bb98df31ac"
+          "sha256": "ab19a0a572c6aa83861614dbdbe32db1a2b991458deb509ef5a4273332fec8a0"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_033.json",
-          "sha256": "0ec99bf585c592ac38ed80954839d3d9c6e05079028ada5c35339ac90d2c899e"
+          "sha256": "80e761461ef1a1be78bc63c1d81823746b1d64be7717609f2701971ef5b7d323"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_034.json",
-          "sha256": "5afe11a5cbaf47abecbb30193e09e9571a5927bac60a4711f91275f921458200"
+          "sha256": "3a2d20b048fda5d0e374becda5e3639e76b07e41da62ebaf2851b48056513d5d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_035.json",
-          "sha256": "0a602ae389ef7481a39130e0bbef8ca49eeff8692147ae797dd95fe47fdc82c5"
+          "sha256": "e1edcfd95a8ad64a113b331558cc775d64ae7540f05703cf082b0e72f7a82f36"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_036.json",
-          "sha256": "02715eb67be4bcf49bcd405e9b13fe30db6e4e3eefc937b59371efded6ee011f"
+          "sha256": "684c309333c88af488ccef55405e8cb5607aedf3ad3406bc5798faf1811aa115"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_037.json",
-          "sha256": "68f9b79e8b8df3a85934c109e9c9b2d17c99c7514c62bcb5c30fc1d4a8833cd5"
+          "sha256": "5472f50f8454be324e756ef7312ff1012b6814c47aa64957dc3e680dc0d8b548"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_038.json",
-          "sha256": "f5978472ac9300010d99bb7659b4525df4abb9f1d0d1f84b583ec13a93882e4c"
+          "sha256": "ef40c6084b8bdff0f050e26606c1929358747afc6a521bf8f4abd6fe7e457c1c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_039.json",
-          "sha256": "1f3ea2c92acd8d7bed2eb19cfef850dc81a7aa2e0b6209b25527f0a5c8fae133"
+          "sha256": "3527e61f07033dfb210cb9bebe3185319c238f58ff13200e5b8257eb27bc8ed1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_040.json",
-          "sha256": "bee55efe5e89a474b1187a37f9daa676aed8ebc5d9e58ad030015c411359ea28"
+          "sha256": "58de2242a3d4d0178989f4f8999cdb09d67b03c345f34342b99b30eea5961b8c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_041.json",
-          "sha256": "8fb540904d31ad5bf0e0d857ad07349fb39bb73d23ca4f40a89ad1bcbc6bc9bd"
+          "sha256": "e778fb19e4e40976791f13dbc6115a4151de443b93767985764dcb4d3b30157a"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_042.json",
-          "sha256": "84b2deb7c142202095910098b38d72699049cb6f8b1699c2928edbb7834c8583"
+          "sha256": "b4b6ef7fb82b78c38c3d425ccfba2ac2b90774bc674e0d197903e8032d6f49f2"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_043.json",
-          "sha256": "bba244414e9f3130d85dbb6f4b23ef7292b0508581aa508cbb9569f6589e7ba6"
+          "sha256": "d97e2f1a72be65d45dbea69ac3a492bb29605ddbdb84b342c343432ad80169b8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_044.json",
-          "sha256": "9a2db49d877f77182b0bdd83d1a5b2132689b0232d3c32542573c224118ef7b9"
+          "sha256": "4b86b5ee3f90653c27b40c1830edcc975791248c5c22a2d5a1216cc4d8ba531d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_045.json",
-          "sha256": "c0031c09db0969b1affcf4ad26f258a0e4f6c130bb1088785114ec8e575df8ee"
+          "sha256": "939d99a47560fff4f5f15ef4b6c17ebc4dc86a5682a89ea0e8aef4e6b2cdf14e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_046.json",
-          "sha256": "33e1c813da6648528b1c1977622ea7dabede2a787bdf83f269069b9a38012479"
+          "sha256": "c702588fad7386cee51c7eb9ff3f136ca6681e5f6c0f20beba4f4c157d697842"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_047.json",
-          "sha256": "5b872545d1281dee4aa20b8eaff3325d3f712ec72fdd006d694ffc8cd1042710"
+          "sha256": "a01360915c34eb64dc81ec64102c42093a5794ff1b1cd02cb4a1c4624aac0d37"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_048.json",
-          "sha256": "c5a224a32ed11da833df2534ad6759e5f06e24daed7ba6ea0cee7e8097091b96"
+          "sha256": "32a80c428aed0cc8bd3f5362cc3124e7a3d462f1d11ccf7c85a8e9f2b1573d2b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_049.json",
-          "sha256": "415c92d2f83beb138769f027315f57e783f034536e856c4977539f7ee6e7e62e"
+          "sha256": "97e880b017fe5e94e8f762d8530019f5a2a403dcb97f2762cbd05d7c3e556a1e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_050.json",
-          "sha256": "86a60fcb19e0374a9d90aa9c5658444147561678a0d34c10bcee87f839af6d74"
+          "sha256": "28d47debeca5225317212fc9176b19e2163529f6ae2fe67f5464a542bc5a3b4d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_051.json",
-          "sha256": "45061e5353cbb30d6450062334d780514e458115b9724056f28faf4a06edbb78"
+          "sha256": "2b1ae536d0f815a979ea8bac572efb9942a621cd0cdcbf1b95b7647f70efb0a9"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_052.json",
-          "sha256": "44da7066ea9059aab30594d391691fc5fffcc7c0df1edde9bb091caada30ac15"
+          "sha256": "be40efb88eb9fcca488e7b91c0ab9ee91e6684043e4167bbffe4bae52ac0d62c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_053.json",
-          "sha256": "9d89f57aeb8b085175d3b986fbaa0ac6df93fce3d8353da22feb999e79c236ad"
+          "sha256": "1203c1ed4d41b3149f4fa00bf14c16ee15c9a2588c35fa3a8925f8913fcdd3e5"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_054.json",
-          "sha256": "5b1ca31e99daacae9bf894a83645f77fc3fc43478a63e743709c55d024307004"
+          "sha256": "f73ee360d32d213d401d646fb0419b78b353c62a8c0631c9edb6fc538ca7943a"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_055.json",
-          "sha256": "40ab05b7dcf60c486fc482f90906b1e98665f028f32bf75ccc2bcc604182b076"
+          "sha256": "09a96a4fd89901b69f98953715f6e551db97aecb7ca9f9379839b46e92590d11"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_056.json",
-          "sha256": "f585329d3f32476e2986fdc32e8e3f5d6a372c50da498f3522ef59e3b04bfab4"
+          "sha256": "b3fbfd452467109a4220039c7acafbcff9f3a5d04e785482cb33c6da5d61207b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_057.json",
-          "sha256": "aa683e51df02f63e25de8b42d3d54816f8276bdf550a27aaf5011502794e3bc7"
+          "sha256": "3ec6e305ade1f6e21a38e48555d64f61d621bb31db97a408b2046a0951fc2d33"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_058.json",
-          "sha256": "da4da0b0f912b0d6d8757088a05a939a68c15b1f228d56c96791961609ae9100"
+          "sha256": "ae2b3186af170b0322e02ca26f2356b17bab22666b082f0a5fcd914a90cb0292"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_059.json",
-          "sha256": "b252a7046c0f8d141f514c64b8ec74c49ba5f9439a9c6a2c71798aec205970ff"
+          "sha256": "2284dc527a5b450964a7794849f2dede28d57c3c254f6b3483b0f51fd367186c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_060.json",
-          "sha256": "ae141ab34ccf1d9f58fa41e49608806c8cb502add7da2a1317ce9577330bd262"
+          "sha256": "14d18a8811c50c500ca0178e86c9eef563c2ffab69772ad7639c89c1af689bc2"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_061.json",
-          "sha256": "e52843354090adbbdb955058b845ac3d9171a12317cc0c68f87a2c5b0214f2ef"
+          "sha256": "0ec736e42b0ee830231da835b151a35746499697420c4d6321cee02ac86051f8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_062.json",
-          "sha256": "446ef6d7a9c53ba9dbd93856313a4170ec2b0290130b81936b66f50731e9c30a"
+          "sha256": "54a1dcf3ed1a4e4a2e4a7e8280476063169ead754b3c6d17880cde88d295e5a0"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_063.json",
-          "sha256": "b3caa78d4f23227b1b65fc8cd40ad78e6466f9037dfe3663412ab05ba1d8322a"
+          "sha256": "563cf5886992163d0c6ec79c15d4ecda5d10ca157f2ef6e79533e206d297a7b2"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_064.json",
-          "sha256": "129268d19a0f7809bd98da90b191818335bd205fdb0212c1b00cfb8452de7769"
+          "sha256": "b5006be3715a26e921d483b769a702dbdabb9867eafe2e1366c949f3681b0342"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_065.json",
-          "sha256": "b3b1bc431a12c9fe13df1b17dfe4307860bb996bca313c3080ec149d3254d378"
+          "sha256": "d6cfda2b47ccb6f6e16fdc8624671abca1cc6ff45e0aaba1ad989e24519e9db1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_066.json",
-          "sha256": "3e8b525c4e870780ae901a0bafd57da0e5fa58c28d40fe50076a510424654590"
+          "sha256": "eee1f83f883bdfc92b08ba74e98c74a5410e3e069e0e78d47aa11832cf02e9ca"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_067.json",
-          "sha256": "51ad0fa327b957067295a49ff1910e549e662a94f6ad34a63ba7ec4c43e27e30"
+          "sha256": "b128c2d8984ff4fddaca953501fa53f54808a902e6ccb0925ce44ebdc2536072"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_068.json",
-          "sha256": "f362bc0f7a340c6afcb12934d42bdb28d7fdc388d132fd7773bf0d4d6ee77aa8"
+          "sha256": "d28bdb64990031636f8c60d3a1325b06b0b8a6ee82739525bf75bd0c4ca0224c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_069.json",
-          "sha256": "97d0c60e88dc398d2a0e408641bba576efe2b93ec4fb7a5e5571c5b14bc97321"
+          "sha256": "cdcf0cc8f68fc01f657b21991e1501274100dfd7bcbf981b299269945ef3d4a0"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_070.json",
-          "sha256": "79fdc046709a78f33222de17d05dcc1b53ab91a19eb6e8cd3526cd53675cef50"
+          "sha256": "0aedc03893e139ccb6cd72369912dfbfaa1d80a6cb08a4a61ebeee1658e1af17"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_071.json",
-          "sha256": "b901822cab240a3b0505a7bf07f773bcdb3f3386f2a24d9da43b6e5dd559c518"
+          "sha256": "c6cb7258cded4c311c3b201d3e090055630c2a484b6549a55bf719c214b37396"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_072.json",
-          "sha256": "666cec1e9295f0a2708877da63e7dfb22f189826bd769675e102a88f4260b248"
+          "sha256": "3feeb4a60fbef726d1cc8805c61bbcbba883e2cbe3cc62351456449b15e54f2b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_073.json",
-          "sha256": "8e1a66699745d3dcdbce046fd0666780696a0916fc8d2749602d027936e0d244"
+          "sha256": "abdbc50c3a1010eb0172c8805bf0777de4845d746507c57ff8a3b1225f45a1a5"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_074.json",
-          "sha256": "ea5c0ce108ab6a4b9057184e00832e23b7b4a4ad4d617ecf029cd92ceec9e9a4"
+          "sha256": "99996b73a6950a6f6b26d61401ebc49062cd9c056ef45f2cca691a026416feda"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_075.json",
-          "sha256": "3f9fcf673adcf5c860b1f830fb60af1cd4b53d367503c028fbd80bc2b9fcfa9b"
+          "sha256": "0271424d367e41c615836700e714c55048c9f1dc8ba44bd2d701241e83fb08b0"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_076.json",
-          "sha256": "64658c72516091da873e76c97347f572cfc343662a0a7264a17b9d405cd0c59d"
+          "sha256": "fd83dfb334bed66f82ec45eda719a7e2be53cb9148b2d78554c450da67cab9d5"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_077.json",
-          "sha256": "2e69e5fceecb19d10b8be14980f9f6ad071ddf54121cc74765d3af2b827e0a0e"
+          "sha256": "53e00ca99f6d687011d4c4e5d10ab9eba32c730170aa8f81934bd26cffae1424"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_078.json",
-          "sha256": "c1671203d4d2db9e653131db6e6e80fa2ff025bf539e573f4ea21934c1198a0f"
+          "sha256": "d41192a57c7b52f16c81c0e8166204b78ab2dac50136005af9fdab663feef7b6"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_079.json",
-          "sha256": "9505f26615d33eb1348e274d15e842cfeccee9dd1276c98326230a56c784df50"
+          "sha256": "16f2fcb28fad124300ba8f0a888d2f58fd1d3a72c9321e31dcd30650f53c04f9"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_080.json",
-          "sha256": "65ab40c2e1ef334eb27a037e49e7c802b6cc3fc525a03e375819b18f164d70e9"
+          "sha256": "877ea66a34f0c7c317fa16c2ad7694824f709fb506fd0c8ff6127a2999545708"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_081.json",
-          "sha256": "bfc38a2009c72357cc7a18b77acc48b01a9250ab72358128287c5875652ae66c"
+          "sha256": "c3164313cf360e015315c259db6a6b388c6e37c34ed9af71ab0e089a476cd1c4"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_082.json",
-          "sha256": "1ef4992cf3d737f237879e1f76ceadc689b691b8e229c0f119c65bb6a67a6290"
+          "sha256": "4357efd71404d28e7ad792cbcbb6beb16f52a9f5693302cda169a91c347f265f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_083.json",
-          "sha256": "72d56db933da2e899d98475f5b83aa2a14a5490dc49048b332616ebc36c1b2b3"
+          "sha256": "4cb4c27c6ed85ba92f33ddfaab2b78bc3de28c964791b963e1b47e6c2528e50f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_084.json",
-          "sha256": "9924b60ef17d3f33c6b53f926c3f90b7c5d49d76647a425e3140f7ecb59392f6"
+          "sha256": "3f481e3f3ad0a29252d65bb5427e7dba13a62f893bb7a56c60cc459e8cc08ebb"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_085.json",
-          "sha256": "d15058cf02a961abd73adeae781ba7284ba716805f9dbea68860433f0943eff9"
+          "sha256": "a62f2660072dadbedcaf9267f36b8649e21825bbf9246ec998f31e185308a229"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_086.json",
-          "sha256": "006df8e4ecc13da4a9e09125f6af7eacd4b710527556d452e794b711a3c9a93a"
+          "sha256": "4d5b23a42c075aec41ac6a182f6637a526f3d9d2b926b096bb4615dd3138ba75"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_087.json",
-          "sha256": "c79d065d4a3cf6f3f1758ba62dab72b33847cc3f7ebf6594d841730ffc394db4"
+          "sha256": "e97e9291ffb2a361902deaedb77becb38ef048685cf3465c3a1c1e31a254df04"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_088.json",
-          "sha256": "ffadfbb5c0e9bf0e31489239cdb06e69157b416c8a88aed2d76ba4a88803f5c3"
+          "sha256": "30669e4f8bf558ccc7402dc6e430d552cbf4624ed46a0df6dbfcafb277ee23de"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_089.json",
-          "sha256": "7e3238db6efa5e622c258b304904cd8871292d5add4a5655244e9f66f01f319d"
+          "sha256": "3045c7d23f2b0bf858627a352fb94fbf052b8315f7100cc4994a91a6d6814589"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_090.json",
-          "sha256": "11473ba16ab50226ea7d4a53e6bf82ffb9f15d1bf06c553ad5e3800d457e08af"
+          "sha256": "853d3ec01a9fb10ea90d8c64f351250aa971e99da72fa8bab45470796443b3a8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_091.json",
-          "sha256": "1e6cb6eba421064acbe492b7bcced1261bc43c4e992e9e7eb57e156bc474ff52"
+          "sha256": "b4d245ea75bb7efa9924340b28839a3d9885d8e6cdcd85bfb17c9a2eaa10f88f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_092.json",
-          "sha256": "8742791dfaaeabebdccdb66b0c3b1c15050a45f27174d7f82490979955e12887"
+          "sha256": "897cca1e32af49743e301e187eaeda6a36fe135125c70efee3af3ede58cc95c5"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_093.json",
-          "sha256": "07b6eaa54ceafd8ce4b089b9ea7b78d4d102efba1854040c3a9937f5de9ca509"
+          "sha256": "384cac7debf98937535a81792b4f2cefb7e2b2d904c1e68c1fd4a14a8b48591d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_094.json",
-          "sha256": "9024022f3ff8977f3da3a07cd3d73a76f38fe2326feff2e32342754d90cab341"
+          "sha256": "69eb2e0a6bf4bf6bd195781ac1492571ed9ef254367dc950d9136ef393bf9796"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_095.json",
-          "sha256": "6b4fd15fedbbf5bd0d876373db6da26e0f1d8c4365b2f3a259bde6db80b392fb"
+          "sha256": "249193daa3cbd761b2fedaa2cae16097da6dd6c16d42cd7f3f5486b507cabb0b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_096.json",
-          "sha256": "bc4795b9685a6265441f5041b803aec9a597fc570bb82aca32df381b7c77ff14"
+          "sha256": "48a7e32068c714a5a0c61041856ca0f9594f7863425c81f7e380403e0be9b82a"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_097.json",
-          "sha256": "0fc0b14607710f3d3af2638ea19b616c47f3c77db4063b2226689051b4404080"
+          "sha256": "f549d8cc16641ae91e4f29daaf7358f09527e27fd59e2553dbfc6973916004aa"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_098.json",
-          "sha256": "dc6e9aa4ebe783b4e8c670f6275eaece15d57bebbef36c56c7ecaa0d89a1eedf"
+          "sha256": "f9f610baf14626141f681e638c601f18df8ee5f97bece63b62c028229c73578e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_099.json",
-          "sha256": "4a759120caa7ef51656eef0763cc42e5e829ca8db9e0bca80cbc92e297e46e3b"
+          "sha256": "1eb600c18806498b54116c00d1d0d9ff9aa93d4fedb59708c2c4eddfff3900a8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_100.json",
-          "sha256": "8a8c4cd35c0f52b8154600e9d82073307aefd5de20b5d7f749c1e3d581587046"
+          "sha256": "375616b0d29f7266839664e1127d1e54c658720e224e9d431683f9da1f923e6b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_101.json",
-          "sha256": "1bc0eadc71a7d5f907310d4703d94ad385dc668bb98a0b03516f78388edcac65"
+          "sha256": "232df7b8a5e1c342fb1a138016a0d6f20c80a8cc51bbc7ef9c4abc31e2be0cab"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_102.json",
-          "sha256": "a7f64b3cb1fca90b4c93fe7313801dfd2ed22cf478c0053407ccd0c74261657c"
+          "sha256": "f31e4ab098b16f6d974bebb3169d0c42bac680574203be376e2254eefc39fe99"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_103.json",
-          "sha256": "cae7e0eaea976da78fb5a78b2a34a68bd687cdd532b8f994678a001e511cc294"
+          "sha256": "4fcefb37f478f0b54e800729135adb49a3fab64831c1e469ee5cf78fe1118917"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_104.json",
-          "sha256": "35791130c02b6393bfd3d1182b2081a97b3ff6c621b89cf07045608ad25ed3e9"
+          "sha256": "8970bebb63ccc80a4f88ab285a5dfe0ac6aa8cd94bc6a5bf6536638104e9ca2a"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_105.json",
-          "sha256": "b0ad03e5051fd595c903b3e36550cc8f0467fff7e32adaf782b244c920f6bc9a"
+          "sha256": "d8e30c5f1e000c7cb3baad60f7b1aa5a2ea4ae3db2076c784e0dc1c1debe28e7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_106.json",
-          "sha256": "446a46d6df9b3d1eb62ed3f95621e5d44de6b77f81440cbb1ab279fcc5aeaaef"
+          "sha256": "25d1457ef2f2a77c7adee3b738d40235810826a2c89427e7e8dd5e1deadc1464"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_107.json",
-          "sha256": "b2b23803af962aada674b7e66eb5e24661da92e88661ea06e8cc09c6348881c3"
+          "sha256": "fec02b5d73a75d13dc8ce4ebd99ce231a8d566a6ca0448635bc551ad47ca9d3b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_108.json",
-          "sha256": "57c238fa46af459832714c3a988add6450354babde93c50f7ffc63b583fba91e"
+          "sha256": "42cadf1bc529ba9febeb3d40122a2cd59fd3ef9822d43fa85585d8ed8a09688e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_109.json",
-          "sha256": "b29ae8ee36e156ab39cbbc532630967da5ee263b17525966e81b88b67e407d59"
+          "sha256": "6412bfb048f91598650226d92675e8757a9a03d08b6f381815d3e6ab49511150"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_110.json",
-          "sha256": "caede4be8572b674e196d8e3c160bd0fea6d65f2cb15d39c686826a7ae1f7868"
+          "sha256": "515052b85be7e2b9f36dd6773d07e282739e757367fc244fe7fdefcadca43720"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_111.json",
-          "sha256": "37b5cd50baf45a54aca399a9b3876e5b93531bd137ceec1bdf85127d37fea5a8"
+          "sha256": "850b596570c1207e7eda519a14e72b719c81a6542ee94695de05b20ed3c78df3"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_112.json",
-          "sha256": "7c71b24236519772d6e1249f92cc1b3beda9644c19b79435d33326cf14b6f9e0"
+          "sha256": "b8d5208a8e6be71fa42444934ecaefb207c4bd2e734a6287bc705b664ffaae0e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_113.json",
-          "sha256": "613fae741cb95d574fb63798a7d07f1032dd9d0ec544e289421bb1c947441bac"
+          "sha256": "1930f72ac7ad2b2f18eed034394c9cdd8a8ba54ca31cb74d502d26907948c8c7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_114.json",
-          "sha256": "f7b71ed40ec7a37c297f53fcd13f91b09ad59537651223c9a1e629ce5bb4e3fa"
+          "sha256": "9dca83295a8d52cfcf3aafa4f88b5318d743c61be46b71f1e9c35c140457460f"
         }
       ],
-      "aggregateSha256": "e96eb84df4a0bfc18f65b994cdcda1df734401823c2bd2a081aa12d09639331b"
+      "aggregateSha256": "801aa1f7c210ffaa22698b9cd5d90fe46f706b63c2301eeb8e016669a51adf16"
     },
     {
       "source": "al_sadi_ar",
@@ -509,469 +511,472 @@
       "corpusPath": "src/features/tafsir/data/tafsir/al_sadi",
       "integrity": {
         "hashScope": "exact_committed_bytes",
-        "currentApiEqualityVerified": false,
-        "affectedFileCount": 50,
-        "replacementCharacterCount": 290
+        "currentApiEqualityVerified": true,
+        "affectedFileCount": 0,
+        "replacementCharacterCount": 0,
+        "mappingCount": 6177,
+        "missingVerseKeyCount": 59,
+        "coverageReport": "docs/noor-rag/corpus-coverage.json"
       },
       "files": [
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_001.json",
-          "sha256": "96c975c545076ee89506734ecfcee8d1a014e65e10a68d45e1fd7dcd1ef12d7a"
+          "sha256": "b55f73ee7cc0a792f4f250d8614a43130ca068f29031fc55dc42a816380db7c4"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_002.json",
-          "sha256": "ef984dfe8f4547dc810b080b0f95ef9701b25f14912fcf93f8e00bffd4617b23"
+          "sha256": "aa500061b43cf13adb728fd6c418b363bbb122c57305792488b570dff12ee341"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_003.json",
-          "sha256": "6a01b21a5ef3679b6c6c1a9771a28a81b26711bc3492bdd78eeec5adfee7be23"
+          "sha256": "5471403af2a812b2c0bed79b888889117f326e511c21b4507f06be0f7b31edc0"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_004.json",
-          "sha256": "05a37313f38809bb4500c67996a90b8e1e918baa0bcdcdd49b037c300191cf7e"
+          "sha256": "d30927f9803709d4846e9e9fd341b73d3ffc7438975752f4eac49a407e3f750d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_005.json",
-          "sha256": "a866ce1be77fc49a69ce094c81b1ad708d52b39a7f320f802c5f85815c0b58e3"
+          "sha256": "c94b74e4cf888cc77eb779691c97ffec52080f2a80ef6125653f931288d2b687"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_006.json",
-          "sha256": "db6010005c5519ee7438f285b01cb02eb25815a33204a11e0b228c2f7c9b6c55"
+          "sha256": "3e8deaa0bf59ed6f9b707a4dd9fd95e3c0b6412df1926f1f41b2406b17f896a6"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_007.json",
-          "sha256": "c9ee16475c8121f1e27fb1c060a2e05399d6ce790604c28b4a9bf73f8736ca14"
+          "sha256": "df791b635623bc93d91ed00679654079a97c46739e7f04ace66ffb98e514e763"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_008.json",
-          "sha256": "5d58ee62d55aa57056fd7a94e53c0e2ea99848d7551b05c5dc34d5ed4f50371b"
+          "sha256": "470144cadbc6ca62452c4a3afacee009f1ff8bad30c8281895bd80aca281faa3"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_009.json",
-          "sha256": "35f22cff11287a54922951ab0c2871e07e0c3bb248f7c6c8f7c8535f80b46b74"
+          "sha256": "a0b61f0e39dd9a197e0afebd0f2480135fb1063f7549668954a72dfc5d1ae23f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_010.json",
-          "sha256": "eab2cabfbe8af6518ad8dde3e2a0b8e055efaf7ce0125774690e02af729874fd"
+          "sha256": "a888ece9f74dca21d8d12245e518ca142408670cd72f5e177c4797e297afe2d9"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_011.json",
-          "sha256": "c48cf024892b988854c5e7db6b0c03b2b8e0d5a19bfdd2d6293fbffea08552c7"
+          "sha256": "788a440a1080bc32a5d8f615d2778f46aff7050ec85821a8d010c2502f2896df"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_012.json",
-          "sha256": "4e5d595db3793392ef91acaccc2962ff608608de1e14995631ef3491319dc04c"
+          "sha256": "68723a42fb5956d1ae6060d7298b800f5a901feffc0c8e9f5e41d36e08c202b7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_013.json",
-          "sha256": "9def9b9083497d6e230a856b368d3b3637c5310b241946725ec0f1ba6a41899c"
+          "sha256": "fb65bb032ee11f45ae824b501d071627d7d0b0f5743465aaf8bff23f77560ffd"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_014.json",
-          "sha256": "8a4e3e3431d9d0a0026238f26fef59afbbda56e51a7b30b6b373fc4462761306"
+          "sha256": "46b7bd84a925a801bd8c765daaa0789da7f95aa255f67e457834b66f4871adfb"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_015.json",
-          "sha256": "c366407a8ae0c0e0f1f73206c993365b0ee549fe0baa2899342ba850b467d7c6"
+          "sha256": "e5829ac07270e28c27cbea5a343923c65223eaf119cf12b63e41b227fc9bc7b3"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_016.json",
-          "sha256": "f52ea17456b4c5d0bb2b6958359e3f9b77bb982680ba1d35c329d6478c0e0187"
+          "sha256": "8bc267aade89b8d070590f8adb7a6c924e83516d9d2462b86829b451767587f4"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_017.json",
-          "sha256": "1c1b75f91aafa9c9082249e36584fb516aa023dcafb71253145cbc7dd23888db"
+          "sha256": "f5cb4be4600e0a39bc1c0172aa28c95b4d6fcad3d53bba0914a4ddff9f4a3c1b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_018.json",
-          "sha256": "84d1a124c73d7382ad5df110d1e98524edb7510c9b56a51e8772a6261b5bb116"
+          "sha256": "90e8f483f6438febb2c1c9fd6704b03a2fc9cb745787c3c02e8925ff03e56c8f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_019.json",
-          "sha256": "2e86e877bdee4a4d25c3a929151d85af555fe737bf4432b38c8f7a1f48fa78d2"
+          "sha256": "3a28e13d0e31a2b86dd22bebf824ba036b1b12c03c62bdc9c957c666ae45c59e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_020.json",
-          "sha256": "3774f296ccbcd02352a228742a35a015411e9890878a61e6b91031bd35264faa"
+          "sha256": "1f34eb544d392e1c687af690eb1eeb1537083b1b98b05864b3cbf610fcd17731"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_021.json",
-          "sha256": "283c09f032d70484750009c5a9012d84b250144b4aebc2149e233f5612094d56"
+          "sha256": "f00b3a799b6571164d669e4ce62af549f0bbba037092d206890920c42d286778"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_022.json",
-          "sha256": "7409e12b1627fa606aeaa8b22f374e5122bd11d1e63856e3c54a7ebfe12571a8"
+          "sha256": "612c78a262565f48861daebde9175f20e34585865adb3dfe7d068d9de8438208"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_023.json",
-          "sha256": "023570d2995aa9cac70bfaf0b34bb4feef5004ed93d2e09e8bb5ee18aa848633"
+          "sha256": "286a1af20ac8ea7e0be6c847e1f5a8ad839c3fcf15d44f2986a2707897a22e8d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_024.json",
-          "sha256": "b3b5e9076cc9beffc2600ec7a5a3b657f87e278ea6a2c7a11940be3ca725a437"
+          "sha256": "7942550e8be4fbd8d65e672ade7cdaa4aa2c35da3e84cc8b4ff58d2ed52cda63"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_025.json",
-          "sha256": "bec2775748369472adb4a33ee580423de6011a078504c68db0a35e722f772707"
+          "sha256": "6bf8656ebe2c2ebebf22dd4279b345a7fdf27effdd79c702a22c3ee3a43315ca"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_026.json",
-          "sha256": "4b5420bd7d978dbb7895b2246478f50a1faa5b6572e9acd436c7afe7f3eb0690"
+          "sha256": "b929c436f4e1ff165b0904abd45b35e32eb7b9dc171daa728ccf74cc447bb718"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_027.json",
-          "sha256": "83ce7ae648bc081545e0aa81487d692f09bf4d4cfe5ce4bb7ed1342395b17843"
+          "sha256": "89084c626c4fe3955c84cd2857dc6cd10c46c6e1bfd3d994eb17a34ed8366396"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_028.json",
-          "sha256": "fb1f48de211916e2fd8638941d13cad2d673d9c129970f7295d999dccda91298"
+          "sha256": "ee6fe6fca63eacbb9edd0f9789f0b22dcc20aa8d171deebaef9ac47d5fa0c05f"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_029.json",
-          "sha256": "2225b2ce206e6362f581e94ce952dfc7438a771fa2a74aacb8b8ccf011837b60"
+          "sha256": "6ff713aa1956c93dad44fa047e2dbaca4175fc2b25048fd64e06b7c1b6507d71"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_030.json",
-          "sha256": "3429db04afc8312ee443aae6503745912cc68660d93522d4ef7a01ddae686a28"
+          "sha256": "819f8cac9d6a5d2be27988cb2508111cbbaed1cdc36e3581d28cf8db23c67215"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_031.json",
-          "sha256": "3798c9076b2951e4dccd6daa65615be6df24cacaa2a21fff1debd671f81f5ebd"
+          "sha256": "e82edbae2ee8815d00412a70f7d8714b42673dad6d1d5ef3e5695064c54ba214"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_032.json",
-          "sha256": "781a710141f3e07c3f61c21a33bdcfbfebadc4ae144ced15767668588502518e"
+          "sha256": "2781bbcd39adbe053a63d3b9e69a5921a6cc15a2b51b468f2b3d426c6c121764"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_033.json",
-          "sha256": "17a12b4b9aae342b925bc5d9bc5dde0c55994f5da53254c19d1f95bc7670f132"
+          "sha256": "60b8e234fa1a2bc81f38718fc4d79fba2dfd57205f64386b778fc412dc9ba149"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_034.json",
-          "sha256": "20e95d79a1d9f7a3990e28ca95b6e37405436de90a0cb513a5507e1c0552f491"
+          "sha256": "17c73bf8f21639861aa026f994aea643491c67b3f7073241aefcea003fcdf400"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_035.json",
-          "sha256": "dfca1cdcaad7ffebe745f7f8eb800300668337be28351883c7c22edec90def05"
+          "sha256": "2a25da6a103eecaf018f238fe1d86aa8e8e95faa4e385dedc9ba2ae9c37db07b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_036.json",
-          "sha256": "3d94f90c5fec2a6ed23c864840640a637c4915ee887049f0f3fb838c79ccece8"
+          "sha256": "c5737dbe85a194e9175f14ee5ffcbd1cb69864d1aabfa1f212f4203382eda0df"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_037.json",
-          "sha256": "b87899a35974d26c280db31c3b82509750eeb734fd12b8f4ffc3d71d5d2b1d35"
+          "sha256": "643a03dc673e2878fc4f4f6b9c15f2e12e01b40b75a810d8311ca1d2f46bb17e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_038.json",
-          "sha256": "b6333057c6791094dd4dab36908261d8d2c9ac2f3ab71ecb93f05b0eb9fc5d4c"
+          "sha256": "06c3e1a4b3e009e688c2d1be57fef7e29d187b1212c7925804ef48558c6414bb"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_039.json",
-          "sha256": "3f3d62ccc76652127c7edb092af74be40bacf09f0ac02e213386389a347ee4bc"
+          "sha256": "ae0d0308958f0bcd8ea736634f77c089eea9072891fbee211e06a21ef9f81154"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_040.json",
-          "sha256": "62b7adcde6aada586c3ed1fba9a566cb41b2b6e03894747d0c4b04c6eae03e04"
+          "sha256": "ab36e5ed8bfff626b3d1e9e60b5a5ab56fe019e2ae0f45b39e36841218753260"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_041.json",
-          "sha256": "76f5c32d428d71dfbc9f8beb008d551457599ccc5c7e9d622a0b8a822805a36f"
+          "sha256": "577fd65c4036b69cd9265e25670d41b72002a30ac32ba6e83324f69fd1e0227b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_042.json",
-          "sha256": "db705066515377e73737427c3a416cba1c4f7438cdca75d96a8b05c2d86aa69a"
+          "sha256": "2ba29207258d84a6a8918cbe7a8b48caa509da30e7b57b123ba5dcaae32bee5c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_043.json",
-          "sha256": "b7adb86b7dd73b031e2e8caf732e7e64d2113b5b061bcd4264d870e9ea8c4f6a"
+          "sha256": "bb64f0a23828ac058c87e1ce3cc5efee01ccbecc20ab05e7249773cc384f245a"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_044.json",
-          "sha256": "08d19d0a5f888d3145bfbf085e96bae82fa1fd3dd969d77c15d441c0cb7b4bc8"
+          "sha256": "a1938328c8bf0261c6b30ca3c9415d1531253bd40d3fccc0007da7dabe8e00bc"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_045.json",
-          "sha256": "f7e8333e03bc2b3b4c8fee67d94ba7edad79639f3cef89c3f0543a5c248d2961"
+          "sha256": "d781dc7a9b4ff57539eb0d87d328448b89f3c040b1184cb30a95b3018d1a4422"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_046.json",
-          "sha256": "4b3f09a516f879e28af1ac357ba2391da074f501472307bb7201d63a590f924a"
+          "sha256": "2cb0ec6e09c6648c455763da3359da1f6279c1147eff99e0e7f6e7e2ffdfa6ed"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_047.json",
-          "sha256": "c563388b9ec9a1640b8007c7751f86125d987f4e85409344dcf2f74d1b9b8b9d"
+          "sha256": "5f472d5e8d78c7805aebb2bc296026a8341fb39fb2b01fe272666b71a4f4e821"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_048.json",
-          "sha256": "598890e8a47d28be2a2306a62e660c47fefec54ed21414897231d971f4e88fbd"
+          "sha256": "12d314947085720ca460044735fc62c20c758f74645823ac90077c616dfef365"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_049.json",
-          "sha256": "71e7eaf9f85bf24d47d6f38b59b56c3376092936fa7e2db04d65a6362efc4484"
+          "sha256": "429667f92000b1f13eafcd8c2f56bf92592832d6825725f2546c303a30577fd3"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_050.json",
-          "sha256": "b9bf98e0b680f7e630966a51a082f2e79e460f4b1b6de9da37ec1905aace84c5"
+          "sha256": "e07f961d2de922adfa32dd46278706020180bec9ea8f07a6e601f300a7659487"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_051.json",
-          "sha256": "b3f7b06f909b39755e9c18ae62fa5b200eadab4963e61d780495befe7a6cf6f3"
+          "sha256": "c288e09aad1e5ce573cb56d2f6644e7a431d9ed66aaad1ca89378ea478b00f03"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_052.json",
-          "sha256": "e0f0c82f14e6d923901991e3c38165a79a678722b384f4a2b4395e53d06e0461"
+          "sha256": "3638d75f99901afca4a4fa1dfc59ccb6dcc88696db109ffd501a46bda24f3a74"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_053.json",
-          "sha256": "308813ac854950728ea9a192b8290ea31d7e19bd7ff17c38e9db4392d144638c"
+          "sha256": "be10a6c92c7eb4b7ecb84be648e9851a08ffc958ad8d7883de2e23d0c10e2479"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_054.json",
-          "sha256": "a32e8dcedf9c2f60b09584d0792883bc4f7628c1fa889e808e73fbedb560ea8d"
+          "sha256": "59dd72e16e54bc805affa6ae030cfa9f84baafb129ead220e102f4ee75880583"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_055.json",
-          "sha256": "f0029b9bc59d7b2e8ec6bda0bc659bb4e552c57d9479a7037a2d09d3d3b19e48"
+          "sha256": "9bc8ae2613902e59a62452b4ab83c894c7a87dce042e0bd0b5fb78d2ea24a348"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_056.json",
-          "sha256": "d1396daa1ed278858575e9e6d21423ba675c51fd38ce8cc6c17580bbd28e37be"
+          "sha256": "c32b85ae2e16366e201b5c281b7e2a9cd1b6ace08753a0c1f94abb6994746883"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_057.json",
-          "sha256": "6a633ffa4627ff1f7e656af6d1cd26c77660823a7154d575a6530aa429b9ba3b"
+          "sha256": "319142c9b84514456d6d5e5a2a81e4924f6d9aec96d96e57c940ed82645914f0"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_058.json",
-          "sha256": "07935382564a923635f6b173e7b171b4d734a1fa9acd2afd4bf4e526561ac84b"
+          "sha256": "9127107ab73eba844156e33cad73a9f55ddb488fb109a346501864613c0bf51c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_059.json",
-          "sha256": "5281488fd99f7a8477d82be08f8625752b9ad010213aaf26a2936f51b0b72d91"
+          "sha256": "12cec7d7c831e2f6e6ed30f61afb0b35508b27b287366191a3f176835ff13879"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_060.json",
-          "sha256": "ed661512481b9bf67b9e40d1d6e13ad0aa97b19eb388540887e96bd8e1de4393"
+          "sha256": "8f6eeac1e39f75e8b44d8b383b0b52be241760e54f598da178ee2e1bbc24ddd7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_061.json",
-          "sha256": "4757d2d5293ef72c0704f0a944cfeba795b6e18b21e103c0f1847d8cec50c39a"
+          "sha256": "2373ff3c56fd3e7db86da2be8b734bed0bf286dfbf74c3638fb758c2c5921b53"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_062.json",
-          "sha256": "b8c007304facfd7a9de12db2d07504bc9aa6294949fe40a743881dda561e72f9"
+          "sha256": "4f0fb3890bfc220dd03e98754c1f5b35a407bf45194aadb518a032ecbc1fa195"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_063.json",
-          "sha256": "47a2b31a3c380d9e9414979f0fb4fad833d3a9a66302cb2bfc341954771f712b"
+          "sha256": "1e375740213f44bc0cde4ceac5b80a02f7c9fc3da7e0ae68b8c98d6390f7128c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_064.json",
-          "sha256": "a744a62b3c57fa6ae8c509303cc94e2315d444ae1146b27cb35a1234fb82e4c8"
+          "sha256": "48bf496bfc2c97c98ec128745df30a7a9cec922b32ae798146a3022f9009abfe"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_065.json",
-          "sha256": "0d2f8688c5145b6016cb7232f220ffc7e5f273cb7f2859ca5afbf132dbc57683"
+          "sha256": "3b2b7747adecfcea543440a162790df29d098fcd9371618e6db388cefbfa92e8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_066.json",
-          "sha256": "199d52b043a37818b68b162d9b461152bc038acc0a770801ef52c84d4fc82e6b"
+          "sha256": "863517cf4ed844485ee8620b51cde8011365c1b5b3a79beab55695f51753a10e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_067.json",
-          "sha256": "577f2672d13082975dd49032dcd48ada5c0ff445dfb51036a1659baea78bd926"
+          "sha256": "4df71751696ad41a454a170d8afd48c9310fe37e3def8d826887a7ff18c0c1e1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_068.json",
-          "sha256": "5150b08f3ea094ff2d43d90512ab1682c7727eb66b32c418659f112855d23fde"
+          "sha256": "ec4901a82e6cc77fc2f72d2e769cd68fed7820e8b39bb53419da0782fd554528"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_069.json",
-          "sha256": "d1809141a7251385378a61808a58e80ec7459e8ff3d5ada512769fcb581280ce"
+          "sha256": "a78551076fdf15dedbef784481b44fc2113c6f061be83317df365b03477a9a83"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_070.json",
-          "sha256": "76d0fa21b95b0d4d256c138fedf3bf67b169e67e7209dc4d46b542089310d33d"
+          "sha256": "04ee83f059da4c35f01259b9e73c6395f0bb8ba18e08065c907e947b6884a14d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_071.json",
-          "sha256": "200f61e807a030e7cf242719f842cd0b28fb108109f3b8311c826d28a9011181"
+          "sha256": "a7411c5661c9e7844afb33d4d0d331c60c66d53438e1fc14c8f245b1affd7cb7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_072.json",
-          "sha256": "6a63d58fd52165805cc5292ffaa80022908dba2538859baec0958526b0202288"
+          "sha256": "b02f7e0037459b07bd9bcc69c77fa48b6008e0e015a430caecd1744fe14b96bc"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_073.json",
-          "sha256": "92e3b22d13258f92c6e68eb83dd689b154c38acec9e3001d04cb4a43f0990262"
+          "sha256": "ef56a6e6cba6be251a6b293bcc267bd73ed93dcec90306c2881afdf2b3838467"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_074.json",
-          "sha256": "18c02d4cfe0de7326439ef5fd89f70cf2f2c8b4f11d4f69a432ff2d8f93eea76"
+          "sha256": "53ff36b7ab2629093bfb42e9f5fa2a80f30a9286b027d5498d4542be4c51895b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_075.json",
-          "sha256": "d3183a324ffd533117e6f260c72ceb5a1df011f93baa21ca667c13b1098c2dd1"
+          "sha256": "de3984c0987e5165612ad45fad7e0da2c3ab2c6a2ddd0e1efd3b31b854ce6b17"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_076.json",
-          "sha256": "b549f9d3f37ceb19972b3ba502b7ad4b82a0a47d054c8abb4f9c0f1598f6a5a8"
+          "sha256": "d566469f647a633ca3d48195f89ef608b86138b3be2d68a72cc243694401fa24"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_077.json",
-          "sha256": "6e73ea6998be209ee12458ca0de88e6618678c5b9b925d8e1f4dcb6590df936e"
+          "sha256": "1b30dc997ee85a928c31c61082f855eafe6c74eaf974284dad7776751eb7526e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_078.json",
-          "sha256": "2992b7f8d3975fc4f729ad9a977bd302f8737ab59f95d800530c99164d3f38f1"
+          "sha256": "b55a20257309df3710f4158e2b63d59dc95727ff1fb1c4a548ebf9294351c5c1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_079.json",
-          "sha256": "dfd4a51301a9e13fa18537f59a50c783b2d140783f321855d2d10d78dd8bc6a0"
+          "sha256": "39df9af9feb66fc8ce6995b59291b47c2a990edd699b5284cb13a10c6bcd854c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_080.json",
-          "sha256": "bbe13849fbad9dd92b43dc9bfe888d95e006d4e15423c85ea7d06a3033db13c4"
+          "sha256": "8d9f7dcbb8c8f8f37cf1ab3312b34bfbb3aa41979438e0a009155619bb236aa9"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_081.json",
-          "sha256": "b75387acb79e9d253338ebd094e5913a193b27edc3fb466d55a9e23e02f52737"
+          "sha256": "8db3a197b7fbf29d1bfad6d17bc0c244fb43472fff22923a15e99b4449a14b9e"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_082.json",
-          "sha256": "658314f88740a4d06ed692d8ec52c3a8d2feeae172f425abc30d3cfa08add509"
+          "sha256": "fe865f21cc5415331f1c29493fa90b5635324db18e9887a89766bee05221a681"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_083.json",
-          "sha256": "0d33a3b0beb24f70ddc372b1d60772c779a0923876dd99ff521f4130141e99c2"
+          "sha256": "b2247fb3d8dab04c6d0fdb5466c1fab8ae8841c573cd3739afae2b5ded7afa97"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_084.json",
-          "sha256": "17230a7c49161ca5c003d03f0bf0c9e52732e3a6dc122c264a3c7269c5777183"
+          "sha256": "44206687f73dcad584736688ec58f67452eed9e6e7a407c84eec2995710be0e7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_085.json",
-          "sha256": "eda1b4e410130ad53f82d36bd9aeaf65c008e2a503208352eb51bfab179d3e34"
+          "sha256": "15952f873b893a005d82c868898912d9869fde2b08075b2f9d0af37f4bf268b4"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_086.json",
-          "sha256": "cf6b288fe90f784e8923fc6d0a6796e25c7bd3a692389a83f48efda132636356"
+          "sha256": "28a9da686871567929cb33434c08b44828511cbc2a7579a953ef0ccf9546b468"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_087.json",
-          "sha256": "891f164c5f1d8fb9fb3d324455e6f965ffab142eeb91bcc19d5531fcd0c672da"
+          "sha256": "8686b720b42a7bf3b72099aa86446e7ad03a277e56d03f4268d1e74327a11f3c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_088.json",
-          "sha256": "63a7963832c90e20a664b921b36ecafe387cbeed9132f7520052c83630b4b52e"
+          "sha256": "741b096b90ea774c21d96f687abf03ddccd7e36e3b94caa920dd25b8d3d40cb1"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_089.json",
-          "sha256": "48e888fbe514b8ec1906033557e8b9892df0110ff13abc224d9930aa771779ad"
+          "sha256": "f871e31ef71216580f171b546be1ec3a5ed8468a6b3ebdd4f00eea43392b7a5d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_090.json",
-          "sha256": "ec38c9599a34b65e9d84b034f112924b96ceddfe1c7bc4b3a45ddbc8140d9507"
+          "sha256": "009595ac5a528728af07f3c2bd973bfb854b72e53d20fe80ef740cb4bcc2a531"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_091.json",
-          "sha256": "ed7292660a2e8802dc99475db911c6b517a066ed1c06b5d90075da24fa67b366"
+          "sha256": "5362dbc66b4a13f0a05618b90f3e66eedd82df104bbf6dd6694f4d6ba63bd820"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_092.json",
-          "sha256": "fa64c4a94011cc6e9a715dd3ddaa0c93c6540af5717c69d3cf7045de1bf6e9e5"
+          "sha256": "611f5fc20670f869e2fcb3ccba6d9ed220a2f36263cb120a04ed029ff3e11605"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_093.json",
-          "sha256": "2293b1f3c8e24df68d129abea112d28789690dd08cc50e298ad46cd93846c426"
+          "sha256": "5fbb2c4fb73074b95294f94511af9074bd7f1b0e4fdd5fbc0a452afa71db316c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_094.json",
-          "sha256": "a55c1d04fb501f4c48b3a6b0fc89dfe6312da2386b24a12497f9702bb65203ee"
+          "sha256": "fab47e590c34a15785264270b108dff627c3329c6d05163d54da90f554e728c4"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_095.json",
-          "sha256": "f406a2a2061940dc94146a5b550d3a10f932aa7816d2466139ca2ef2c3a77d33"
+          "sha256": "b42eb15038a5c4f7509f3be3766599cb1440765f03ad38e1c37a4ee9780501e2"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_096.json",
-          "sha256": "15679c8d22e6a40d7dbcfe598b53ca31321cfaeaec50264afea8cc7869e68b71"
+          "sha256": "b6a3be1ad6f5f5313e6516c065243bdae7e39a8131f71940b1c87bd57ad9c2fb"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_097.json",
-          "sha256": "7f84f2f492118dcf80b2bc89e68497af4cfa15226681d2ba9f420f66b5d77b45"
+          "sha256": "f8dcff137930290187b7331da4a4b150ce8bf7d439484c77e687db10e9d6e323"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_098.json",
-          "sha256": "e881db5582ab3ef1be00013509eb3d482ce554689a706b9233c681a440ebbff4"
+          "sha256": "59a9d3605c4ab8cfca860c86057409dd6637c19d383e42929be916b4d47f8249"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_099.json",
-          "sha256": "9dd5c024c80606c142aeafcd836b6474813b7e41034ba56b51423f92f27ead27"
+          "sha256": "defe809593181c1d6ae33acd67db8877ad07ad2e7fde23796a65e19971bdbaa6"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_100.json",
-          "sha256": "dfe2749caadf4bc5c09ad7ee00350c44f6ec12ea98acade11249f1c4014ebda6"
+          "sha256": "eb6dab7f4713708030c1e7ca4ff1771c46d88e62e0b914318826b6c224376d9c"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_101.json",
-          "sha256": "219cb4ec9e500662dc9e87a07e67bbc986d6408c85aa06bfaad2f4720d9ffef5"
+          "sha256": "a508c40ec29138f9e4e50ef1da756164f2b415013cdd267ba27fcd318518a703"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_102.json",
-          "sha256": "568a270bf910d9284c07846eb55c6874a8d70077a1bf4148b99200b660f06994"
+          "sha256": "cf273c82de504d515927a9b9a1f63dd4eade47f0e37bd9e078656b8fd0087e0b"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_103.json",
-          "sha256": "e040a0793bc9521407f8a434cbb5a08b011bc0a6be6dfd436b4fc786c10eee55"
+          "sha256": "53da3a255ea4eb8720bf1271dc62b4c108c5418c5c5486f0d0e340e96dea1848"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_104.json",
-          "sha256": "f834d9a018a1595081079c67e0084ba755bf46712c4fc617de400b92a202190f"
+          "sha256": "76fe88a1971c120856b6c2f93de5c430864957ec43a890bd911d08bc0f7fe559"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_105.json",
-          "sha256": "9a10fd88abdd659e2e81c1450c8cd6bef5f7af95eb0854afa7a02de842df646a"
+          "sha256": "b391ecf31cfe988741b90f1f4505f3147c9efe8c916481c3395821e37e6f3d7d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_106.json",
-          "sha256": "2d610109a00fa4fb6701977e5be24916f8687ec6d6f21ebdda8c7b1d229376d6"
+          "sha256": "20f8ddcb66926f31a6c3c390009beebd9e0390f16fc75577bfa6ff536712e4db"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_107.json",
-          "sha256": "5fa8befd5744c006455841a4d9c4b3081b3880f2fdddbcb5b15ef83b390f7b2a"
+          "sha256": "2b3bcbc9acc9c38051a735516db60b3dcf18a15499ab332de7c163af7e4692af"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_108.json",
-          "sha256": "c5ff5cdf85c68f72ebc3439373ad3b117c7ee7a7a43b84cf656df2e5ce47f480"
+          "sha256": "7dee3dfe46186c48a5280be18b6d7259aaade5056b47808fb4fc412743b29a8d"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_109.json",
-          "sha256": "cb21edddae798478037b7b57ee35876d9cdc2df61521dc8e9b92bf96cf0de53f"
+          "sha256": "5fc8128949c8d45646cf0a65ee173c34818705a4084e1b5e8ee92f74b744fb12"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_110.json",
-          "sha256": "b903dd9e3a14d44cbda9a7bc03e2bc97d11af41c6e2b87206c2d6a525386e94b"
+          "sha256": "baa9c523509bee6016f5b643446c85124205a172d3ca16ad29adf5839f8ca914"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_111.json",
-          "sha256": "f641637f04177a6b0d19ab0893564a5f7ac243b08747c4d72026373a040e8e7e"
+          "sha256": "e5a9b54e71b525f2fccca99ab456cc88b8362cf2ae010f858c6a32096ece99a8"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_112.json",
-          "sha256": "4fd1f0f22e632acf79e45805e11555ec8295e2ffda5b781821a6a67681451bf7"
+          "sha256": "b5e18bc89e89887219ebb790aebe0167d20b921211d254eb9aec1f5ac77ac5c7"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_113.json",
-          "sha256": "321de704d4e38caf4541b30d93c98d556ee3dc9d334e39651352499c56bcc088"
+          "sha256": "81caf6416b8129bd5765a1238d8108e3e9f7761fef01f1fc2a10d97536af65ff"
         },
         {
           "path": "src/features/tafsir/data/tafsir/al_sadi/surah_114.json",
-          "sha256": "5d1be888c79c8f1a40ea27d6a2ee30bb861791ea72163f0dc2d9976bcdfdd917"
+          "sha256": "164cca47038ed4a9e36b5e782cece5eb3c0f5a9592226151c930a173f69baf57"
         }
       ],
-      "aggregateSha256": "8fe944468f08d1b20bbd562e83486e27c62c7435c123ad8709630a0ae3714c85"
+      "aggregateSha256": "ae898052ec37ecfe48cb62a8b637887b388d5ff04c7f934613a7726d8c75ea70"
     }
   ]
 }

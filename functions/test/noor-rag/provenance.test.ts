@@ -149,7 +149,7 @@ describe('corpus provenance manifest', () => {
 
             assert.equal(source.aggregateSha256, computeAggregateSha256(source.files));
             assert.equal(source.integrity.hashScope, 'exact_committed_bytes');
-            assert.equal(source.integrity.currentApiEqualityVerified, false);
+            assert.equal(source.integrity.currentApiEqualityVerified, true);
             assert.equal(source.integrity.affectedFileCount, affectedFileCount);
             assert.equal(source.integrity.replacementCharacterCount, replacementCharacterCount);
         }
@@ -346,8 +346,8 @@ describe('corpus provenance manifest', () => {
         assert.ok(currentContentSource);
         const integrity = currentContentSource.integrity;
         assert.ok(typeof integrity === 'object' && integrity !== null && !Array.isArray(integrity));
-        (integrity as Record<string, unknown>).currentApiEqualityVerified = true;
-        expectInvalid(currentContentClaim, /current API equality.*not verified/i);
+        (integrity as Record<string, unknown>).currentApiEqualityVerified = false;
+        expectInvalid(currentContentClaim, /current API equality.*verified/i);
     });
 
     it('returns structured errors for non-string activation blockers without coercing them', () => {
