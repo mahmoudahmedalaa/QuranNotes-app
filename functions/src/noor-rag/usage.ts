@@ -14,6 +14,7 @@ export const RATE_LIMIT_ATTEMPTS = 5;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
 export const LEASE_DURATION_MS = 120_000;
 export const COMPLETED_REPLAY_MS = 600_000;
+export const MAX_CLOCK_SKEW_MS = 5_000;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_IDENTIFIER_PATTERN = /^[^/\u0000-\u001f\u007f]{1,128}$/;
@@ -173,7 +174,7 @@ function parseDaily(value: unknown, expectedDate: string, resetAt: Date, nowMs: 
     const expiresAt = asDate(value.expiresAt);
     if (expiresAt.getTime() !== resetAt.getTime()) return invalidState();
     const reservations = value.reservations.map(parseReservation);
-    if (reservations.some((reservation) => reservation.expiresAtMs > nowMs + LEASE_DURATION_MS)) {
+    if (reservations.some((reservation) => reservation.expiresAtMs > nowMs + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS)) {
         return invalidState();
     }
     return {
@@ -195,7 +196,7 @@ function parseRate(value: unknown, defaultExpiry: Date, nowMs: number): RateStat
     for (let index = 1; index < attemptsMs.length; index += 1) {
         if ((attemptsMs[index - 1] ?? 0) > (attemptsMs[index] ?? 0)) return invalidState();
     }
-    if (attemptsMs.some((attempt) => attempt > nowMs)) return invalidState();
+    if (attemptsMs.some((attempt) => attempt > nowMs + MAX_CLOCK_SKEW_MS)) return invalidState();
     const expiresAt = asDate(value.expiresAt);
     const newestAttempt = attemptsMs[attemptsMs.length - 1];
     if (newestAttempt !== undefined && expiresAt.getTime() !== newestAttempt + RATE_LIMIT_WINDOW_MS) {
@@ -236,7 +237,7 @@ function parseIdempotency(value: unknown, nowMs: number): IdempotencyState | nul
             || !/^\d{4}-\d{2}-\d{2}$/.test(value.usageDateUtc)
             || typeof value.leaseExpiresAtMs !== 'number'
             || !Number.isSafeInteger(value.leaseExpiresAtMs)) return invalidState();
-        if (value.leaseExpiresAtMs > nowMs + LEASE_DURATION_MS) return invalidState();
+        if (value.leaseExpiresAtMs > nowMs + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS) return invalidState();
         try { parseIdentifier(value.ownerId); } catch { return invalidState(); }
         if (asDate(value.expiresAt).getTime() !== value.leaseExpiresAtMs) return invalidState();
         return {
@@ -249,7 +250,7 @@ function parseIdempotency(value: unknown, nowMs: number): IdempotencyState | nul
             || typeof value.finalizedBy !== 'string'
             || typeof value.responseExpiresAtMs !== 'number'
             || !Number.isSafeInteger(value.responseExpiresAtMs)) return invalidState();
-        if (value.responseExpiresAtMs > nowMs + COMPLETED_REPLAY_MS) return invalidState();
+        if (value.responseExpiresAtMs > nowMs + COMPLETED_REPLAY_MS + MAX_CLOCK_SKEW_MS) return invalidState();
         try { parseIdentifier(value.finalizedBy); } catch { return invalidState(); }
         if (asDate(value.expiresAt).getTime() !== value.responseExpiresAtMs) return invalidState();
         const response = parseBoundedAnswer(value.response);
@@ -276,13 +277,11 @@ export async function claimRequest(input: ClaimInput): Promise<ClaimResult> {
     if (!Object.prototype.hasOwnProperty.call(DAILY_ANSWER_LIMITS, input.entitlementClass)) {
         throw new Error('Invalid Noor entitlement class');
     }
-    const now = nowFrom(input.clock);
-    const nowMs = now.getTime();
-    const dateUtc = utcDate(nowMs);
-    const resetAt = new Date(nextUtcResetIso(nowMs));
-    const documentPaths = paths(uid, requestId, dateUtc);
-
     return input.repository.runTransaction(async (transaction): Promise<ClaimResult> => {
+        const nowMs = nowFrom(input.clock).getTime();
+        const dateUtc = utcDate(nowMs);
+        const resetAt = new Date(nextUtcResetIso(nowMs));
+        const documentPaths = paths(uid, requestId, dateUtc);
         const [dailyValue, rateValue, idempotencyValue] = await Promise.all([
             transaction.get(documentPaths.daily),
             transaction.get(documentPaths.rate),
@@ -355,11 +354,10 @@ async function finalize(input: FinalizeInput, expectedAnswered: boolean): Promis
     const invocationId = parseIdentifier(input.invocationId);
     const response = assertFinalizeStatus(input.response, expectedAnswered);
     if (response.requestId !== requestId) throw new Error('Invalid Noor final response');
-    const now = nowFrom(input.clock);
-    const nowMs = now.getTime();
     const idempotencyPath = `noorIdempotency/${uid}_${requestId}`;
 
     return input.repository.runTransaction(async (transaction): Promise<FinalizeResult> => {
+        const nowMs = nowFrom(input.clock).getTime();
         const idempotency = parseIdempotency(await transaction.get(idempotencyPath), nowMs);
         if (idempotency?.status === 'completed') {
             if (idempotency.finalizedBy === invocationId) return { kind: 'already_finalized' };

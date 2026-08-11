@@ -6,6 +6,7 @@ import {
     DAILY_ANSWER_LIMITS,
     COMPLETED_REPLAY_MS,
     LEASE_DURATION_MS,
+    MAX_CLOCK_SKEW_MS,
     RATE_LIMIT_WINDOW_MS,
     claimRequest,
     finalizeAnswered,
@@ -42,6 +43,27 @@ class MemoryRepository implements UsageRepository {
     }
 }
 
+class RetryingMemoryRepository implements UsageRepository {
+    readonly documents = new Map<string, unknown>();
+
+    constructor(private readonly beforeRetry: (documents: Map<string, unknown>) => void) {}
+
+    async runTransaction<T>(worker: (transaction: UsageTransaction) => Promise<T>): Promise<T> {
+        const runAttempt = async (commit: boolean): Promise<T> => {
+            const staged = new Map<string, unknown>();
+            const result = await worker({
+                get: async (path) => this.documents.get(path) ?? null,
+                set: (path, value) => { staged.set(path, structuredClone(value)); },
+            });
+            if (commit) for (const [path, value] of staged) this.documents.set(path, value);
+            return result;
+        };
+        await runAttempt(false);
+        this.beforeRetry(this.documents);
+        return runAttempt(true);
+    }
+}
+
 function claim(
     repository: MemoryRepository,
     overrides: Partial<Parameters<typeof claimRequest>[0]> = {},
@@ -65,6 +87,77 @@ function answer(status: NoorStatus, requestId = REQUEST_ID): NoorAnswer {
 }
 
 describe('Noor transactional usage and idempotency', () => {
+    it('resamples the clock for transaction retries and recomputes the UTC daily path', async () => {
+        const pendingRepository = new RetryingMemoryRepository((documents) => {
+            documents.set(`noorIdempotency/${UID}_${REQUEST_ID}`, {
+                status: 'pending', ownerId: 'owner-a', usageDateUtc: '2026-08-11',
+                leaseExpiresAtMs: NOW_MS + 1 + LEASE_DURATION_MS,
+                expiresAt: new Date(NOW_MS + 1 + LEASE_DURATION_MS),
+            });
+        });
+        let pendingClockCalls = 0;
+        const pending = await claimRequest({
+            repository: pendingRepository, uid: UID, requestId: REQUEST_ID,
+            invocationId: 'owner-b', entitlementClass: 'paid',
+            clock: () => new Date(NOW_MS + pendingClockCalls++),
+        });
+        assert.equal(pending.kind, 'in_progress');
+        assert.equal(pendingClockCalls, 2);
+
+        const replayResponse = answer('answered');
+        const replayRepository = new RetryingMemoryRepository((documents) => {
+            documents.set(`noorIdempotency/${UID}_${REQUEST_ID}`, {
+                status: 'completed', finalizedBy: 'owner-a', response: replayResponse,
+                responseExpiresAtMs: NOW_MS + 1 + COMPLETED_REPLAY_MS,
+                expiresAt: new Date(NOW_MS + 1 + COMPLETED_REPLAY_MS),
+            });
+        });
+        let replayClockCalls = 0;
+        assert.deepEqual(await claimRequest({
+            repository: replayRepository, uid: UID, requestId: REQUEST_ID,
+            invocationId: 'owner-b', entitlementClass: 'paid',
+            clock: () => new Date(NOW_MS + replayClockCalls++),
+        }), { kind: 'replay', response: replayResponse });
+        assert.equal(replayClockCalls, 2);
+
+        const finalizeRepository = new RetryingMemoryRepository((documents) => {
+            documents.set(`noorIdempotency/${UID}_${REQUEST_ID}`, {
+                status: 'completed', finalizedBy: 'owner-b', response: replayResponse,
+                responseExpiresAtMs: NOW_MS + 1 + COMPLETED_REPLAY_MS,
+                expiresAt: new Date(NOW_MS + 1 + COMPLETED_REPLAY_MS),
+            });
+        });
+        finalizeRepository.documents.set(`noorIdempotency/${UID}_${REQUEST_ID}`, {
+            status: 'pending', ownerId: 'owner-b', usageDateUtc: '2026-08-11',
+            leaseExpiresAtMs: NOW_MS + LEASE_DURATION_MS,
+            expiresAt: new Date(NOW_MS + LEASE_DURATION_MS),
+        });
+        finalizeRepository.documents.set(`noorUsage/${UID}_2026-08-11`, {
+            dateUtc: '2026-08-11', answered: 0,
+            reservations: [{ requestId: REQUEST_ID, ownerId: 'owner-b', expiresAtMs: NOW_MS + LEASE_DURATION_MS }],
+            expiresAt: new Date('2026-08-12T00:00:00.000Z'),
+        });
+        let finalizeClockCalls = 0;
+        assert.equal((await finalizeAnswered({
+            repository: finalizeRepository, uid: UID, requestId: REQUEST_ID,
+            invocationId: 'owner-b', response: replayResponse,
+            clock: () => new Date(NOW_MS + finalizeClockCalls++),
+        })).kind, 'already_finalized');
+        assert.equal(finalizeClockCalls, 2);
+
+        const midnightMs = Date.parse('2026-08-11T23:59:59.999Z');
+        const midnightRepository = new RetryingMemoryRepository(() => undefined);
+        let midnightClockCalls = 0;
+        await claimRequest({
+            repository: midnightRepository, uid: UID,
+            requestId: '22222222-2222-4222-8222-222222222222',
+            invocationId: 'owner-b', entitlementClass: 'paid',
+            clock: () => new Date(midnightMs + midnightClockCalls++),
+        });
+        assert.equal(midnightRepository.documents.has(`noorUsage/${UID}_2026-08-11`), false);
+        assert.equal(midnightRepository.documents.has(`noorUsage/${UID}_2026-08-12`), true);
+    });
+
     it('exports the exact daily limits and computes the next UTC midnight', async () => {
         assert.equal(nextUtcResetIso(Date.parse('2026-08-11T23:59:59.999Z')), '2026-08-12T00:00:00.000Z');
         assert.deepEqual(DAILY_ANSWER_LIMITS, { paid: 50, grandfathered: 3, owner_qa: 100, none: 0 });
@@ -287,6 +380,38 @@ describe('Noor transactional usage and idempotency', () => {
             expiresAt: new Date(NOW_MS + COMPLETED_REPLAY_MS),
         });
         assert.equal((await claim(horizonRepository, { invocationId: 'new-owner' })).kind, 'replay');
+    });
+
+    it('accepts clock skew at each persisted horizon and rejects one millisecond beyond it', async () => {
+        const accepted: Array<{ path: string; value: unknown }> = [
+            { path: `noorRate/${UID}`, value: { attemptsMs: [NOW_MS + MAX_CLOCK_SKEW_MS], expiresAt: new Date(NOW_MS + MAX_CLOCK_SKEW_MS + RATE_LIMIT_WINDOW_MS) } },
+            { path: `noorUsage/${UID}_2026-08-11`, value: { dateUtc: '2026-08-11', answered: 0, reservations: [{ requestId: REQUEST_ID, ownerId: 'owner', expiresAtMs: NOW_MS + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS }], expiresAt: new Date('2026-08-12T00:00:00.000Z') } },
+            { path: `noorIdempotency/${UID}_${REQUEST_ID}`, value: { status: 'pending', ownerId: 'owner', usageDateUtc: '2026-08-11', leaseExpiresAtMs: NOW_MS + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS, expiresAt: new Date(NOW_MS + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS) } },
+            { path: `noorIdempotency/${UID}_${REQUEST_ID}`, value: { status: 'completed', finalizedBy: 'owner', response: answer('answered'), responseExpiresAtMs: NOW_MS + COMPLETED_REPLAY_MS + MAX_CLOCK_SKEW_MS, expiresAt: new Date(NOW_MS + COMPLETED_REPLAY_MS + MAX_CLOCK_SKEW_MS) } },
+        ];
+        for (const testCase of accepted) {
+            const repository = new MemoryRepository();
+            repository.documents.set(testCase.path, testCase.value);
+            await claim(repository, { invocationId: 'new-owner' });
+        }
+        for (const testCase of accepted) {
+            const repository = new MemoryRepository();
+            const value = structuredClone(testCase.value) as Record<string, unknown>;
+            if (Array.isArray(value.attemptsMs)) {
+                value.attemptsMs = [NOW_MS + MAX_CLOCK_SKEW_MS + 1];
+                value.expiresAt = new Date(NOW_MS + MAX_CLOCK_SKEW_MS + 1 + RATE_LIMIT_WINDOW_MS);
+            } else if (Array.isArray(value.reservations)) {
+                value.reservations = [{ requestId: REQUEST_ID, ownerId: 'owner', expiresAtMs: NOW_MS + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS + 1 }];
+            } else if (value.status === 'pending') {
+                value.leaseExpiresAtMs = NOW_MS + LEASE_DURATION_MS + MAX_CLOCK_SKEW_MS + 1;
+                value.expiresAt = new Date(value.leaseExpiresAtMs as number);
+            } else {
+                value.responseExpiresAtMs = NOW_MS + COMPLETED_REPLAY_MS + MAX_CLOCK_SKEW_MS + 1;
+                value.expiresAt = new Date(value.responseExpiresAtMs as number);
+            }
+            repository.documents.set(testCase.path, value);
+            await assert.rejects(() => claim(repository, { invocationId: 'new-owner' }), /Invalid Noor usage state/);
+        }
     });
 
     it('rejects oversized persisted and final answers, citations, and citation strings', async () => {
