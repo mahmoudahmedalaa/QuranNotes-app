@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import { Text, useTheme, Button } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -59,6 +59,7 @@ export default function OnboardingPremium() {
     const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('annual');
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [purchasing, setPurchasing] = useState(false);
+    const operationInFlightRef = useRef(false);
 
     const highlightIndex = highlight ? parseInt(highlight as string) : null;
     const isHardPaywall = hard === '1' || requiresSubscription;
@@ -144,6 +145,9 @@ export default function OnboardingPremium() {
             return;
         }
 
+        if (operationInFlightRef.current) return;
+        operationInFlightRef.current = true;
+
         setPurchasing(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -207,6 +211,7 @@ export default function OnboardingPremium() {
             }
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
+            operationInFlightRef.current = false;
             setPurchasing(false);
         }
     };
@@ -229,6 +234,9 @@ export default function OnboardingPremium() {
             Alert.alert('Sign In Required', 'Please sign in before restoring purchases.');
             return;
         }
+
+        if (operationInFlightRef.current) return;
+        operationInFlightRef.current = true;
 
         setPurchasing(true);
         try {
@@ -263,6 +271,7 @@ export default function OnboardingPremium() {
             }
             Alert.alert('Error', 'Could not restore purchases.');
         } finally {
+            operationInFlightRef.current = false;
             setPurchasing(false);
         }
     };
@@ -284,7 +293,7 @@ export default function OnboardingPremium() {
                     <Text style={styles.title}>QuranNotes Pro</Text>
                     <Text style={styles.subtitle}>
                         {isHardPaywall
-                            ? 'New accounts need an active subscription to continue. Existing users keep access.'
+                            ? 'New accounts need active Pro access or purchase to continue. Existing users keep access.'
                             : 'Unlock your full spiritual potential'}
                     </Text>
                     {trialBadgeText && (
@@ -339,7 +348,8 @@ export default function OnboardingPremium() {
                                     key={period}
                                     accessibilityRole="button"
                                     accessibilityLabel={`Select ${PLAN_LABELS[period]} plan`}
-                                    accessibilityState={{ selected }}
+                                    accessibilityState={{ selected, disabled: purchasing }}
+                                    disabled={purchasing}
                                     onPress={() => setSelectedPeriod(period)}
                                     style={[styles.planOption, selected && styles.planOptionSelected]}>
                                     <Text style={[styles.planName, selected && styles.planNameSelected]}>
@@ -383,7 +393,13 @@ export default function OnboardingPremium() {
                             <Text style={styles.secondaryText}>Start Free</Text>
                         </Pressable>
                     )}
-                    <Pressable onPress={handleRestore} style={styles.secondaryButton}>
+                    <Pressable
+                        onPress={handleRestore}
+                        accessibilityRole="button"
+                        accessibilityLabel="Restore purchases"
+                        accessibilityState={{ disabled: purchasing }}
+                        disabled={purchasing}
+                        style={styles.secondaryButton}>
                         <Text style={styles.secondaryText}>Restore Purchases</Text>
                     </Pressable>
                 </MotiView>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Alert, Pressable, Linking } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { useRouter, useLocalSearchParams, Redirect } from 'expo-router';
@@ -53,6 +53,7 @@ export default function PaywallScreen() {
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
+    const operationInFlightRef = useRef(false);
     const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('annual');
     const isHardPaywall = hard === '1';
 
@@ -156,7 +157,7 @@ export default function PaywallScreen() {
                 return {
                     title: isHardPaywall ? 'Continue with QuranNotes Pro' : 'QuranNotes Pro',
                     subtitle: isHardPaywall
-                        ? 'This account needs an active subscription to enter the app. Existing purchases can be restored at any time.'
+                        ? 'This account needs active Pro access or purchase to enter the app. Existing purchases can be restored at any time.'
                         : 'Unlock your full spiritual potential',
                     highlightIndex: null
                 };
@@ -185,6 +186,9 @@ export default function PaywallScreen() {
             );
             return;
         }
+
+        if (operationInFlightRef.current) return;
+        operationInFlightRef.current = true;
 
         setPurchasing(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -255,6 +259,7 @@ export default function PaywallScreen() {
             }
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
+            operationInFlightRef.current = false;
             setPurchasing(false);
         }
     };
@@ -264,6 +269,9 @@ export default function PaywallScreen() {
             Alert.alert('Sign In Required', 'Please sign in before restoring purchases.');
             return;
         }
+
+        if (operationInFlightRef.current) return;
+        operationInFlightRef.current = true;
 
         setPurchasing(true);
         try {
@@ -302,6 +310,7 @@ export default function PaywallScreen() {
             }
             Alert.alert('Error', 'Could not restore purchases.');
         } finally {
+            operationInFlightRef.current = false;
             setPurchasing(false);
         }
     };
@@ -385,7 +394,8 @@ export default function PaywallScreen() {
                                         key={period}
                                         accessibilityRole="button"
                                         accessibilityLabel={`Select ${PLAN_LABELS[period]} plan`}
-                                        accessibilityState={{ selected }}
+                                        accessibilityState={{ selected, disabled: purchasing }}
+                                        disabled={purchasing}
                                         onPress={() => setSelectedPeriod(period)}
                                         style={[styles.planOption, selected && styles.planOptionSelected]}>
                                         <Text style={[styles.planName, selected && styles.planNameSelected]}>
@@ -441,7 +451,13 @@ export default function PaywallScreen() {
                     )}
 
                     {/* Restore Purchases */}
-                    <Pressable onPress={handleRestore} style={styles.restoreButton}>
+                    <Pressable
+                        onPress={handleRestore}
+                        accessibilityRole="button"
+                        accessibilityLabel="Restore purchases"
+                        accessibilityState={{ disabled: purchasing }}
+                        disabled={purchasing}
+                        style={styles.restoreButton}>
                         <Text style={styles.restoreText}>Restore Purchases</Text>
                     </Pressable>
 

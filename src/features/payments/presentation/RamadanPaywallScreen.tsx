@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     StyleSheet,
@@ -67,6 +67,7 @@ export default function RamadanPaywallScreen({
     const [offering, setOffering] = useState<PurchasesOffering | null>(null);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
+    const operationInFlightRef = useRef(false);
     const [countdown, setCountdown] = useState(ramadanCountdownText());
     const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>('annual');
 
@@ -118,6 +119,9 @@ export default function RamadanPaywallScreen({
             Alert.alert('Error', 'Product not available.');
             return;
         }
+
+        if (operationInFlightRef.current) return;
+        operationInFlightRef.current = true;
 
         setPurchasing(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -187,6 +191,7 @@ export default function RamadanPaywallScreen({
             }
             Alert.alert('Error', 'Something went wrong. Please try again.');
         } finally {
+            operationInFlightRef.current = false;
             setPurchasing(false);
         }
     };
@@ -196,6 +201,9 @@ export default function RamadanPaywallScreen({
             Alert.alert('Sign In Required', 'Please sign in before restoring purchases.');
             return;
         }
+
+        if (operationInFlightRef.current) return;
+        operationInFlightRef.current = true;
 
         setPurchasing(true);
         try {
@@ -229,6 +237,7 @@ export default function RamadanPaywallScreen({
             }
             Alert.alert('Error', 'Could not restore purchases.');
         } finally {
+            operationInFlightRef.current = false;
             setPurchasing(false);
         }
     };
@@ -264,6 +273,8 @@ export default function RamadanPaywallScreen({
                 {allowDismiss && (
                     <Pressable
                         onPress={() => onDismiss ? onDismiss() : router.back()}
+                        accessibilityRole="button"
+                        accessibilityLabel="Dismiss paywall"
                         style={styles.closeButton}
                         hitSlop={16}>
                         <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
@@ -317,7 +328,8 @@ export default function RamadanPaywallScreen({
                                     key={period}
                                     accessibilityRole="button"
                                     accessibilityLabel={`Select ${PLAN_LABELS[period]} plan`}
-                                    accessibilityState={{ selected }}
+                                    accessibilityState={{ selected, disabled: purchasing }}
+                                    disabled={purchasing}
                                     onPress={() => setSelectedPeriod(period)}
                                     style={[styles.planCard, selected && styles.planCardSelected]}>
                                     <View style={styles.planHeader}>
@@ -395,6 +407,7 @@ export default function RamadanPaywallScreen({
                     <Pressable
                         onPress={handlePurchase}
                         accessibilityLabel="Purchase selected plan"
+                        accessibilityState={{ disabled: purchasing }}
                         disabled={purchasing}
                         style={({ pressed }) => [
                             styles.ctaButton,
@@ -421,12 +434,20 @@ export default function RamadanPaywallScreen({
                     </Pressable>
 
                     {/* Maybe Later */}
-                    <Pressable onPress={() => onDismiss ? onDismiss() : router.back()} style={styles.secondaryButton}>
-                        <Text style={styles.secondaryText}>Maybe Later</Text>
-                    </Pressable>
+                    {allowDismiss && (
+                        <Pressable onPress={() => onDismiss ? onDismiss() : router.back()} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryText}>Maybe Later</Text>
+                        </Pressable>
+                    )}
 
                     {/* Restore */}
-                    <Pressable onPress={handleRestore} style={styles.restoreButton}>
+                    <Pressable
+                        onPress={handleRestore}
+                        accessibilityRole="button"
+                        accessibilityLabel="Restore purchases"
+                        accessibilityState={{ disabled: purchasing }}
+                        disabled={purchasing}
+                        style={styles.restoreButton}>
                         <Text style={styles.restoreText}>Restore Purchases</Text>
                     </Pressable>
 

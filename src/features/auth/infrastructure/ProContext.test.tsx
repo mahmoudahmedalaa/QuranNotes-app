@@ -50,6 +50,14 @@ function wrapper({ children }: { children: React.ReactNode }) {
     return <ProProvider>{children}</ProProvider>;
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(next => {
+        resolve = next;
+    });
+    return { promise, resolve };
+}
+
 describe('ProContext RevenueCat identity isolation', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -181,5 +189,108 @@ describe('ProContext RevenueCat identity isolation', () => {
             status = await result.current.checkStatus();
         });
         expect(status).toBe(true);
+    });
+
+    it('keeps a newer true result when an older false request finishes last', async () => {
+        mockCurrentUser = user('same-user');
+        const { result } = renderHook(() => usePro(), { wrapper });
+        await waitFor(() => expect(result.current.identityReady).toBe(true));
+
+        const older = deferred<typeof LOCKED_INFO>();
+        const newer = deferred<typeof PRO_INFO>();
+        mockService().getCustomerInfo.mockClear();
+        mockService().getCustomerInfo
+            .mockImplementationOnce(() => older.promise)
+            .mockImplementationOnce(() => newer.promise);
+
+        let olderStatusPromise!: Promise<boolean>;
+        let newerStatusPromise!: Promise<boolean>;
+        act(() => {
+            olderStatusPromise = result.current.checkStatus();
+            newerStatusPromise = result.current.checkStatus();
+        });
+        await waitFor(() => expect(mockService().getCustomerInfo).toHaveBeenCalledTimes(2));
+
+        let newerStatus = false;
+        await act(async () => {
+            newer.resolve(PRO_INFO);
+            newerStatus = await newerStatusPromise;
+        });
+        expect(newerStatus).toBe(true);
+        expect(result.current.isPro).toBe(true);
+
+        let olderStatus = true;
+        await act(async () => {
+            older.resolve(LOCKED_INFO);
+            olderStatus = await olderStatusPromise;
+        });
+        expect(olderStatus).toBe(false);
+        expect(result.current.isPro).toBe(true);
+        expect(result.current.identityReady).toBe(true);
+    });
+
+    it('keeps a newer false result and suppresses an older true request that finishes last', async () => {
+        mockCurrentUser = user('same-user');
+        const { result } = renderHook(() => usePro(), { wrapper });
+        await waitFor(() => expect(result.current.identityReady).toBe(true));
+
+        const older = deferred<typeof PRO_INFO>();
+        const newer = deferred<typeof LOCKED_INFO>();
+        mockService().getCustomerInfo.mockClear();
+        mockService().getCustomerInfo
+            .mockImplementationOnce(() => older.promise)
+            .mockImplementationOnce(() => newer.promise);
+
+        let olderStatusPromise!: Promise<boolean>;
+        let newerStatusPromise!: Promise<boolean>;
+        act(() => {
+            olderStatusPromise = result.current.checkStatus();
+            newerStatusPromise = result.current.checkStatus();
+        });
+        await waitFor(() => expect(mockService().getCustomerInfo).toHaveBeenCalledTimes(2));
+
+        let newerStatus = true;
+        await act(async () => {
+            newer.resolve(LOCKED_INFO);
+            newerStatus = await newerStatusPromise;
+        });
+        expect(newerStatus).toBe(false);
+        expect(result.current.isPro).toBe(false);
+
+        let olderStatus = true;
+        await act(async () => {
+            older.resolve(PRO_INFO);
+            olderStatus = await olderStatusPromise;
+        });
+        expect(olderStatus).toBe(false);
+        expect(result.current.isPro).toBe(false);
+        expect(result.current.identityReady).toBe(true);
+    });
+
+    it('invalidates an in-flight status request on logout', async () => {
+        mockCurrentUser = user('same-user');
+        const { result, rerender } = renderHook(() => usePro(), { wrapper });
+        await waitFor(() => expect(result.current.identityReady).toBe(true));
+
+        const pending = deferred<typeof PRO_INFO>();
+        mockService().getCustomerInfo.mockImplementationOnce(() => pending.promise);
+        let pendingStatusPromise!: Promise<boolean>;
+        act(() => {
+            pendingStatusPromise = result.current.checkStatus();
+        });
+        await waitFor(() => expect(result.current.identityReady).toBe(false));
+
+        mockCurrentUser = null;
+        rerender({});
+        await waitFor(() => expect(mockService().logoutUser).toHaveBeenCalled());
+
+        let pendingStatus = true;
+        await act(async () => {
+            pending.resolve(PRO_INFO);
+            pendingStatus = await pendingStatusPromise;
+        });
+        expect(pendingStatus).toBe(false);
+        expect(result.current.isPro).toBe(false);
+        expect(result.current.identityReady).toBe(false);
     });
 });

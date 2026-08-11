@@ -7,7 +7,12 @@ import { revenueCatService } from '../infrastructure/RevenueCatService';
 
 const mockCheckStatus = jest.fn();
 const mockOnPurchaseSuccess = jest.fn();
+const mockBack = jest.fn();
 let mockUser: { id: string } | null = { id: 'firebase-user' };
+
+jest.mock('expo-router', () => ({
+    useRouter: () => ({ back: mockBack }),
+}));
 
 jest.mock('moti', () => ({
     MotiView: 'View',
@@ -59,6 +64,14 @@ function serviceMock() {
     };
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(next => {
+        resolve = next;
+    });
+    return { promise, resolve };
+}
+
 describe('RamadanPaywallScreen', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -83,6 +96,37 @@ describe('RamadanPaywallScreen', () => {
         expect(screen.getByText('AED 299.99')).toBeTruthy();
         expect(screen.getByText('One-time purchase')).toBeTruthy();
         expect(screen.getByText('Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.')).toBeTruthy();
+    });
+
+    it('hides every dismissal control when dismissal is not allowed', async () => {
+        const screen = render(<RamadanPaywallScreen allowDismiss={false} />);
+
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+        expect(screen.queryByLabelText('Dismiss paywall')).toBeNull();
+        expect(screen.queryByText('Maybe Later')).toBeNull();
+    });
+
+    it('keeps dismissal controls active on a soft paywall', async () => {
+        const onDismiss = jest.fn();
+        const screen = render(<RamadanPaywallScreen allowDismiss onDismiss={onDismiss} />);
+
+        await waitFor(() => expect(screen.getByLabelText('Dismiss paywall')).toBeTruthy());
+        expect(screen.getByText('Maybe Later')).toBeTruthy();
+        fireEvent.press(screen.getByText('Maybe Later'));
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('never navigates back from a hard paywall while authoritative status remains locked', async () => {
+        mockCheckStatus.mockResolvedValue(false);
+        const screen = render(<RamadanPaywallScreen allowDismiss={false} />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+        await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Purchase Pending', expect.any(String)));
+        fireEvent.press(screen.getByLabelText('Restore purchases'));
+        await waitFor(() => expect(serviceMock().restorePurchases).toHaveBeenCalled());
+
+        expect(mockBack).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -173,6 +217,28 @@ describe('RamadanPaywallScreen', () => {
         await waitFor(() => expect(mockCheckStatus).toHaveBeenCalled());
         expect(mockOnPurchaseSuccess).not.toHaveBeenCalled();
         expect(Alert.alert).toHaveBeenCalledWith('Purchase Pending', expect.any(String));
+    });
+
+    it('synchronously blocks purchase and duplicate restore overlap while controls are disabled', async () => {
+        const identity = deferred<unknown>();
+        serviceMock().ensureUserIdentity.mockReturnValue(identity.promise);
+        const screen = render(<RamadanPaywallScreen />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+        fireEvent.press(screen.getByLabelText('Restore purchases'));
+        fireEvent.press(screen.getByLabelText('Restore purchases'));
+
+        expect(serviceMock().ensureUserIdentity).toHaveBeenCalledTimes(1);
+        expect(serviceMock().purchasePackage).not.toHaveBeenCalled();
+        expect(serviceMock().restorePurchases).not.toHaveBeenCalled();
+        expect(screen.getByLabelText('Purchase selected plan').props.accessibilityState.disabled).toBe(true);
+        expect(screen.getByLabelText('Restore purchases').props.accessibilityState.disabled).toBe(true);
+        expect(screen.getByLabelText('Select Monthly plan').props.accessibilityState.disabled).toBe(true);
+
+        identity.resolve({ entitlements: { active: {} } });
+        await waitFor(() => expect(serviceMock().purchasePackage).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(screen.getByLabelText('Restore purchases').props.accessibilityState.disabled).toBe(false));
     });
 
     it('does not render or substitute a missing Lifetime package', async () => {

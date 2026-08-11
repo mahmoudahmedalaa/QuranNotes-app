@@ -83,6 +83,14 @@ function serviceMock() {
     };
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(next => {
+        resolve = next;
+    });
+    return { promise, resolve };
+}
+
 describe('PaywallScreen', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -109,6 +117,14 @@ describe('PaywallScreen', () => {
         expect(screen.getByText('One-time purchase')).toBeTruthy();
         expect(screen.getByText('Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.')).toBeTruthy();
         expect(screen.queryByText(/Unlimited AI|unlimited AI-powered/i)).toBeNull();
+    });
+
+    it('uses Lifetime-compatible Pro access copy on the hard paywall', async () => {
+        const screen = render(<PaywallScreen />);
+
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+        expect(screen.queryByText(/active subscription/i)).toBeNull();
+        expect(screen.getByText(/active Pro access or purchase/i)).toBeTruthy();
     });
 
     it('defaults to Monthly when Annual is absent and does not invent missing plans', async () => {
@@ -191,5 +207,27 @@ describe('PaywallScreen', () => {
 
         await waitFor(() => expect(serviceMock().purchasePackage).toHaveBeenCalled());
         expect(Alert.alert).not.toHaveBeenCalled();
+    });
+
+    it('synchronously blocks duplicate restore and purchase overlap while all purchase controls are disabled', async () => {
+        const identity = deferred<unknown>();
+        serviceMock().ensureUserIdentity.mockReturnValue(identity.promise);
+        const screen = render(<PaywallScreen />);
+        await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+
+        fireEvent.press(screen.getByLabelText('Restore purchases'));
+        fireEvent.press(screen.getByLabelText('Restore purchases'));
+        fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+        expect(serviceMock().ensureUserIdentity).toHaveBeenCalledTimes(1);
+        expect(serviceMock().restorePurchases).not.toHaveBeenCalled();
+        expect(serviceMock().purchasePackage).not.toHaveBeenCalled();
+        expect(screen.getByLabelText('Restore purchases').props.accessibilityState.disabled).toBe(true);
+        expect(screen.getByLabelText('Purchase selected plan').props.accessibilityState.disabled).toBe(true);
+        expect(screen.getByLabelText('Select Lifetime plan').props.accessibilityState.disabled).toBe(true);
+
+        identity.resolve({ entitlements: { active: {} } });
+        await waitFor(() => expect(serviceMock().restorePurchases).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(screen.getByLabelText('Restore purchases').props.accessibilityState.disabled).toBe(false));
     });
 });

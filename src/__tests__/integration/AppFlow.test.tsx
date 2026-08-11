@@ -25,6 +25,7 @@ import { Colors, Spacing } from '../../core/theme/DesignSystem';
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockDismissAll = jest.fn();
+let mockAppParams: { hard?: string; id?: string } = { id: '1' };
 let mockAppUser: { id: string; email: string } | null = {
     id: 'current-firebase-user',
     email: 'current@example.com',
@@ -36,7 +37,7 @@ jest.mock('expo-router', () => ({
         dismissAll: mockDismissAll,
         back: jest.fn(),
     }),
-    useLocalSearchParams: () => ({ id: '1' }),
+    useLocalSearchParams: () => mockAppParams,
     useFocusEffect: (cb: any) => cb(),
 }));
 
@@ -142,6 +143,7 @@ function appRevenueMock() {
 }
 
 function resetAppPurchaseMocks() {
+    mockAppParams = { id: '1' };
     mockAppUser = { id: 'current-firebase-user', email: 'current@example.com' };
     appRevenueMock().ensureUserIdentity.mockResolvedValue({ entitlements: { active: {} } });
     appRevenueMock().getCustomerInfo.mockResolvedValue({
@@ -156,6 +158,14 @@ function resetAppPurchaseMocks() {
     appRevenueMock().restorePurchases.mockResolvedValue(true);
     appRevenueMock().isPro.mockReturnValue(true);
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+}
+
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(next => {
+        resolve = next;
+    });
+    return { promise, resolve };
 }
 
 
@@ -329,6 +339,21 @@ describe('Comprehensive App Flow (50 Checks)', () => {
             expect(screen.getByText('Includes up to 50 successful AI answers per UTC day. Your allowance resets daily.')).toBeTruthy();
         });
 
+        it('52a. Onboarding hard paywall uses Lifetime-compatible Pro access copy', async () => {
+            mockAppParams = { hard: '1' };
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            expect(screen.queryByText(/active subscription/i)).toBeNull();
+            expect(screen.getByText(/active Pro access or purchase/i)).toBeTruthy();
+        });
+
         it('53. Tafsir purchase prompts do not promise uncapped AI', () => {
             const tafsirSource = fs.readFileSync(
                 path.join(process.cwd(), 'src/features/tafsir/presentation/TafsirBottomSheet.tsx'),
@@ -447,6 +472,39 @@ describe('Comprehensive App Flow (50 Checks)', () => {
             expect(mockReplace).not.toHaveBeenCalled();
             expect(mockDismissAll).not.toHaveBeenCalled();
             expect(Alert.alert).toHaveBeenCalledWith('Purchase Pending', expect.any(String));
+        });
+
+        it('60. Onboarding synchronously blocks duplicate restore and purchase overlap while controls are disabled', async () => {
+            const screen = render(
+                <ProProvider>
+                    <PaperProvider>
+                        <OnboardingPremium />
+                    </PaperProvider>
+                </ProProvider>
+            );
+            await waitFor(() => expect(screen.getByLabelText('Select Annual plan')).toBeTruthy());
+            await waitFor(() => expect(appRevenueMock().getCustomerInfo).toHaveBeenCalled());
+
+            const identity = deferred<unknown>();
+            appRevenueMock().ensureUserIdentity.mockClear();
+            appRevenueMock().restorePurchases.mockClear();
+            appRevenueMock().purchasePackage.mockClear();
+            appRevenueMock().ensureUserIdentity.mockReturnValue(identity.promise);
+
+            fireEvent.press(screen.getByLabelText('Restore purchases'));
+            fireEvent.press(screen.getByLabelText('Restore purchases'));
+            fireEvent.press(screen.getByLabelText('Purchase selected plan'));
+
+            expect(appRevenueMock().ensureUserIdentity).toHaveBeenCalledTimes(1);
+            expect(appRevenueMock().restorePurchases).not.toHaveBeenCalled();
+            expect(appRevenueMock().purchasePackage).not.toHaveBeenCalled();
+            expect(screen.getByLabelText('Restore purchases').props.accessibilityState.disabled).toBe(true);
+            expect(screen.getByLabelText('Purchase selected plan').props.accessibilityState.disabled).toBe(true);
+            expect(screen.getByLabelText('Select Monthly plan').props.accessibilityState.disabled).toBe(true);
+
+            identity.resolve({ entitlements: { active: {} } });
+            await waitFor(() => expect(appRevenueMock().restorePurchases).toHaveBeenCalledTimes(1));
+            await waitFor(() => expect(screen.getByLabelText('Restore purchases').props.accessibilityState.disabled).toBe(false));
         });
     });
 

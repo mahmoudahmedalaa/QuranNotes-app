@@ -28,10 +28,12 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [identityReady, setIdentityReady] = useState(false);
     const { user } = useAuth();
     const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+    const statusGenerationRef = useRef(0);
     activeUserIdRef.current = user?.id ?? null;
 
     const checkStatus = useCallback(async (): Promise<boolean> => {
         const targetUserId = activeUserIdRef.current;
+        const requestGeneration = ++statusGenerationRef.current;
         setLoading(true);
         setIsPro(false);
         setIdentityReady(false);
@@ -45,24 +47,32 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await revenueCatService.ensureUserIdentity(targetUserId);
             const customerInfo = await revenueCatService.getCustomerInfo();
             const proStatus = revenueCatService.isPro(customerInfo);
-            if (activeUserIdRef.current !== targetUserId) return false;
+            const isCurrentRequest = activeUserIdRef.current === targetUserId
+                && statusGenerationRef.current === requestGeneration;
+            if (!isCurrentRequest) return false;
 
             setIdentityReady(true);
             setIsPro(proStatus);
             return proStatus;
         } catch {
-            if (activeUserIdRef.current !== targetUserId) return false;
+            const isCurrentRequest = activeUserIdRef.current === targetUserId
+                && statusGenerationRef.current === requestGeneration;
+            if (!isCurrentRequest) return false;
             setIdentityReady(false);
             setIsPro(false);
             return false;
         } finally {
-            if (activeUserIdRef.current === targetUserId) setLoading(false);
+            if (
+                activeUserIdRef.current === targetUserId
+                && statusGenerationRef.current === requestGeneration
+            ) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         const currentUserId = user?.id ?? null;
         let cancelled = false;
+        statusGenerationRef.current += 1;
 
         setIsPro(false);
         setIdentityReady(false);
