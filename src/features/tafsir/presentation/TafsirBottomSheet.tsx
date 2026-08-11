@@ -10,7 +10,7 @@
  *  6. 💬 AI Q&A answer (if asked)
  *  7. Ask input + disclaimer
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -38,6 +38,7 @@ import { AiQueryInput } from './AiQueryInput';
 import NoorCitationList from '../../noor-ai/presentation/NoorCitationList';
 import { NoorCitation } from '../../noor-ai/domain/generatedContract';
 import { getNoorStatusPresentation } from '../../noor-ai/domain/NoorStatusPresentation';
+import { AsyncGenerationGuard } from '../../noor-ai/domain/AsyncGenerationGuard';
 
 const GOLD = '#D4A853';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -87,6 +88,10 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
     // ── Paywall ──
     const router = useRouter();
     const [aiGated, setAiGated] = useState(false);
+    const contextGenerationRef = useRef(new AsyncGenerationGuard());
+    const questionGenerationRef = useRef(new AsyncGenerationGuard());
+    const contextGeneration = contextGenerationRef.current;
+    const questionGeneration = questionGenerationRef.current;
 
     // Restore preferred source
     useEffect(() => {
@@ -100,6 +105,8 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
         if (!visible || !data) return;
 
         let cancelled = false;
+        const summaryGeneration = contextGeneration.next();
+        questionGeneration.invalidate();
 
         setAiExplanation(null);
         setAiLoading(false);
@@ -127,30 +134,49 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                     data.surahNumber,
                     data.verseNumber,
                 );
-                if (cancelled) return;
+                if (cancelled || !contextGeneration.isCurrent(summaryGeneration)) return;
                 const presentation = getNoorStatusPresentation(response);
                 setAiExplanation(response.status === 'answered' ? response.answer : presentation.message);
                 setExplanationCitations(response.citations);
                 setAiGated(presentation.action === 'paywall');
             } catch {
-                if (!cancelled) setAiFailed(true);
+                if (!cancelled && contextGeneration.isCurrent(summaryGeneration)) setAiFailed(true);
             } finally {
-                if (!cancelled) setAiLoading(false);
+                if (!cancelled && contextGeneration.isCurrent(summaryGeneration)) setAiLoading(false);
             }
         })();
 
-        return () => { cancelled = true; };
-    }, [visible, data, source]);
+        return () => {
+            cancelled = true;
+            contextGeneration.invalidate();
+            questionGeneration.invalidate();
+        };
+    }, [
+        visible,
+        data,
+        data?.arabicText,
+        data?.translation,
+        data?.surahName,
+        data?.surahNumber,
+        data?.verseNumber,
+        source,
+        contextGeneration,
+        questionGeneration,
+    ]);
 
     const handleSourceChange = useCallback((newSource: TafsirSource) => {
+        contextGeneration.invalidate();
+        questionGeneration.invalidate();
         setSource(newSource);
         AsyncStorage.setItem(SOURCE_PREF_KEY, newSource);
-    }, []);
+    }, [contextGeneration, questionGeneration]);
 
     const handleAskQuestion = useCallback(
         async (question: string) => {
             if (!data) return;
 
+            const questionContextGeneration = contextGeneration.current();
+            const generation = questionGeneration.next();
             setAnswerCitations([]);
             setAnswerLoading(true);
             try {
@@ -164,18 +190,24 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                     data.surahNumber,
                     data.verseNumber,
                 );
+                if (!contextGeneration.isCurrent(questionContextGeneration)
+                    || !questionGeneration.isCurrent(generation)) return;
                 const presentation = getNoorStatusPresentation(result);
                 setAiAnswer(result.status === 'answered' ? result.answer : presentation.message);
                 setAnswerCitations(result.citations);
                 if (presentation.action === 'paywall') router.push('/paywall?reason=ai-tafsir' as never);
             } catch {
-                setAnswerCitations([]);
-                setAiAnswer('Unable to answer right now. Please try again.');
+                if (contextGeneration.isCurrent(questionContextGeneration)
+                    && questionGeneration.isCurrent(generation)) {
+                    setAnswerCitations([]);
+                    setAiAnswer('Unable to answer right now. Please try again.');
+                }
             } finally {
-                setAnswerLoading(false);
+                if (contextGeneration.isCurrent(questionContextGeneration)
+                    && questionGeneration.isCurrent(generation)) setAnswerLoading(false);
             }
         },
-        [data, rawCommentary, source, router],
+        [data, rawCommentary, source, router, contextGeneration, questionGeneration],
     );
 
     // Truncated scholar text

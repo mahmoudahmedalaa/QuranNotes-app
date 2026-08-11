@@ -7,4 +7,11 @@ describe('TafsirBottomSheet citation state', () => {
         expect(handler).toMatch(/setAnswerCitations\(\[\]\);[\s\S]*setAnswerLoading\(true\)/);
         expect(handler).toMatch(/catch \{[\s\S]*setAnswerCitations\(\[\]\)/);
     });
+
+    it('checks context and question generations before committing async results', () => {
+        const source = fs.readFileSync(require.resolve('./TafsirBottomSheet'), 'utf8');
+        expect(source).toMatch(/contextGeneration\.isCurrent\(summaryGeneration\)/);
+        expect(source).toMatch(/contextGeneration\.isCurrent\(questionContextGeneration\)/);
+        expect(source).toMatch(/questionGeneration\.isCurrent\(generation\)/);
+    });
 });

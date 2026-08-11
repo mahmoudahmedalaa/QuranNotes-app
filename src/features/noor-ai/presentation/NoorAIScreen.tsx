@@ -47,6 +47,7 @@ import NoorTypingIndicator from './NoorTypingIndicator';
 import NoorSuggestionChips from './NoorSuggestionChips';
 import NoorConversationList from './NoorConversationList';
 import { Spacing } from '../../../core/theme/DesignSystem';
+import { AsyncGenerationGuard } from '../domain/AsyncGenerationGuard';
 
 export default function NoorAIScreen() {
     const theme = useTheme();
@@ -62,6 +63,14 @@ export default function NoorAIScreen() {
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [showHistory, setShowHistory] = useState(false);
     const flatListRef = useRef<FlatList>(null);
+    const inFlightRef = useRef(false);
+    const requestGenerationRef = useRef(new AsyncGenerationGuard());
+    const requestGeneration = requestGenerationRef.current;
+
+    useEffect(() => () => {
+        requestGeneration.invalidate();
+        inFlightRef.current = false;
+    }, [requestGeneration]);
 
     // ── Build verse context from params ──
     const verseContext: VerseContext | undefined = useMemo(() => (
@@ -108,14 +117,18 @@ export default function NoorAIScreen() {
 
     // ── Resume a past conversation from the history list ──
     const handleResumeConversation = useCallback(async (id: string) => {
+        requestGeneration.invalidate();
+        inFlightRef.current = false;
+        setIsLoading(false);
+        const resumeGeneration = requestGeneration.next();
         const conv = await loadConversation(id);
-        if (conv) {
+        if (conv && requestGeneration.isCurrent(resumeGeneration)) {
             setMessages(conv.messages);
             setConversationId(conv.id);
             setShowHistory(false);
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
         }
-    }, []);
+    }, [requestGeneration]);
 
     // ── Suggested questions ──
     const suggestedQuestions = getSuggestedQuestions(verseContext);
@@ -124,7 +137,9 @@ export default function NoorAIScreen() {
     const handleSend = useCallback(
         async (textOverride?: string) => {
             const text = (textOverride || inputText).trim();
-            if (!text || isLoading) return;
+            if (!text || inFlightRef.current) return;
+            inFlightRef.current = true;
+            const generation = requestGeneration.next();
 
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             Keyboard.dismiss();
@@ -142,6 +157,7 @@ export default function NoorAIScreen() {
             try {
                 const history = [...messages, userMsg].filter((m) => m.role !== 'noor' || messages.indexOf(m) > 0);
                 const response = await askNoor(text, history, undefined, verseContext);
+                if (!requestGeneration.isCurrent(generation)) return;
                 const presentation = getNoorStatusPresentation(response);
                 const safeResponse = response.status === 'answered'
                     ? response
@@ -152,18 +168,24 @@ export default function NoorAIScreen() {
 
                 // Persist conversation
                 const savedId = await saveConversation(conversationId, updatedMessages, verseContext);
+                if (!requestGeneration.isCurrent(generation)) return;
                 if (!conversationId) setConversationId(savedId);
                 if (presentation.action === 'paywall') {
                     router.push('/paywall?reason=noor-ai' as never);
                 }
             } catch {
-                setTransientError('Noor is temporarily unavailable. Your message was not sent. Please try again.');
+                if (requestGeneration.isCurrent(generation)) {
+                    setTransientError('Noor is temporarily unavailable. Your message was not sent. Please try again.');
+                }
             } finally {
-                setIsLoading(false);
-                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
+                if (requestGeneration.isCurrent(generation)) {
+                    inFlightRef.current = false;
+                    setIsLoading(false);
+                    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
+                }
             }
         },
-        [inputText, isLoading, messages, verseContext, conversationId, router],
+        [inputText, messages, verseContext, conversationId, router, requestGeneration],
     );
 
     // ── Derived: can send ──
@@ -247,6 +269,7 @@ export default function NoorAIScreen() {
                     <View style={styles.headerActions}>
                         {/* History */}
                         <Pressable
+                            disabled={isLoading}
                             onPress={() => {
                                 Keyboard.dismiss();
                                 setShowHistory(true);
@@ -259,7 +282,7 @@ export default function NoorAIScreen() {
                                         ? 'rgba(167, 139, 250, 0.12)'
                                         : 'rgba(98, 70, 234, 0.08)',
                                 },
-                                pressed && { opacity: 0.7 },
+                                (pressed || isLoading) && { opacity: 0.7 },
                             ]}
                         >
                             <MaterialCommunityIcons

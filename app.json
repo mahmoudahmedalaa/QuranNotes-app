@@ -75,7 +75,14 @@
         }
       ],
       "@bacons/apple-targets",
-      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/app",
+        {
+          "ios": {
+            "disableSPM": true
+          }
+        }
+      ],
       "@react-native-firebase/app-check",
       [
         "expo-build-properties",

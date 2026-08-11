@@ -36,7 +36,7 @@ describe('NativeAppCheckProvider', () => {
     it('declares the required Expo plugins, static frameworks, deployment target, and entitlement', () => {
         const appJson = require('../../../app.json').expo;
         expect(appJson.plugins).toEqual(expect.arrayContaining([
-            '@react-native-firebase/app',
+            ['@react-native-firebase/app', { ios: { disableSPM: true } }],
             '@react-native-firebase/app-check',
             ['expo-build-properties', {
                 ios: {
