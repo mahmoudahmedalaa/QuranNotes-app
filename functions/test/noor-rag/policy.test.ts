@@ -10,6 +10,18 @@ describe('Noor policy', () => {
 
     it('refuses standalone hadith requests', () => {
         assert.equal(classifyPolicy('Give me a hadith about patience.'), 'standalone_hadith');
+        assert.equal(classifyPolicy('Invent a hadith about patience.'), 'standalone_hadith');
+        assert.equal(classifyPolicy('Fabricate a hadith about gratitude.'), 'standalone_hadith');
+        assert.equal(classifyPolicy('Make up a hadith about mercy.'), 'standalone_hadith');
+        assert.equal(classifyPolicy('Is this hadith authentic?'), 'standalone_hadith');
+        assert.equal(classifyPolicy('Verify the authenticity of this hadith.'), 'standalone_hadith');
+    });
+
+    it('allows source-attributed hadith context inside tafsir explanation', () => {
+        assert.equal(
+            classifyPolicy('Show me the hadith that Ibn Kathir cites while explaining this verse.'),
+            'allowed',
+        );
     });
 
     it('refuses medical and legal crisis requests', () => {
