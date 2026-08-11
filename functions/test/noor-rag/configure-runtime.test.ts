@@ -41,6 +41,15 @@ describe('Noor runtime configuration', () => {
         ]), /one mode/);
     });
 
+    it('parses the explicit operator risk flag for public enablement', () => {
+        const options = parseRuntimeArguments([
+            `--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`,
+            '--public', '--expected-enabled=true', '--expected-public=false',
+            '--execute-production-write', '--operator-accepted-provenance-risk',
+        ]);
+        assert.equal(options.acceptUnverifiedProvenance, true);
+    });
+
     it('bootstraps only the complete reviewed dark schema and defaults to zero writes', async () => {
         const repository = new FakeRepository(null);
         const options = parseRuntimeArguments([

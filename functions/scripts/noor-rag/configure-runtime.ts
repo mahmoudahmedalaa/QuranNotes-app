@@ -21,6 +21,7 @@ export interface RuntimeOptions {
     expectedPublic?: boolean;
     ownerUids: string[];
     configPath: string;
+    acceptUnverifiedProvenance?: boolean;
 }
 
 export interface RuntimeConfigRepository {
@@ -76,6 +77,10 @@ export function parseRuntimeArguments(args: readonly string[]): RuntimeOptions {
         if (mode !== 'owner-only' && ownerUids.length > 0) throw new Error('Owner UIDs are permitted only in owner-only mode');
     }
     const configPath = oneValue(args, 'config') ?? REVIEWED_CONFIG_PATH;
+    const acceptUnverifiedProvenance = args.includes('--operator-accepted-provenance-risk');
+    if (acceptUnverifiedProvenance && (!args.includes('--execute-production-write') || mode !== 'public')) {
+        throw new Error('Operator provenance risk acceptance requires an explicit public production write');
+    }
     const recognized = new Set([
         `--project=${project}`, `--version=${version}`, `--${mode}`,
         ...(args.includes('--execute-production-write') ? ['--execute-production-write'] : []),
@@ -84,6 +89,7 @@ export function parseRuntimeArguments(args: readonly string[]): RuntimeOptions {
         ...(expectedPublic === undefined ? [] : [`--expected-public=${String(expectedPublic)}`]),
         ...values(args, 'owner-uid').map(uid => `--owner-uid=${uid}`),
         ...(oneValue(args, 'config') === undefined ? [] : [`--config=${configPath}`]),
+        ...(acceptUnverifiedProvenance ? ['--operator-accepted-provenance-risk'] : []),
     ]);
     const unknown = args.find(value => !recognized.has(value));
     if (unknown) throw new Error(`Unknown runtime configuration argument: ${unknown}`);
@@ -91,6 +97,7 @@ export function parseRuntimeArguments(args: readonly string[]): RuntimeOptions {
         project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, mode,
         execute: args.includes('--execute-production-write'), expectedMissing,
         expectedEnabled, expectedPublic, ownerUids, configPath,
+        acceptUnverifiedProvenance,
     };
 }
 
@@ -170,9 +177,9 @@ async function main(): Promise<void> {
         const provenance = JSON.parse(readFileSync(
             resolve(repositoryRoot, 'docs/noor-rag/corpus-provenance.json'), 'utf8',
         )) as unknown;
-        if (typeof provenance !== 'object' || provenance === null
+        if (!options.acceptUnverifiedProvenance && (typeof provenance !== 'object' || provenance === null
             || !('publicActivationApproved' in provenance)
-            || provenance.publicActivationApproved !== true) {
+            || provenance.publicActivationApproved !== true)) {
             throw new Error('Corpus provenance public activation is not approved');
         }
     }

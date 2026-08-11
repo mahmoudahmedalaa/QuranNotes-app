@@ -182,6 +182,20 @@ describe('Noor corpus activation', () => {
         assert.deepEqual(repository.activations, []);
     });
 
+    it('requires an explicit operator risk flag to activate unresolved provenance', async () => {
+        const options = parseActivationArguments([
+            `--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--expected-current=none',
+            '--execute-production-write', '--operator-accepted-provenance-risk',
+        ]);
+        assert.equal(options.acceptUnverifiedProvenance, true);
+        const repository = new FakeRepository();
+        await activateCorpus({
+            options, repository, expectedManifest: EXPECTED, publicActivationApproved: false,
+            probeIndex: async () => true,
+        });
+        assert.deepEqual(repository.activations, [LOCKED_CORPUS_VERSION]);
+    });
+
     it('rejects incomplete, failed, hash/count/model/dimension/budget mismatches and nonready sources', async () => {
         const mutations: unknown[] = [
             { ...MANIFEST, complete: false },

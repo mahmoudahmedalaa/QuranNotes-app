@@ -22,6 +22,7 @@ export interface ActivationOptions {
     version: typeof LOCKED_CORPUS_VERSION;
     expectedCurrent: string;
     execute: boolean;
+    acceptUnverifiedProvenance?: boolean;
 }
 
 export interface ExpectedManifest {
@@ -65,12 +66,17 @@ export function parseActivationArguments(args: readonly string[]): ActivationOpt
     const known = new Set([
         `--project=${project}`, `--version=${version}`, `--expected-current=${expectedCurrent}`,
         ...(args.includes('--execute-production-write') ? ['--execute-production-write'] : []),
+        ...(args.includes('--operator-accepted-provenance-risk') ? ['--operator-accepted-provenance-risk'] : []),
     ]);
     const unknown = args.find(value => !known.has(value));
     if (unknown) throw new Error(`Unknown corpus activation argument: ${unknown}`);
+    const acceptUnverifiedProvenance = args.includes('--operator-accepted-provenance-risk');
+    if (acceptUnverifiedProvenance && !args.includes('--execute-production-write')) {
+        throw new Error('Operator provenance risk acceptance requires an explicit production write');
+    }
     return {
         project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, expectedCurrent,
-        execute: args.includes('--execute-production-write'),
+        execute: args.includes('--execute-production-write'), acceptUnverifiedProvenance,
     };
 }
 
@@ -181,7 +187,7 @@ export async function activateCorpus(input: {
     publicActivationApproved: boolean;
     probeIndex(source: NoorSource): Promise<boolean>;
 }): Promise<{ dryRun: boolean; version: typeof LOCKED_CORPUS_VERSION }> {
-    if (!input.publicActivationApproved) {
+    if (!input.publicActivationApproved && !input.options.acceptUnverifiedProvenance) {
         throw new Error('Corpus provenance public activation is not approved');
     }
     assertExpectedManifest(input.expectedManifest, input.options.version);
@@ -311,7 +317,7 @@ async function main(): Promise<void> {
     const provenanceReadiness = inspectActivationProvenance(
         provenance, new Date().toISOString().slice(0, 10),
     );
-    if (!preflight && !provenanceReadiness.publicActivationApproved) {
+    if (!preflight && !provenanceReadiness.publicActivationApproved && !options.acceptUnverifiedProvenance) {
         throw new Error('Corpus provenance public activation is not approved');
     }
     const indexProbe = await createAdminIndexProbe(options);
