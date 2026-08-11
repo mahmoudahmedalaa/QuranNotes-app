@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import {
     buildCorpus,
     loadReviewedCorpusInputs,
+    promoteCorpusWithExactTokenCounts,
     serializeCorpusArtifact,
     type TokenCounter,
 } from '../../src/noor-rag/corpus';
@@ -13,7 +14,7 @@ import {
 } from '../../src/noor-rag/vertex-token-counter';
 
 const GENERATION_MODEL = 'gemini-3.5-flash-lite';
-const VERTEX_CHUNK_CONCURRENCY = 32;
+const VERTEX_LOCATION = 'global';
 const VERTEX_COUNTER_BATCH_SIZE = 32;
 const VERTEX_COUNTER_CONCURRENCY = 2;
 const VERTEX_COUNTER_TIMEOUT_MS = 30_000;
@@ -37,8 +38,8 @@ function localCounter(): TokenCounter {
 function vertexCounter(): TokenCounter {
     const project = process.env.GOOGLE_CLOUD_PROJECT;
     const location = process.env.GOOGLE_CLOUD_LOCATION;
-    if (!project || !location) {
-        throw new Error('Vertex counter mode requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION; refusing local approximation');
+    if (!project || location !== VERTEX_LOCATION) {
+        throw new Error(`Vertex counter mode requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION=${VERTEX_LOCATION}; refusing local approximation`);
     }
     const client = new GoogleGenAI({ vertexai: true, project, location });
     return createVertexBatchTokenCounter(
@@ -52,14 +53,9 @@ function vertexCounter(): TokenCounter {
     );
 }
 
-function selectedCounter(): TokenCounter {
+function selectedMode(): 'local' | 'vertex' {
     const mode = argument('counter');
-    if (mode === 'local') {
-        return localCounter();
-    }
-    if (mode === 'vertex') {
-        return vertexCounter();
-    }
+    if (mode === 'local' || mode === 'vertex') return mode;
     throw new Error('Explicit counter mode required: --counter=local or --counter=vertex');
 }
 
@@ -71,13 +67,15 @@ async function main(): Promise<void> {
     const repositoryRoot = resolve(__dirname, '../../../..');
     const functionsRoot = resolve(repositoryRoot, 'functions');
     const { sources } = loadReviewedCorpusInputs(repositoryRoot);
-    const tokenCounter = selectedCounter();
-    const artifacts = await buildCorpus({
+    const mode = selectedMode();
+    const localArtifacts = await buildCorpus({
         corpusVersion,
         sources,
-        tokenCounter,
-        chunkConcurrency: tokenCounter.mode === 'vertex-production' ? VERTEX_CHUNK_CONCURRENCY : undefined,
+        tokenCounter: localCounter(),
     });
+    const artifacts = mode === 'vertex'
+        ? await promoteCorpusWithExactTokenCounts(localArtifacts, vertexCounter(), VERTEX_LOCATION)
+        : localArtifacts;
     const outputDirectory = resolve(functionsRoot, '.generated/noor-corpus', corpusVersion);
     mkdirSync(outputDirectory, { recursive: true });
     writeFileSync(resolve(outputDirectory, 'units.json'), serializeCorpusArtifact(artifacts.units));

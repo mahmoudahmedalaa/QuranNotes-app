@@ -119,6 +119,11 @@ export interface CorpusManifest {
     chunkingVersion: typeof CHUNKING_VERSION;
     tokenizerMode: string;
     tokenizerModel: string;
+    tokenValidation?: {
+        method: 'vertex-compute-tokens-final-chunks';
+        location: string;
+        validatedChunkCount: number;
+    };
     targetTokens: number;
     hardMaxTokens: number;
     overlapTokens: number;
@@ -620,6 +625,46 @@ export async function buildCorpus(input: BuildCorpusInput): Promise<CorpusArtifa
             unitCount: units.length,
             chunkCount: chunks.length,
             lookupCount: lookups.length,
+            artifactSha256: hashes,
+            aggregateSha256: aggregateSha256(hashes),
+        },
+    };
+}
+
+export async function promoteCorpusWithExactTokenCounts(
+    artifacts: CorpusArtifacts,
+    tokenCounter: TokenCounter,
+    location: string,
+): Promise<CorpusArtifacts> {
+    if (artifacts.manifest.tokenizerMode !== 'local-deterministic'
+        || tokenCounter.mode !== 'vertex-production' || !tokenCounter.model || !location) {
+        throw new Error('Exact token promotion requires a local deterministic corpus and Vertex counter');
+    }
+    const counts = await Promise.all(artifacts.chunks.map(chunk => tokenCounter.countTokens(chunk.originalText)));
+    const chunks = artifacts.chunks.map((chunk, index) => {
+        const tokenCount = counts[index];
+        if (!Number.isSafeInteger(tokenCount) || tokenCount === undefined || tokenCount < 1) {
+            throw new Error(`Chunk ${chunk.chunkId} has an invalid exact token count`);
+        }
+        if (tokenCount > artifacts.manifest.hardMaxTokens) {
+            throw new Error(`Chunk ${chunk.chunkId} exceeds the hard maximum token count`);
+        }
+        return { ...chunk, tokenCount };
+    });
+    const hashes = artifactHashes(artifacts.units, chunks, artifacts.lookups);
+    return {
+        units: artifacts.units,
+        chunks,
+        lookups: artifacts.lookups,
+        manifest: {
+            ...artifacts.manifest,
+            tokenizerMode: 'vertex-validated-deterministic',
+            tokenizerModel: tokenCounter.model,
+            tokenValidation: {
+                method: 'vertex-compute-tokens-final-chunks',
+                location,
+                validatedChunkCount: chunks.length,
+            },
             artifactSha256: hashes,
             aggregateSha256: aggregateSha256(hashes),
         },

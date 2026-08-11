@@ -13,7 +13,7 @@ import {
     type RepositoryWrite,
 } from '../../scripts/noor-rag/ingest-corpus';
 
-function artifacts(tokenizerMode = 'vertex-production'): IngestArtifacts {
+function artifacts(tokenizerMode = 'vertex-validated-deterministic'): IngestArtifacts {
     return {
         units: [{
             canonicalUnitId: 'u_1', source: 'al_sadi_ar', sourceTitle: "Tafsir Al-Sa'di",
@@ -35,6 +35,11 @@ function artifacts(tokenizerMode = 'vertex-production'): IngestArtifacts {
             normalizationVersion: 'html-entities-nfc-whitespace-v1',
             chunkingVersion: 'raw-paragraph-sentence-900-1400-overlap-80-v1',
             tokenizerMode, tokenizerModel: 'gemini-3.5-flash-lite', targetTokens: 900,
+            ...(tokenizerMode === 'vertex-validated-deterministic' ? { tokenValidation: {
+                method: 'vertex-compute-tokens-final-chunks' as const,
+                location: 'global',
+                validatedChunkCount: 3,
+            } } : {}),
             hardMaxTokens: 1400, overlapTokens: 80, sourceCounts: [], unitCount: 1,
             chunkCount: 3, lookupCount: 1, artifactSha256: { units: 'u', chunks: 'c', lookups: 'l' },
             aggregateSha256: 'aggregate',
@@ -158,6 +163,7 @@ describe('Noor corpus ingestion', () => {
         many.manifest.unitCount = many.units.length;
         many.manifest.chunkCount = 0;
         many.manifest.lookupCount = 0;
+        many.manifest.tokenValidation!.validatedChunkCount = 0;
         const repository = new FakeRepository();
 
         const result = await ingestCorpus({

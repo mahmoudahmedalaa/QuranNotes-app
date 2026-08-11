@@ -125,9 +125,13 @@ function assertArtifactShape(artifacts: IngestArtifacts, version: string): void 
     }
 }
 
-function assertProductionArtifact(manifest: CorpusManifest): void {
-    if (manifest.tokenizerMode !== 'vertex-production' || manifest.tokenizerModel !== GENERATION_MODEL) {
-        throw new Error('Production ingestion requires a corpus rebuilt and validated with --counter=vertex');
+export function assertProductionArtifact(manifest: CorpusManifest): void {
+    if (manifest.tokenizerMode !== 'vertex-validated-deterministic'
+        || manifest.tokenizerModel !== GENERATION_MODEL
+        || manifest.tokenValidation?.method !== 'vertex-compute-tokens-final-chunks'
+        || manifest.tokenValidation.location !== VERTEX_LOCATION
+        || manifest.tokenValidation.validatedChunkCount !== manifest.chunkCount) {
+        throw new Error('Production ingestion requires an exact Vertex-validated deterministic corpus');
     }
 }
 
