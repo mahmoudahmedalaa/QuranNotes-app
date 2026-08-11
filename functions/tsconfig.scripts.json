@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "lib-scripts",
+        "rootDir": "."
+    },
+    "include": [
+        "src/noor-rag/**/*.ts",
+        "scripts/noor-rag/**/*.ts"
+    ],
+    "exclude": [
+        "scripts/embed_tafsir.ts"
+    ]
+}

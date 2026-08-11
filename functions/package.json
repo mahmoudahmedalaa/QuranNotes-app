@@ -2,7 +2,10 @@
     "name": "quran-notes-functions",
     "description": "Firebase Cloud Functions for QuranNotes security hardening",
     "scripts": {
-        "build": "tsc",
+        "build": "tsc -p tsconfig.json",
+        "build:test": "tsc -p tsconfig.test.json",
+        "test": "npm run build:test && node --test lib-test/test/noor-rag/*.test.js",
+        "contract:check": "node ../scripts/generate-noor-contract.js --check",
         "build:watch": "tsc --watch",
         "serve": "npm run build && firebase emulators:start --only functions",
         "shell": "npm run build && firebase functions:shell",
@@ -20,6 +23,8 @@
         "firebase-functions": "^5.0.0"
     },
     "devDependencies": {
+        "@modelcontextprotocol/sdk": "1.25.2",
+        "@types/node": "20.19.43",
         "typescript": "^5.0.0"
     },
     "private": true
