@@ -51,6 +51,7 @@ android/.gradle/
 # Firebase Cloud Functions
 functions/lib/
 functions/node_modules/
+functions/.generated/noor-corpus/
 .firebase/
 
 
