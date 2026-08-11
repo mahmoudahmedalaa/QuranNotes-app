@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+    NoorEntitlementUnavailableError,
     resolveNoorEntitlement,
     type EntitlementRepository,
     type FetchLike,
@@ -63,7 +64,45 @@ function input(repository: EntitlementRepository, fetcher: FetchLike, timeoutMs 
     };
 }
 
+async function expectUnavailable(action: () => Promise<unknown>): Promise<NoorEntitlementUnavailableError> {
+    try {
+        await action();
+    } catch (error: unknown) {
+        assert.ok(error instanceof NoorEntitlementUnavailableError);
+        return error;
+    }
+    assert.fail('Expected NoorEntitlementUnavailableError');
+}
+
 describe('Noor server entitlement resolution', () => {
+    it('distinguishes verified inactivity from provider uncertainty with a stable safe error', async () => {
+        const verifiedInactive = await resolveNoorEntitlement(input(
+            new FakeRepository(), async () => response(200, revenueCat()),
+        ));
+        assert.deepEqual(verifiedInactive, { class: 'none', expiresAt: null, source: 'revenuecat' });
+
+        const uncertaintyCases: ReadonlyArray<FetchLike> = [
+            async () => response(401, { secret: SECRET, uid: UID }),
+            async () => response(403, { secret: SECRET, uid: UID }),
+            async () => response(200, { subscriber: { entitlements: [] }, secret: SECRET }),
+            async () => { throw new TypeError(`${SECRET}:${UID}:provider-body`); },
+            async () => response(500, { secret: SECRET, uid: UID }),
+        ];
+        for (const fetcher of uncertaintyCases) {
+            const error = await expectUnavailable(
+                () => resolveNoorEntitlement(input(new FakeRepository(), fetcher)),
+            );
+            assert.equal(error.code, 'temporarily_unavailable');
+            assert.equal(error.message, 'Noor entitlement is temporarily unavailable');
+            const exposed = `${String(error)} ${JSON.stringify(error)}`;
+            assert.equal(exposed.includes(SECRET), false);
+            assert.equal(exposed.includes(UID), false);
+            assert.equal(exposed.includes('401'), false);
+            assert.equal(exposed.includes('403'), false);
+            assert.equal(exposed.includes('provider-body'), false);
+        }
+    });
+
     it('accepts active Monthly, Annual, Lifetime, and grace-period pro_access without product whitelists', async () => {
         const cases = [
             active('2026-09-11T12:00:00.000Z'),
@@ -154,8 +193,13 @@ describe('Noor server entitlement resolution', () => {
                 validUntil: '2026-08-11T11:59:59.000Z',
             },
         });
-        const result = await resolveNoorEntitlement(input(expired, async () => response(429, { secret: 'hidden' })));
-        assert.deepEqual(result, { class: 'none', expiresAt: null, source: 'revenuecat' });
+        await expectUnavailable(() => resolveNoorEntitlement(input(
+            expired,
+            (_url, init) => new Promise((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new Error('hidden')), { once: true });
+            }),
+            2,
+        )));
     });
 
     it('uses fresh cache for 429 and 5xx, but not for 401, 403, malformed provider data, or malformed cache', async () => {
@@ -172,23 +216,22 @@ describe('Noor server entitlement resolution', () => {
             assert.deepEqual(result, { class: 'paid', expiresAt: null, source: 'cache' });
         }
         for (const status of [401, 403]) {
-            const result = await resolveNoorEntitlement(input(
-                new FakeRepository(freshCache), async () => response(status, { private: 'body' }),
-            ));
-            assert.deepEqual(result, { class: 'none', expiresAt: null, source: 'revenuecat' });
+            const repository = new FakeRepository(freshCache);
+            await expectUnavailable(() => resolveNoorEntitlement(input(
+                repository, async () => response(status, { private: 'body' }),
+            )));
+            assert.equal(repository.reads.includes(`noorEntitlementCache/${UID}`), false);
         }
-        const malformedProvider = await resolveNoorEntitlement(input(
+        await expectUnavailable(() => resolveNoorEntitlement(input(
             new FakeRepository(freshCache), async () => response(200, { subscriber: { entitlements: [] } }),
-        ));
-        assert.deepEqual(malformedProvider, { class: 'none', expiresAt: null, source: 'revenuecat' });
+        )));
 
-        const malformedCache = await resolveNoorEntitlement(input(
+        await expectUnavailable(() => resolveNoorEntitlement(input(
             new FakeRepository({ [`noorEntitlementCache/${UID}`]: {
                 class: 'paid', expiresAt: null, cachedAt: '2026-08-11T12:00:00.000Z', validUntil: 'not-a-date',
             } }),
             async () => response(500, {}),
-        ));
-        assert.deepEqual(malformedCache, { class: 'none', expiresAt: null, source: 'revenuecat' });
+        )));
     });
 
     it('does not trust cache for non-timeout fetch failures or externally-originated aborts', async () => {
@@ -204,10 +247,9 @@ describe('Noor server entitlement resolution', () => {
         ];
         for (const failure of failures) {
             const repository = new FakeRepository(freshCache);
-            const result = await resolveNoorEntitlement(input(repository, async () => {
+            await expectUnavailable(() => resolveNoorEntitlement(input(repository, async () => {
                 throw failure;
-            }));
-            assert.deepEqual(result, { class: 'none', expiresAt: null, source: 'revenuecat' });
+            })));
             assert.equal(repository.reads.includes(`noorEntitlementCache/${UID}`), false);
         }
     });
@@ -249,17 +291,15 @@ describe('Noor server entitlement resolution', () => {
         ));
         assert.deepEqual(grandfathered, { class: 'grandfathered', expiresAt: null, source: 'server_record' });
 
-        const inactive = await resolveNoorEntitlement(input(new FakeRepository({
+        await expectUnavailable(() => resolveNoorEntitlement(input(new FakeRepository({
             [`noorGrandfathering/${UID}`]: { active: true, expiresAt: '2026-08-10T12:00:00.000Z' },
-        }), async () => response(500, {})));
-        assert.deepEqual(inactive, { class: 'none', expiresAt: null, source: 'revenuecat' });
+        }), async () => response(500, {}))));
     });
 
     it('fails safely on repository read failures and keeps freshly proven paid access on cache-write failure', async () => {
-        const safe = await resolveNoorEntitlement(input(
+        await expectUnavailable(() => resolveNoorEntitlement(input(
             new FakeRepository({}, true), async () => response(500, { raw: 'hidden' }),
-        ));
-        assert.deepEqual(safe, { class: 'none', expiresAt: null, source: 'revenuecat' });
+        )));
 
         const paid = await resolveNoorEntitlement(input(
             new FakeRepository({}, false, true), async () => response(200, revenueCat(active(null))),
@@ -297,7 +337,7 @@ describe('Noor server entitlement resolution', () => {
         const repository = new FakeRepository({
             [`users/${UID}/access`]: { active: true },
         });
-        await resolveNoorEntitlement(input(repository, async () => response(500, {})));
+        await expectUnavailable(() => resolveNoorEntitlement(input(repository, async () => response(500, {}))));
         assert.deepEqual(repository.reads, [
             `noorOwnerQa/${UID}`,
             `noorEntitlementCache/${UID}`,

@@ -12,6 +12,15 @@ export interface EntitlementDecision {
     source: 'revenuecat' | 'cache' | 'server_record';
 }
 
+export class NoorEntitlementUnavailableError extends Error {
+    readonly code = 'temporarily_unavailable' as const;
+
+    constructor() {
+        super('Noor entitlement is temporarily unavailable');
+        this.name = 'NoorEntitlementUnavailableError';
+    }
+}
+
 export interface EntitlementRepository {
     readDocument(path: string): Promise<unknown | null>;
     writeDocument(path: string, data: unknown): Promise<void>;
@@ -225,8 +234,8 @@ export async function resolveNoorEntitlement(
     if (grandfathered !== null) {
         return { class: 'grandfathered', expiresAt: grandfathered.expiresAt, source: 'server_record' };
     }
-    if (normalized?.class === 'none' && source === 'cache') {
-        return { class: 'none', expiresAt: null, source: 'cache' };
+    if (normalized?.class === 'none') {
+        return { class: 'none', expiresAt: null, source };
     }
-    return { class: 'none', expiresAt: null, source: 'revenuecat' };
+    throw new NoorEntitlementUnavailableError();
 }
