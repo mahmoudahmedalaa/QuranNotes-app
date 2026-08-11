@@ -50,12 +50,6 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
         description: 'Google Sign-In web client ID',
         critical: true,
     },
-    // AI Features
-    {
-        key: 'EXPO_PUBLIC_GEMINI_API_KEY',
-        description: 'Gemini/OpenAI API key (AI Tafsir)',
-        critical: false,
-    },
 ];
 
 /**

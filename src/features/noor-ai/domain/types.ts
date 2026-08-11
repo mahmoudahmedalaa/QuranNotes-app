@@ -3,6 +3,8 @@
  */
 
 /** A single message in a Noor AI conversation. */
+import { NoorCitation, NoorStatus } from './generatedContract';
+
 export interface NoorMessage {
     id: string;
     role: 'user' | 'noor';
@@ -12,6 +14,10 @@ export interface NoorMessage {
     verseContext?: VerseContext;
     /** Whether this response was served from cache */
     cached?: boolean;
+    citations?: NoorCitation[];
+    status?: NoorStatus;
+    requestId?: string;
+    nextResetAt?: string;
 }
 
 /** Verse context for contextual questions */

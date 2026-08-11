@@ -28,7 +28,6 @@
     "@10play/tentap-editor": "^1.0.1",
     "@bacons/apple-targets": "^4.0.3",
     "@expo/vector-icons": "^15.0.3",
-    "@google/generative-ai": "^0.24.1",
     "@jamsch/expo-speech-recognition": "^0.2.15",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",

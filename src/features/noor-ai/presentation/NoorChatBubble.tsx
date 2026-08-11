@@ -15,6 +15,7 @@ import Markdown from 'react-native-markdown-display';
 import { useRouter } from 'expo-router';
 import { NoorMessage } from '../domain/types';
 import { Spacing } from '../../../core/theme/DesignSystem';
+import NoorCitationList from './NoorCitationList';
 
 interface Props {
     message: NoorMessage;
@@ -155,6 +156,8 @@ export default function NoorChatBubble({ message, isLatest = false }: Props) {
                         >
                             {displayContent}
                         </Markdown>
+
+                        <NoorCitationList citations={message.citations ?? []} />
 
                         <Text
                             style={[

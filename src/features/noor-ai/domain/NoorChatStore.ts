@@ -8,6 +8,7 @@
  */
 
 import { NoorMessage, VerseContext } from './types';
+import { NoorAnswer } from './generatedContract';
 
 let _idCounter = 0;
 
@@ -33,14 +34,23 @@ export function createUserMessage(content: string, verseContext?: VerseContext):
 /**
  * Create a Noor response message.
  */
-export function createNoorMessage(content: string, cached = false, verseContext?: VerseContext): NoorMessage {
+export function createNoorMessage(
+    response: string | NoorAnswer,
+    cached = false,
+    verseContext?: VerseContext,
+): NoorMessage {
+    const metadata = typeof response === 'string' ? null : response;
     return {
         id: generateId(),
         role: 'noor',
-        content,
+        content: typeof response === 'string' ? response : response.answer,
         timestamp: Date.now(),
         verseContext,
         cached,
+        citations: metadata?.citations,
+        status: metadata?.status,
+        requestId: metadata?.requestId,
+        nextResetAt: metadata?.nextResetAt,
     };
 }
 
@@ -48,8 +58,6 @@ export function createNoorMessage(content: string, cached = false, verseContext?
  * Create the initial greeting message based on time of day.
  */
 export function createGreetingMessage(): NoorMessage {
-    const hour = new Date().getHours();
-
     const greeting = "Assalamu Alaikum! ✨ I'm Noor. How can I help you explore the Quran today?";
 
     return {

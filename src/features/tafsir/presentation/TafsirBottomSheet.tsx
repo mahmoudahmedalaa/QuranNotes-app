@@ -18,7 +18,6 @@ import {
     Modal,
     Pressable,
     ScrollView,
-    ActivityIndicator,
     Dimensions,
     KeyboardAvoidingView,
     Platform,
@@ -30,16 +29,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 
 import { Spacing, BorderRadius, Shadows } from '../../../core/theme/DesignSystem';
-import { getQuranFontFamily } from '../../../core/theme/QuranFonts';
-import { useSettings } from '../../settings/infrastructure/SettingsContext';
-import { usePro } from '../../auth/infrastructure/ProContext';
 
 import { TafsirSource, TafsirSheetData, DEFAULT_TAFSIR_SOURCE } from '../domain/types';
 import { getTafsirCommentary } from '../data/TafsirDataService';
 import { summarizeTafsir, askAboutVerse } from '../domain/TafsirService';
-import { canUseAI, incrementUsage, getRemainingUses } from '../domain/TafsirUsageService';
 import { SourcePicker } from './SourcePicker';
 import { AiQueryInput } from './AiQueryInput';
+import NoorCitationList from '../../noor-ai/presentation/NoorCitationList';
+import { NoorCitation } from '../../noor-ai/domain/generatedContract';
+import { getNoorStatusPresentation } from '../../noor-ai/domain/NoorStatusPresentation';
 
 const GOLD = '#D4A853';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -73,9 +71,6 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
     data,
 }) => {
     const theme = useTheme();
-    const { settings } = useSettings();
-    const quranFontFamily = getQuranFontFamily(settings.quranFont);
-
     // ── State ──
     const [source, setSource] = useState<TafsirSource>(DEFAULT_TAFSIR_SOURCE);
     const [rawCommentary, setRawCommentary] = useState<string | null>(null);
@@ -85,14 +80,13 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
     const [scholarOpen, setScholarOpen] = useState(false);
     const [scholarExpanded, setScholarExpanded] = useState(false);
     const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+    const [explanationCitations, setExplanationCitations] = useState<NoorCitation[]>([]);
+    const [answerCitations, setAnswerCitations] = useState<NoorCitation[]>([]);
     const [answerLoading, setAnswerLoading] = useState(false);
 
     // ── Paywall ──
-    const { isPro } = usePro();
     const router = useRouter();
     const [aiGated, setAiGated] = useState(false);
-    const [qaGated, setQaGated] = useState(false);
-    const [remainingExplanations, setRemainingExplanations] = useState(3);
 
     // Restore preferred source
     useEffect(() => {
@@ -111,6 +105,8 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
         setAiLoading(false);
         setAiFailed(false);
         setAiAnswer(null);
+        setExplanationCitations([]);
+        setAnswerCitations([]);
         setScholarOpen(false);
         setScholarExpanded(false);
 
@@ -118,68 +114,33 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
         const cleaned = result?.text ? cleanText(result.text) : null;
         setRawCommentary(cleaned);
 
-        if (cleaned) {
-            // Check free-tier usage before making AI call
-            (async () => {
-                if (__DEV__) console.log('[TafsirPaywall] isPro:', isPro);
-
-                const allowed = isPro || await canUseAI('explanation');
-                if (!isPro) {
-                    const usage = await getRemainingUses();
-                    if (__DEV__) console.log('[TafsirPaywall] Usage check:', {
-                        explanationsRemaining: usage.explanationsRemaining,
-                        allowed,
-                    });
-                    if (cancelled) return;
-                    setRemainingExplanations(usage.explanationsRemaining);
-                    setQaGated(!(await canUseAI('question')));
-                }
-                if (!allowed) {
-                    if (!cancelled) setAiGated(true);
-                    return;
-                }
-
-                // ── PRE-INCREMENT usage BEFORE making the AI call ──
-                // This ensures usage is always counted, even if the user
-                // closes the sheet before the AI response arrives.
-                if (!isPro) {
-                    await incrementUsage('explanation');
-                    if (__DEV__) console.log('[TafsirPaywall] Pre-incremented explanation usage');
-                }
-
+        (async () => {
+            setAiGated(false);
+            setAiLoading(true);
+            try {
+                const response = await summarizeTafsir(
+                    data.arabicText,
+                    data.translation,
+                    result?.text ?? '',
+                    source,
+                    data.surahName,
+                    data.surahNumber,
+                    data.verseNumber,
+                );
                 if (cancelled) return;
-                setAiGated(false);
-                setAiLoading(true);
-                try {
-                    const res = await summarizeTafsir(
-                        data.arabicText,
-                        data.translation,
-                        result!.text,
-                        source,
-                        data.surahName,
-                        data.surahNumber,
-                        data.verseNumber,
-                    );
-                    if (cancelled) return;
-                    setAiExplanation(res.answer);
-                    // Update remaining counter display
-                    if (!isPro) {
-                        const updated = await getRemainingUses();
-                        if (!cancelled) {
-                            setRemainingExplanations(updated.explanationsRemaining);
-                            setQaGated(!(await canUseAI('question')));
-                        }
-                    }
-                } catch {
-                    if (!cancelled) setAiFailed(true);
-                } finally {
-                    if (!cancelled) setAiLoading(false);
-                }
-            })();
-        }
+                const presentation = getNoorStatusPresentation(response);
+                setAiExplanation(response.status === 'answered' ? response.answer : presentation.message);
+                setExplanationCitations(response.citations);
+                setAiGated(presentation.action === 'paywall');
+            } catch {
+                if (!cancelled) setAiFailed(true);
+            } finally {
+                if (!cancelled) setAiLoading(false);
+            }
+        })();
 
         return () => { cancelled = true; };
-    }, [visible, data, source, isPro]);
+    }, [visible, data, source]);
 
     const handleSourceChange = useCallback((newSource: TafsirSource) => {
         setSource(newSource);
@@ -189,19 +150,6 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
     const handleAskQuestion = useCallback(
         async (question: string) => {
             if (!data) return;
-
-            // Check Q&A free-tier usage
-            if (!isPro) {
-                const allowed = await canUseAI('question');
-                if (__DEV__) console.log('[TafsirPaywall] Q&A check:', { allowed, isPro });
-                if (!allowed) {
-                    router.push('/paywall?reason=ai-tafsir' as any);
-                    return;
-                }
-                // Pre-increment Q&A usage BEFORE making the call
-                await incrementUsage('question');
-                if (__DEV__) console.log('[TafsirPaywall] Pre-incremented Q&A usage');
-            }
 
             setAnswerLoading(true);
             try {
@@ -215,18 +163,17 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                     data.surahNumber,
                     data.verseNumber,
                 );
-                setAiAnswer(result.answer);
-                // Update gated status for display
-                if (!isPro) {
-                    setQaGated(true);
-                }
+                const presentation = getNoorStatusPresentation(result);
+                setAiAnswer(result.status === 'answered' ? result.answer : presentation.message);
+                setAnswerCitations(result.citations);
+                if (presentation.action === 'paywall') router.push('/paywall?reason=ai-tafsir' as never);
             } catch {
                 setAiAnswer('Unable to answer right now. Please try again.');
             } finally {
                 setAnswerLoading(false);
             }
         },
-        [data, rawCommentary, source, isPro, router],
+        [data, rawCommentary, source, router],
     );
 
     // Truncated scholar text
@@ -317,7 +264,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                                             color={GOLD}
                                         />
                                         <Text style={[styles.gatedTitle, { color: theme.colors.onSurface }]}>
-                                            You{"'"}ve used all 3 free AI explanations today
+                                            Noor AI is available with Pro access
                                         </Text>
                                         <Text style={[styles.gatedSubtitle, { color: theme.colors.onSurfaceVariant }]}>
                                             Upgrade to Pro for Noor AI & Quran Explanations
@@ -330,7 +277,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                                             <Text style={styles.unlockButtonText}>Explore Pro Access</Text>
                                         </Pressable>
                                         <Text style={[styles.gatedReset, { color: theme.colors.onSurfaceVariant }]}>
-                                            Resets tomorrow
+                                            Includes up to 50 successful AI answers per UTC day.
                                         </Text>
                                     </View>
                                 ) : aiLoading ? (
@@ -369,14 +316,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                                         <Text style={[styles.explanationText, { color: theme.colors.onSurface }]}>
                                             {aiExplanation}
                                         </Text>
-                                        {!isPro && (
-                                            <Text style={[styles.remainingText, { color: theme.colors.onSurfaceVariant }]}>
-                                                {remainingExplanations > 0
-                                                    ? `${remainingExplanations} free explanation${remainingExplanations !== 1 ? 's' : ''} remaining today`
-                                                    : 'No free explanations remaining today'
-                                                }
-                                            </Text>
-                                        )}
+                                        <NoorCitationList citations={explanationCitations} />
                                     </MotiView>
                                 ) : rawCommentary ? (
                                     /* AI failed — show cleaned raw text as fallback */
@@ -492,6 +432,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                                             <Text style={[styles.explanationText, { color: theme.colors.onSurface }]}>
                                                 {aiAnswer}
                                             </Text>
+                                            <NoorCitationList citations={answerCitations} />
                                         </MotiView>
                                     </>
                                 )}

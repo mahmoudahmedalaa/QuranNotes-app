@@ -30,13 +30,6 @@ async function runWithLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Generate a unique conversation ID.
- */
-function generateId(): string {
-    return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/**
  * Auto-generate a title from the first user message.
  */
 function generateTitle(messages: NoorMessage[], verseContext?: VerseContext): string {
@@ -147,14 +140,14 @@ export async function saveConversation(
  * Load all conversations (newest first).
  * Returns metadata only (messages are truncated to save memory).
  */
-export async function loadConversations(): Promise<Array<{
+export async function loadConversations(): Promise<{
     id: string;
     title: string;
     messageCount: number;
     lastMessage: string;
     updatedAt: number;
     verseContext?: VerseContext;
-}>> {
+}[]> {
     const conversations = await loadAllRaw();
     return conversations.map(c => {
         const lastMsg = c.messages[c.messages.length - 1];

@@ -36,6 +36,10 @@ export interface AiQueryResult {
     answer: string;
     /** Whether this came from cache */
     cached: boolean;
+    status: import('../../noor-ai/domain/generatedContract').NoorStatus;
+    citations: import('../../noor-ai/domain/generatedContract').NoorCitation[];
+    requestId: string;
+    nextResetAt?: string;
 }
 
 /** Props for the TafsirBottomSheet component */

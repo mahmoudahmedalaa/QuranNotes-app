@@ -6,11 +6,10 @@
  *  - Premium gradient chat bubbles
  *  - Card-style suggestion chips with icons
  *  - Frosted glass input bar
- *  - Smart error handling (403/429/network)
- *  - Free/Pro usage gating
+ *  - Typed, safe backend states and cited answers
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
     View,
     StyleSheet,
@@ -24,7 +23,6 @@ import {
 import { Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { MotiView } from 'moti';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,41 +37,34 @@ import {
     createVerseGreetingMessage,
 } from '../domain/NoorChatStore';
 import {
-    canSendMessage,
-    recordMessageSent,
-    getRemainingMessages,
-    DAILY_LIMIT,
-} from '../domain/NoorUsageService';
-import {
     saveConversation,
     loadConversation,
 } from '../domain/NoorConversationHistory';
-import { usePro } from '../../auth/infrastructure/ProContext';
+import { getNoorStatusPresentation } from '../domain/NoorStatusPresentation';
 
 import NoorChatBubble from './NoorChatBubble';
 import NoorTypingIndicator from './NoorTypingIndicator';
 import NoorSuggestionChips from './NoorSuggestionChips';
 import NoorConversationList from './NoorConversationList';
-import { Spacing, BorderRadius } from '../../../core/theme/DesignSystem';
+import { Spacing } from '../../../core/theme/DesignSystem';
 
 export default function NoorAIScreen() {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const { isPro } = usePro();
     const params = useLocalSearchParams() as unknown as NoorAIParams;
 
     // ── State ──
     const [messages, setMessages] = useState<NoorMessage[]>([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [remainingMsgs, setRemainingMsgs] = useState(DAILY_LIMIT);
+    const [transientError, setTransientError] = useState<string | null>(null);
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [showHistory, setShowHistory] = useState(false);
     const flatListRef = useRef<FlatList>(null);
 
     // ── Build verse context from params ──
-    const verseContext: VerseContext | undefined =
+    const verseContext: VerseContext | undefined = useMemo(() => (
         params.surahNumber && params.verseNumber
             ? {
                 surahNumber: parseInt(params.surahNumber, 10),
@@ -82,7 +73,8 @@ export default function NoorAIScreen() {
                 arabicText: params.arabicText,
                 translation: params.translation,
             }
-            : undefined;
+            : undefined
+    ), [params.arabicText, params.surahName, params.surahNumber, params.translation, params.verseNumber]);
 
     // ── Initialize: load existing conversation or create greeting ──
     useEffect(() => {
@@ -93,10 +85,6 @@ export default function NoorAIScreen() {
                 if (conv) {
                     setMessages(conv.messages);
                     setConversationId(conv.id);
-                    if (!isPro) {
-                        const remaining = await getRemainingMessages();
-                        setRemainingMsgs(remaining);
-                    }
                     return;
                 }
             }
@@ -106,10 +94,6 @@ export default function NoorAIScreen() {
                 ? createVerseGreetingMessage(verseContext)
                 : createGreetingMessage();
             setMessages([greeting]);
-
-            if (!isPro) {
-                getRemainingMessages().then(setRemainingMsgs);
-            }
 
             // If an initial question was passed, auto-send it
             if (params.initialQuestion) {
@@ -142,21 +126,9 @@ export default function NoorAIScreen() {
             const text = (textOverride || inputText).trim();
             if (!text || isLoading) return;
 
-            // Usage check for free users
-            if (!isPro) {
-                const allowed = await canSendMessage();
-                if (!allowed) {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    const nudge = createNoorMessage(
-                        `You've used all ${DAILY_LIMIT} free messages today. Upgrade to **Pro** for unlimited Noor AI conversations! 🌟`,
-                    );
-                    setMessages((prev) => [...prev, nudge]);
-                    return;
-                }
-            }
-
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             Keyboard.dismiss();
+            setTransientError(null);
 
             // Add user message
             const userMsg = createUserMessage(text, verseContext);
@@ -170,47 +142,28 @@ export default function NoorAIScreen() {
             try {
                 const history = [...messages, userMsg].filter((m) => m.role !== 'noor' || messages.indexOf(m) > 0);
                 const response = await askNoor(text, history, undefined, verseContext);
-
-                const noorMsg = createNoorMessage(response.answer, response.cached, verseContext);
+                const presentation = getNoorStatusPresentation(response);
+                const safeResponse = response.status === 'answered'
+                    ? response
+                    : { ...response, answer: presentation.message };
+                const noorMsg = createNoorMessage(safeResponse, false, verseContext);
                 const updatedMessages = [...messages, userMsg, noorMsg];
                 setMessages(updatedMessages);
 
                 // Persist conversation
                 const savedId = await saveConversation(conversationId, updatedMessages, verseContext);
                 if (!conversationId) setConversationId(savedId);
-
-                // Record usage for free users
-                if (!isPro) {
-                    await recordMessageSent();
-                    const remaining = await getRemainingMessages();
-                    setRemainingMsgs(remaining);
+                if (presentation.action === 'paywall') {
+                    router.push('/paywall?reason=noor-ai' as never);
                 }
-            } catch (e: any) {
-                const msg = (e?.message || '').toLowerCase();
-                let errorText: string;
-
-                if (msg.includes('403') || msg.includes('permission') || msg.includes('forbidden')) {
-                    errorText =
-                        'The AI service isn\'t configured yet. Please enable **Gemini Developer API** in your Firebase Console under Build → AI Logic. 🔧';
-                } else if (msg.includes('429') || msg.includes('quota') || msg.includes('rate limit')) {
-                    errorText =
-                        'I\'m getting a lot of questions right now! Please wait a moment and try again. 🤲';
-                } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) {
-                    errorText =
-                        'It looks like you\'re offline. Please check your internet connection and try again. 📡';
-                } else {
-                    errorText =
-                        'I had trouble connecting. Please try again in a moment. 🤲';
-                }
-
-                const errorMsg = createNoorMessage(errorText);
-                setMessages((prev) => [...prev, errorMsg]);
+            } catch {
+                setTransientError('Noor is temporarily unavailable. Your message was not sent. Please try again.');
             } finally {
                 setIsLoading(false);
                 setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
             }
         },
-        [inputText, isLoading, isPro, messages, verseContext, conversationId],
+        [inputText, isLoading, messages, verseContext, conversationId, router],
     );
 
     // ── Derived: can send ──
@@ -316,28 +269,6 @@ export default function NoorAIScreen() {
                             />
                         </Pressable>
 
-                        {/* Usage badge for free users */}
-                        {!isPro && (
-                            <View
-                                style={[
-                                    styles.usageBadge,
-                                    {
-                                        backgroundColor: theme.dark
-                                            ? 'rgba(167, 139, 250, 0.12)'
-                                            : 'rgba(98, 70, 234, 0.08)',
-                                    },
-                                ]}
-                            >
-                                <Text
-                                    style={[
-                                        styles.usageText,
-                                        { color: theme.colors.primary },
-                                    ]}
-                                >
-                                    {remainingMsgs}/{DAILY_LIMIT}
-                                </Text>
-                            </View>
-                        )}
                     </View>
                 </View>
             </View>
@@ -377,6 +308,17 @@ export default function NoorAIScreen() {
                         </>
                     }
                 />
+
+                {transientError && (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Retry sending your Noor question"
+                        onPress={() => handleSend(messages.filter((message) => message.role === 'user').at(-1)?.content)}
+                        style={styles.transientError}
+                    >
+                        <Text style={{ color: theme.colors.error }}>{transientError}</Text>
+                    </Pressable>
+                )}
 
                 {/* ── Premium Input Bar ── */}
                 <View
@@ -541,6 +483,12 @@ const styles = StyleSheet.create({
     usageText: {
         fontSize: 12,
         fontWeight: '700',
+    },
+    transientError: {
+        minHeight: 44,
+        justifyContent: 'center',
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.sm,
     },
     // ── Chat ──
     chatArea: {
