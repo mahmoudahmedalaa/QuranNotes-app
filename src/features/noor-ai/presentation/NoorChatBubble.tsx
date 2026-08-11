@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { NoorMessage } from '../domain/types';
 import { Spacing } from '../../../core/theme/DesignSystem';
 import NoorCitationList from './NoorCitationList';
+import { getNoorSupportMetadata } from '../domain/NoorStatusPresentation';
 
 interface Props {
     message: NoorMessage;
@@ -39,6 +40,7 @@ export default function NoorChatBubble({ message, isLatest = false }: Props) {
     };
 
     const displayContent = isUser ? message.content : processQuranCitations(message.content);
+    const supportMetadata = getNoorSupportMetadata(message);
 
     return (
         <MotiView
@@ -159,6 +161,15 @@ export default function NoorChatBubble({ message, isLatest = false }: Props) {
 
                         <NoorCitationList citations={message.citations ?? []} />
 
+                        {supportMetadata && (
+                            <Text
+                                accessibilityLabel={supportMetadata}
+                                style={[styles.supportMetadata, { color: theme.colors.onSurfaceVariant }]}
+                            >
+                                {`Status: ${message.status?.replaceAll('_', ' ')} · Ref: ${message.requestId?.slice(0, 8)}`}
+                            </Text>
+                        )}
+
                         <Text
                             style={[
                                 styles.noorTimestamp,
@@ -277,5 +288,10 @@ const styles = StyleSheet.create({
         fontSize: 10,
         marginTop: 4,
         alignSelf: 'flex-end',
+    },
+    supportMetadata: {
+        fontSize: 9,
+        marginTop: 8,
+        opacity: 0.75,
     },
 });

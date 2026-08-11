@@ -1,3 +1,5 @@
+import { nativeAppCheckTokenProvider } from './NativeAppCheckProvider';
+
 export interface AppCheckTokenProvider {
     initialize(environment: 'development' | 'production'): Promise<void>;
     getToken(forceRefresh?: boolean): Promise<string>;
@@ -14,10 +16,10 @@ export class AppCheckError extends Error {
     }
 }
 
-let provider: AppCheckTokenProvider | null = null;
+let provider: AppCheckTokenProvider | null = nativeAppCheckTokenProvider;
 let initializationPromise: Promise<void> | null = null;
 
-export function configureAppCheckProvider(nextProvider: AppCheckTokenProvider): void {
+export function configureAppCheckProvider(nextProvider: AppCheckTokenProvider | null): void {
     provider = nextProvider;
     initializationPromise = null;
 }
@@ -48,6 +50,6 @@ export async function getQuranNotesAppCheckToken(forceRefresh = false): Promise<
 }
 
 export function resetAppCheckForTests(): void {
-    provider = null;
+    provider = nativeAppCheckTokenProvider;
     initializationPromise = null;
 }

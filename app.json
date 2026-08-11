@@ -30,6 +30,7 @@
         ]
       },
       "entitlements": {
+        "com.apple.developer.devicecheck.appattest-environment": "production",
         "com.apple.security.application-groups": [
           "group.com.mahmoudahmedalaa.qurannotes"
         ]
@@ -74,6 +75,21 @@
         }
       ],
       "@bacons/apple-targets",
+      "@react-native-firebase/app",
+      "@react-native-firebase/app-check",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static",
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBAppCheck"
+            ]
+          }
+        }
+      ],
       "./plugins/widget-infoplist-fix"
     ],
     "scheme": [

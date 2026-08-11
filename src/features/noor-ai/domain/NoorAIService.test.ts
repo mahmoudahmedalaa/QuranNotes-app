@@ -2,6 +2,9 @@ import { createNoorAIService } from './NoorAIService';
 import { NoorAnswer } from './generatedContract';
 
 jest.mock('../../../core/firebase/config', () => ({ auth: { currentUser: null } }));
+jest.mock('../../../core/firebase/AppCheckService', () => ({
+    getQuranNotesAppCheckToken: jest.fn(async () => 'app-check-token'),
+}));
 
 describe('NoorAIService', () => {
     it('sends bounded history and preserves the typed answer', async () => {

@@ -2,6 +2,9 @@ import { createNoorRemoteService } from './NoorRemoteService';
 import { NoorRequest } from '../domain/generatedContract';
 
 jest.mock('../../../core/firebase/config', () => ({ auth: { currentUser: null } }));
+jest.mock('../../../core/firebase/AppCheckService', () => ({
+    getQuranNotesAppCheckToken: jest.fn(async () => 'app-check-token'),
+}));
 
 const request: NoorRequest = {
     mode: 'chat',
@@ -59,6 +62,12 @@ describe('NoorRemoteService', () => {
         { result: answer, extra: true },
         { result: { ...answer, status: 'made_up' } },
         { result: { ...answer, requestId: '550e8400-e29b-41d4-a716-446655440001' } },
+        { result: { ...answer, answer: '' } },
+        { result: { ...answer, answer: 'a'.repeat(10_001) } },
+        { result: { ...answer, citations: [{ chunkId: '', canonicalUnitId: 'u1', source: 'al_sadi_ar', sourceTitle: 'Al-Sadi', surah: 1, verseStart: 1, verseEnd: 1, corpusVersion: 'v1' }] } },
+        { result: { ...answer, citations: [{ chunkId: 'c1', canonicalUnitId: 'u1', source: 'al_sadi_ar', sourceTitle: 'Al-Sadi', surah: 1, verseStart: 1, verseEnd: 1, corpusVersion: 'v1', extra: true }] } },
+        { result: { ...answer, citations: [{ chunkId: 'c1', canonicalUnitId: 'u1', source: 'al_sadi_ar', sourceTitle: 'Al-Sadi', surah: 1, verseStart: 8, verseEnd: 8, corpusVersion: 'v1' }] } },
+        { result: { ...answer, status: 'quota_exceeded', nextResetAt: '2026-02-30T00:00:00Z' } },
         { error: { message: 'secret provider detail' } },
     ])('rejects malformed or error envelopes without leaking details', async (envelope) => {
         const service = createNoorRemoteService({

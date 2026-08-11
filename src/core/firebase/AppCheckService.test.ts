@@ -4,6 +4,13 @@ import {
     resetAppCheckForTests,
 } from './AppCheckService';
 
+jest.mock('./NativeAppCheckProvider', () => ({
+    nativeAppCheckTokenProvider: {
+        initialize: jest.fn(async () => undefined),
+        getToken: jest.fn(async () => 'native-app-check-token'),
+    },
+}));
+
 describe('AppCheckService', () => {
     afterEach(() => resetAppCheckForTests());
 
@@ -19,6 +26,7 @@ describe('AppCheckService', () => {
     });
 
     it('fails closed when no provider has been configured', async () => {
+        configureAppCheckProvider(null);
         await expect(getQuranNotesAppCheckToken()).rejects.toMatchObject({ code: 'app_check_unavailable' });
     });
 });

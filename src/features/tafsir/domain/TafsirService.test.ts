@@ -1,6 +1,9 @@
 import { createTafsirService } from './TafsirService';
 
 jest.mock('../../../core/firebase/config', () => ({ auth: { currentUser: null } }));
+jest.mock('../../../core/firebase/AppCheckService', () => ({
+    getQuranNotesAppCheckToken: jest.fn(async () => 'app-check-token'),
+}));
 
 describe('TafsirService', () => {
     it.each([

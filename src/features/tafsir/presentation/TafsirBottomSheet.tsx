@@ -151,6 +151,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
         async (question: string) => {
             if (!data) return;
 
+            setAnswerCitations([]);
             setAnswerLoading(true);
             try {
                 const result = await askAboutVerse(
@@ -168,6 +169,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
                 setAnswerCitations(result.citations);
                 if (presentation.action === 'paywall') router.push('/paywall?reason=ai-tafsir' as never);
             } catch {
+                setAnswerCitations([]);
                 setAiAnswer('Unable to answer right now. Please try again.');
             } finally {
                 setAnswerLoading(false);

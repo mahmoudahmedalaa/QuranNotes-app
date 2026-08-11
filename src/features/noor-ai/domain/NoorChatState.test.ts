@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNoorMessage } from './NoorChatStore';
 import { loadConversation, saveConversation } from './NoorConversationHistory';
-import { getNoorStatusPresentation } from './NoorStatusPresentation';
+import { getNoorStatusPresentation, getNoorSupportMetadata } from './NoorStatusPresentation';
 
 describe('Noor chat response state', () => {
     beforeEach(() => (AsyncStorage.clear as jest.Mock)());
@@ -42,5 +42,12 @@ describe('Noor chat response state', () => {
             status: 'quota_exceeded',
             nextResetAt: '2026-08-12T00:00:00.000Z',
         }).message).toContain('12 Aug 2026');
+    });
+
+    it('exposes status and request ID as concise support metadata', () => {
+        expect(getNoorSupportMetadata({
+            status: 'answered',
+            requestId: '550e8400-e29b-41d4-a716-446655440000',
+        })).toBe('Status: answered · Request: 550e8400-e29b-41d4-a716-446655440000');
     });
 });
