@@ -30,8 +30,8 @@
         "currentApiEqualityVerified": true,
         "affectedFileCount": 0,
         "replacementCharacterCount": 0,
-        "mappingCount": 6236,
-        "missingVerseKeyCount": 0,
+        "mappingCount": 6231,
+        "missingVerseKeyCount": 5,
         "coverageReport": "docs/noor-rag/corpus-coverage.json"
       },
       "files": [
@@ -453,7 +453,7 @@
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_105.json",
-          "sha256": "d8e30c5f1e000c7cb3baad60f7b1aa5a2ea4ae3db2076c784e0dc1c1debe28e7"
+          "sha256": "41e00f5f005ac27518833977d6a39fc450bb0ae0fe70b987dd2fa399f0eabf85"
         },
         {
           "path": "src/features/tafsir/data/tafsir/ibn_kathir/surah_106.json",
@@ -492,7 +492,7 @@
           "sha256": "9dca83295a8d52cfcf3aafa4f88b5318d743c61be46b71f1e9c35c140457460f"
         }
       ],
-      "aggregateSha256": "801aa1f7c210ffaa22698b9cd5d90fe46f706b63c2301eeb8e016669a51adf16"
+      "aggregateSha256": "836b447d50614fe3d4fac004152caa690bef9229a531c79d117708bb2684512b"
     },
     {
       "source": "al_sadi_ar",

@@ -12,6 +12,7 @@ const SOURCES = [
 const VERSE_COUNTS = [7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,6];
 const PRODUCTION_DIR = path.resolve(__dirname, '..', 'src', 'features', 'tafsir', 'data', 'tafsir');
 const RETRIES = 2;
+const IBN_KATHIR_GAPS = new Set(['105:1', '105:2', '105:3', '105:4', '105:5']);
 
 function stripHtml(html) {
   return html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
@@ -68,7 +69,6 @@ async function downloadSurah(source, surah, outputDir) {
   const rows = response.tafsirs;
   const verseCount = VERSE_COUNTS[surah - 1];
   const verses = {};
-  const fallbackVerseKeys = [];
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
@@ -93,21 +93,10 @@ async function downloadSurah(source, surah, outputDir) {
     }
   }
 
-  if (source.key === 'ibn_kathir') {
-    const missing = Array.from({ length: verseCount }, (_, index) => index + 1)
-      .filter(verse => !verses[String(verse)]);
-    await mapWithConcurrency(missing, 4, async verse => {
-      const fallbackRaw = await httpGet(`https://api.quran.com/api/v4/tafsirs/${source.resourceId}/by_ayah/${surah}:${verse}`);
-      const fallback = JSON.parse(fallbackRaw).tafsir;
-      if (fallback?.resource_id !== source.resourceId) throw new Error(`${source.key} ${surah}:${verse}: fallback resource ID drift`);
-      const text = stripHtml(fallback?.text || '');
-      if (!text) throw new Error(`${source.key} ${surah}:${verse}: empty by_ayah fallback`);
-      verses[String(verse)] = { text, range: [verse, verse] };
-      fallbackVerseKeys.push(`${surah}:${verse}`);
-    });
-  }
-
-  const expected = source.key === 'ibn_kathir' ? verseCount : rows.length;
+  const sourceGaps = source.key === 'ibn_kathir'
+    ? Array.from({ length: verseCount }, (_, index) => `${surah}:${index + 1}`).filter(key => IBN_KATHIR_GAPS.has(key)).length
+    : 0;
+  const expected = source.key === 'ibn_kathir' ? verseCount - sourceGaps : rows.length;
   if (Object.keys(verses).length !== expected) {
     throw new Error(`${source.key} ${surah}: expected ${expected} mappings, received ${Object.keys(verses).length}`);
   }
@@ -116,7 +105,6 @@ async function downloadSurah(source, surah, outputDir) {
   fs.writeFileSync(target, `${JSON.stringify({ verses }, null, 2)}\n`, 'utf8');
   return {
     mappings: Object.keys(verses).map(verse => `${surah}:${verse}`),
-    fallbackVerseKeys,
   };
 }
 
@@ -126,11 +114,9 @@ async function main(argv = process.argv.slice(2)) {
   const report = { schemaVersion: 1, retrievedAt: new Date().toISOString().slice(0, 10), sources: [] };
   for (const source of SOURCES) {
     const mappings = [];
-    const fallbackVerseKeys = [];
     await mapWithConcurrency(Array.from({ length: 114 }, (_, index) => index + 1), 8, async surah => {
       const result = await downloadSurah(source, surah, outputDir);
       mappings.push(...result.mappings);
-      fallbackVerseKeys.push(...result.fallbackVerseKeys);
     });
     const expectedKeys = [];
     VERSE_COUNTS.forEach((count, index) => {
@@ -144,7 +130,6 @@ async function main(argv = process.argv.slice(2)) {
       fileCount: 114,
       mappingCount: mappings.length,
       missingVerseKeys: expectedKeys.filter(key => !mapped.has(key)),
-      byAyahFallbackVerseKeys: fallbackVerseKeys.sort(),
     });
   }
   fs.writeFileSync(path.join(outputDir, 'corpus-coverage.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');

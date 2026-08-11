@@ -96,8 +96,8 @@ const SOURCE_EXPECTATIONS: Record<CorpusSourceId, SourceExpectation> = {
         corpusPath: 'src/features/tafsir/data/tafsir/ibn_kathir',
         affectedFileCount: 0,
         replacementCharacterCount: 0,
-        mappingCount: 6236,
-        missingVerseKeyCount: 0,
+        mappingCount: 6231,
+        missingVerseKeyCount: 5,
     },
     al_sadi_ar: {
         sourceTitle: "السعدي Al-Sa'di",

@@ -7,9 +7,8 @@
       "sourceTitle": "Ibn Kathir (Abridged)",
       "resourceId": 169,
       "fileCount": 114,
-      "mappingCount": 6236,
-      "missingVerseKeys": [],
-      "byAyahFallbackVerseKeys": [
+      "mappingCount": 6231,
+      "missingVerseKeys": [
         "105:1",
         "105:2",
         "105:3",
@@ -83,8 +82,7 @@
         "91:8",
         "96:10",
         "109:4"
-      ],
-      "byAyahFallbackVerseKeys": []
+      ]
     }
   ]
 }
