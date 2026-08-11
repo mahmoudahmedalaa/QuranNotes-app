@@ -9,6 +9,8 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
+export { askNoorRagV1 } from "./noor-rag/callable";
+
 admin.initializeApp();
 const db = admin.firestore();
 

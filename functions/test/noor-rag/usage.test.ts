@@ -12,6 +12,7 @@ import {
     finalizeAnswered,
     finalizeNonAnswer,
     nextUtcResetIso,
+    readCompletedReplay,
     type UsageRepository,
     type UsageTransaction,
 } from '../../src/noor-rag/usage';
@@ -87,6 +88,17 @@ function answer(status: NoorStatus, requestId = REQUEST_ID): NoorAnswer {
 }
 
 describe('Noor transactional usage and idempotency', () => {
+    it('reads only a valid unexpired completed replay', () => {
+        const response = answer('answered');
+        const completed = {
+            status: 'completed', finalizedBy: 'owner', response,
+            responseExpiresAtMs: NOW_MS + 1_000,
+            expiresAt: { toMillis: () => NOW_MS + 1_000 },
+        };
+        assert.deepEqual(readCompletedReplay(completed, () => new Date(NOW_MS)), response);
+        assert.equal(readCompletedReplay(completed, () => new Date(NOW_MS + 1_000)), null);
+        assert.throws(() => readCompletedReplay({ ...completed, response: { raw: 'secret' } }, () => new Date(NOW_MS)), /Invalid Noor usage state/);
+    });
     it('resamples the clock for transaction retries and recomputes the UTC daily path', async () => {
         const pendingRepository = new RetryingMemoryRepository((documents) => {
             documents.set(`noorIdempotency/${UID}_${REQUEST_ID}`, {

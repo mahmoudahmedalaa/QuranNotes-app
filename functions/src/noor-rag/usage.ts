@@ -262,6 +262,13 @@ function parseIdempotency(value: unknown, nowMs: number): IdempotencyState | nul
     return invalidState();
 }
 
+export function readCompletedReplay(value: unknown, clock?: () => Date): NoorAnswer | null {
+    const nowMs = nowFrom(clock).getTime();
+    const state = parseIdempotency(value, nowMs);
+    if (state === null || state.status === 'pending' || state.responseExpiresAtMs <= nowMs) return null;
+    return state.response;
+}
+
 function paths(uid: string, requestId: string, dateUtc: string): { daily: string; rate: string; idempotency: string } {
     return {
         daily: `noorUsage/${uid}_${dateUtc}`,
