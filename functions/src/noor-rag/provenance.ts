@@ -69,6 +69,10 @@ export interface ProvenanceValidationResult {
     manifest?: CorpusProvenanceManifest;
 }
 
+export interface ProvenanceValidationOptions {
+    currentUtcDate: string;
+}
+
 interface SourceExpectation {
     sourceTitle: string;
     language: CorpusLanguage;
@@ -162,6 +166,7 @@ function isHttpsUrl(value: string): boolean {
 
 function parseRedistributionBasis(
     input: unknown,
+    currentUtcDate: string,
     context: string,
     errors: string[],
 ): RedistributionBasis | undefined {
@@ -185,8 +190,11 @@ function parseRedistributionBasis(
     } else if (reference !== DEVELOPER_TERMS_URL) {
         errors.push(`${context}.reference must identify the official Quran Foundation developer terms`);
     }
-    if (!isValidIsoDate(termsLastUpdated)) {
+    const termsDateIsValid = isValidIsoDate(termsLastUpdated);
+    if (!termsDateIsValid) {
         errors.push(`${context}.termsLastUpdated must use YYYY-MM-DD`);
+    } else if (termsLastUpdated > currentUtcDate) {
+        errors.push(`${context}.termsLastUpdated must not be after the current UTC date`);
     }
     if (summary.length < 40) {
         errors.push(`${context}.summary must state the unresolved rights basis`);
@@ -303,6 +311,7 @@ function parseFiles(
 function parseSource(
     input: unknown,
     index: number,
+    currentUtcDate: string,
     errors: string[],
 ): CorpusProvenanceSource | undefined {
     const context = `manifest.sources[${index}]`;
@@ -360,8 +369,11 @@ function parseSource(
     if (editionLabel !== expectation.editionLabel) {
         errors.push(`${context}.editionLabel must preserve the reviewed catalog label and unresolved edition details`);
     }
-    if (!isValidIsoDate(retrievedAt)) {
+    const retrievedDateIsValid = isValidIsoDate(retrievedAt);
+    if (!retrievedDateIsValid) {
         errors.push(`${context}.retrievedAt must use YYYY-MM-DD`);
+    } else if (retrievedAt > currentUtcDate) {
+        errors.push(`${context}.retrievedAt must not be after the current UTC date`);
     }
     if (corpusPath !== expectation.corpusPath) {
         errors.push(`${context}.corpusPath does not match ${source}`);
@@ -372,6 +384,7 @@ function parseSource(
 
     const redistributionBasis = parseRedistributionBasis(
         input.redistributionBasis,
+        currentUtcDate,
         `${context}.redistributionBasis`,
         errors,
     );
@@ -391,7 +404,8 @@ function parseSource(
         || resourceId !== expectation.resourceId
         || upstreamReference !== RESOURCE_CATALOG_URL
         || editionLabel !== expectation.editionLabel
-        || !isValidIsoDate(retrievedAt)
+        || !retrievedDateIsValid
+        || retrievedAt > currentUtcDate
         || corpusPath !== expectation.corpusPath
         || files.length !== EXPECTED_FILE_COUNT
         || !SHA256.test(aggregateSha256)
@@ -427,7 +441,15 @@ export function computeAggregateSha256(files: readonly ProvenanceFile[]): string
     return computeFileSha256(payload);
 }
 
-export function validateProvenance(input: unknown): ProvenanceValidationResult {
+export function validateProvenance(
+    input: unknown,
+    validationOptions: ProvenanceValidationOptions,
+): ProvenanceValidationResult {
+    if (!isRecord(validationOptions)
+        || typeof validationOptions.currentUtcDate !== 'string'
+        || !isValidIsoDate(validationOptions.currentUtcDate)) {
+        return { errors: ['validationOptions.currentUtcDate must use YYYY-MM-DD'] };
+    }
     if (!isRecord(input)) {
         return { errors: ['manifest must be an object'] };
     }
@@ -466,9 +488,10 @@ export function validateProvenance(input: unknown): ProvenanceValidationResult {
             }
         }
         for (const blocker of input.activationBlockers) {
-            if (typeof blocker !== 'string'
-                || !(REQUIRED_ACTIVATION_BLOCKERS as readonly string[]).includes(blocker)) {
-                errors.push(`manifest.activationBlockers contains unsupported blocker ${String(blocker)}`);
+            if (typeof blocker !== 'string') {
+                errors.push('manifest.activationBlockers contains unsupported non-string blocker');
+            } else if (!(REQUIRED_ACTIVATION_BLOCKERS as readonly string[]).includes(blocker)) {
+                errors.push(`manifest.activationBlockers contains unsupported blocker ${blocker}`);
             }
         }
         if (blockerSet.size !== input.activationBlockers.length) {
@@ -493,7 +516,12 @@ export function validateProvenance(input: unknown): ProvenanceValidationResult {
             errors.push('manifest.sources contains a duplicate resourceId conflict');
         }
         for (let index = 0; index < input.sources.length; index += 1) {
-            const source = parseSource(input.sources[index], index, errors);
+            const source = parseSource(
+                input.sources[index],
+                index,
+                validationOptions.currentUtcDate,
+                errors,
+            );
             if (source) {
                 sources.push(source);
             }

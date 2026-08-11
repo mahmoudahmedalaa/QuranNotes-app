@@ -14,6 +14,7 @@ import {
 const REPOSITORY_ROOT = resolve(__dirname, '../../../..');
 const MANIFEST_PATH = resolve(REPOSITORY_ROOT, 'docs/noor-rag/corpus-provenance.json');
 const SHA256 = /^[a-f0-9]{64}$/;
+const CONTROLLED_CURRENT_UTC_DATE = '2026-08-11';
 
 function loadManifest(): unknown {
     return JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as unknown;
@@ -35,8 +36,15 @@ function sourceFiles(source: Record<string, unknown>): Array<Record<string, unkn
     return files as Array<Record<string, unknown>>;
 }
 
+function validateManifest(
+    manifest: unknown,
+    currentUtcDate = CONTROLLED_CURRENT_UTC_DATE,
+): ReturnType<typeof validateProvenance> {
+    return validateProvenance(manifest, { currentUtcDate });
+}
+
 function expectInvalid(manifest: unknown, pattern: RegExp): void {
-    const result = validateProvenance(manifest);
+    const result = validateManifest(manifest);
     assert.ok(
         result.errors.some(error => pattern.test(error)),
         `Expected an error matching ${String(pattern)}, received: ${result.errors.join('; ')}`,
@@ -46,7 +54,7 @@ function expectInvalid(manifest: unknown, pattern: RegExp): void {
 describe('corpus provenance manifest', () => {
     it('validates the reviewed two-source manifest', () => {
         const manifest = loadManifest();
-        const result = validateProvenance(manifest);
+        const result = validateManifest(manifest);
 
         assert.deepEqual(result.errors, []);
         assert.ok(result.manifest);
@@ -59,7 +67,7 @@ describe('corpus provenance manifest', () => {
     });
 
     it('locks the live Quran.com source identities and keeps activation closed', () => {
-        const result = validateProvenance(loadManifest());
+        const result = validateManifest(loadManifest());
         assert.ok(result.manifest);
 
         assert.deepEqual(
@@ -113,7 +121,7 @@ describe('corpus provenance manifest', () => {
     });
 
     it('contains exactly 114 correctly named hashes per source and matches committed bytes', () => {
-        const result = validateProvenance(loadManifest());
+        const result = validateManifest(loadManifest());
         assert.ok(result.manifest);
 
         for (const source of result.manifest.sources) {
@@ -265,6 +273,51 @@ describe('corpus provenance manifest', () => {
         expectInvalid(nonPrimaryUrl, /upstreamReference.*official Quran/i);
     });
 
+    it('accepts current-day and past evidence dates against an injected UTC day', () => {
+        const manifest = cloneManifest();
+        const sources = manifestSources(manifest);
+        const currentDaySource = sources[0];
+        const pastSource = sources[1];
+        assert.ok(currentDaySource && pastSource);
+        currentDaySource.retrievedAt = CONTROLLED_CURRENT_UTC_DATE;
+        pastSource.retrievedAt = '2026-08-10';
+
+        const currentDayBasis = currentDaySource.redistributionBasis;
+        const pastBasis = pastSource.redistributionBasis;
+        assert.ok(typeof currentDayBasis === 'object' && currentDayBasis !== null && !Array.isArray(currentDayBasis));
+        assert.ok(typeof pastBasis === 'object' && pastBasis !== null && !Array.isArray(pastBasis));
+        (currentDayBasis as Record<string, unknown>).termsLastUpdated = CONTROLLED_CURRENT_UTC_DATE;
+        (pastBasis as Record<string, unknown>).termsLastUpdated = '2026-08-09';
+
+        assert.deepEqual(validateManifest(manifest).errors, []);
+    });
+
+    it('rejects future retrieved and terms dates against an injected UTC day', () => {
+        const futureRetrieval = cloneManifest();
+        const retrievalSource = manifestSources(futureRetrieval)[0];
+        assert.ok(retrievalSource);
+        retrievalSource.retrievedAt = '2026-08-12';
+        const retrievalResult = validateManifest(futureRetrieval);
+        assert.match(retrievalResult.errors.join('; '), /retrievedAt.*after.*current UTC date/i);
+
+        const futureTerms = cloneManifest();
+        const termsSource = manifestSources(futureTerms)[0];
+        assert.ok(termsSource);
+        const basis = termsSource.redistributionBasis;
+        assert.ok(typeof basis === 'object' && basis !== null && !Array.isArray(basis));
+        (basis as Record<string, unknown>).termsLastUpdated = '2026-08-12';
+        const termsResult = validateManifest(futureTerms);
+        assert.match(termsResult.errors.join('; '), /termsLastUpdated.*after.*current UTC date/i);
+    });
+
+    it('fails closed when the injected current UTC day is invalid', () => {
+        const result = validateManifest(loadManifest(), '2026-02-30');
+
+        assert.deepEqual(result, {
+            errors: ['validationOptions.currentUtcDate must use YYYY-MM-DD'],
+        });
+    });
+
     it('rejects malformed redistribution evidence and unsafe activation claims', () => {
         const missingBasis = cloneManifest();
         const missingBasisSource = manifestSources(missingBasis)[0];
@@ -297,11 +350,34 @@ describe('corpus provenance manifest', () => {
         expectInvalid(currentContentClaim, /current API equality.*not verified/i);
     });
 
+    it('returns structured errors for non-string activation blockers without coercing them', () => {
+        const malformedBlockers: unknown[] = [
+            { toString: null, valueOf: null },
+            [],
+            null,
+            42,
+        ];
+
+        for (const malformedBlocker of malformedBlockers) {
+            const manifest = cloneManifest();
+            const blockers = manifest.activationBlockers;
+            assert.ok(Array.isArray(blockers));
+            blockers.push(malformedBlocker);
+
+            let result: ReturnType<typeof validateProvenance> | undefined;
+            assert.doesNotThrow(() => {
+                result = validateManifest(manifest);
+            });
+            assert.ok(result);
+            assert.match(result.errors.join('; '), /unsupported non-string blocker/i);
+        }
+    });
+
     it('rejects non-object input without throwing', () => {
-        assert.deepEqual(validateProvenance(null), {
+        assert.deepEqual(validateManifest(null), {
             errors: ['manifest must be an object'],
         });
-        assert.deepEqual(validateProvenance([]), {
+        assert.deepEqual(validateManifest([]), {
             errors: ['manifest must be an object'],
         });
     });
