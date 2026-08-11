@@ -78,6 +78,94 @@ describe('Noor canonical corpus', () => {
         )));
     });
 
+    it('bounds unit token counting concurrency while preserving deterministic artifacts', async () => {
+        let active = 0;
+        let maximumActive = 0;
+        const delayedCounter: TokenCounter = {
+            mode: counter.mode,
+            model: counter.model,
+            countTokens: async (text: string): Promise<number> => {
+                active += 1;
+                maximumActive = Math.max(maximumActive, active);
+                await new Promise(resolve => setTimeout(resolve, text.startsWith('A') ? 8 : 1));
+                active -= 1;
+                return Array.from(text).length;
+            },
+        };
+        const sources = [{
+            source: 'al_sadi_ar' as const,
+            sourceTitle: "Al-Sa'di",
+            language: 'ar' as const,
+            resourceId: 91,
+            upstreamReference: 'https://example.test/source',
+            editionLabel: 'fixture',
+            files: [{
+                surah: 2,
+                verses: {
+                    '1': { text: 'AAAA. One.' },
+                    '2': { text: 'BBBB. Two.' },
+                    '3': { text: 'CCCC. Three.' },
+                    '4': { text: 'DDDD. Four.' },
+                },
+            }],
+        }];
+
+        const concurrent = await buildCorpus({
+            corpusVersion: CORPUS_VERSION,
+            tokenCounter: delayedCounter,
+            chunkConcurrency: 2,
+            targetTokens: 7,
+            hardMaxTokens: 9,
+            overlapTokens: 2,
+            sources,
+        });
+        const sequential = await buildCorpus({
+            corpusVersion: CORPUS_VERSION,
+            tokenCounter: counter,
+            targetTokens: 7,
+            hardMaxTokens: 9,
+            overlapTokens: 2,
+            sources,
+        });
+
+        assert.equal(maximumActive, 2);
+        assert.deepEqual(concurrent, sequential);
+    });
+
+    it('propagates token counter failures from concurrent workers', async () => {
+        const failingCounter: TokenCounter = {
+            mode: counter.mode,
+            model: counter.model,
+            countTokens: async (text: string): Promise<number> => {
+                if (text.includes('BBBB')) {
+                    throw new Error('token counter failed');
+                }
+                return Array.from(text).length;
+            },
+        };
+
+        await assert.rejects(buildCorpus({
+            corpusVersion: CORPUS_VERSION,
+            tokenCounter: failingCounter,
+            chunkConcurrency: 2,
+            targetTokens: 20,
+            hardMaxTokens: 24,
+            overlapTokens: 5,
+            sources: [{
+                source: 'al_sadi_ar',
+                sourceTitle: "Al-Sa'di",
+                language: 'ar',
+                resourceId: 91,
+                upstreamReference: 'https://example.test/source',
+                editionLabel: 'fixture',
+                files: [{ surah: 2, verses: {
+                    '1': { text: 'AAAA. One.' },
+                    '2': { text: 'BBBB. Two.' },
+                } }],
+            }],
+        }), /token counter failed/);
+    });
+
     it('matches the reviewed explicit coverage and reports current grouped counts', async () => {
         const { sources, coverage } = loadReviewedCorpusInputs(REPOSITORY_ROOT);
         const result = await buildCorpus({

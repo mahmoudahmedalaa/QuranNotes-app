@@ -10,6 +10,7 @@ import {
 } from '../../src/noor-rag/corpus';
 
 const GENERATION_MODEL = 'gemini-3.5-flash-lite';
+const VERTEX_COUNTER_CONCURRENCY = 8;
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 function argument(name: string): string | undefined {
@@ -66,7 +67,13 @@ async function main(): Promise<void> {
     const repositoryRoot = resolve(__dirname, '../../../..');
     const functionsRoot = resolve(repositoryRoot, 'functions');
     const { sources } = loadReviewedCorpusInputs(repositoryRoot);
-    const artifacts = await buildCorpus({ corpusVersion, sources, tokenCounter: selectedCounter() });
+    const tokenCounter = selectedCounter();
+    const artifacts = await buildCorpus({
+        corpusVersion,
+        sources,
+        tokenCounter,
+        chunkConcurrency: tokenCounter.mode === 'vertex-production' ? VERTEX_COUNTER_CONCURRENCY : undefined,
+    });
     const outputDirectory = resolve(functionsRoot, '.generated/noor-corpus', corpusVersion);
     mkdirSync(outputDirectory, { recursive: true });
     writeFileSync(resolve(outputDirectory, 'units.json'), serializeCorpusArtifact(artifacts.units));

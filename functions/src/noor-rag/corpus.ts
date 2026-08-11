@@ -9,6 +9,7 @@ export const CHUNKING_VERSION = 'raw-paragraph-sentence-900-1400-overlap-80-v1';
 export const DEFAULT_TARGET_TOKENS = 900;
 export const DEFAULT_HARD_MAX_TOKENS = 1400;
 export const DEFAULT_OVERLAP_TOKENS = 80;
+export const MAX_CHUNKING_CONCURRENCY = 8;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const SOURCE_ORDER: readonly NoorSource[] = ['ibn_kathir_en_abridged', 'al_sadi_ar'];
@@ -147,6 +148,7 @@ export interface BuildCorpusInput {
     targetTokens?: number;
     hardMaxTokens?: number;
     overlapTokens?: number;
+    chunkConcurrency?: number;
 }
 
 interface ExplicitVerse {
@@ -446,6 +448,37 @@ async function chunkUnit(
     return chunks;
 }
 
+async function chunkUnits(
+    units: readonly CanonicalUnit[],
+    tokenCounter: TokenCounter,
+    targetTokens: number,
+    hardMaxTokens: number,
+    overlapTokens: number,
+    concurrency: number,
+): Promise<CorpusChunk[]> {
+    const chunksByUnit = new Array<CorpusChunk[]>(units.length);
+    let nextIndex = 0;
+    const worker = async (): Promise<void> => {
+        while (nextIndex < units.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            const unit = units[index];
+            if (!unit) {
+                throw new Error(`Missing canonical unit at index ${index}`);
+            }
+            chunksByUnit[index] = await chunkUnit(
+                unit,
+                tokenCounter,
+                targetTokens,
+                hardMaxTokens,
+                overlapTokens,
+            );
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, units.length) }, worker));
+    return chunksByUnit.flat();
+}
+
 function missingVerseKeys(verses: readonly ExplicitVerse[]): string[] {
     const present = new Set(verses.map(verse => `${verse.surah}:${verse.verse}`));
     const missing: string[] = [];
@@ -468,9 +501,12 @@ export async function buildCorpus(input: BuildCorpusInput): Promise<CorpusArtifa
     const targetTokens = input.targetTokens ?? DEFAULT_TARGET_TOKENS;
     const hardMaxTokens = input.hardMaxTokens ?? DEFAULT_HARD_MAX_TOKENS;
     const overlapTokens = input.overlapTokens ?? DEFAULT_OVERLAP_TOKENS;
+    const chunkConcurrency = input.chunkConcurrency ?? 1;
     if (!input.corpusVersion || !input.tokenCounter.mode || !input.tokenCounter.model
         || !Number.isInteger(targetTokens) || !Number.isInteger(hardMaxTokens)
-        || !Number.isInteger(overlapTokens) || targetTokens < 1 || hardMaxTokens < targetTokens
+        || !Number.isInteger(overlapTokens) || !Number.isInteger(chunkConcurrency)
+        || targetTokens < 1 || hardMaxTokens < targetTokens
+        || chunkConcurrency < 1 || chunkConcurrency > MAX_CHUNKING_CONCURRENCY
         || overlapTokens < 0 || overlapTokens >= targetTokens) {
         throw new Error('Invalid corpus build configuration');
     }
@@ -484,16 +520,14 @@ export async function buildCorpus(input: BuildCorpusInput): Promise<CorpusArtifa
     );
     for (const sourceInput of orderedSources) {
         const built = buildUnits(input.corpusVersion, sourceInput);
-        const sourceChunks: CorpusChunk[] = [];
-        for (const unit of built.units) {
-            sourceChunks.push(...await chunkUnit(
-                unit,
-                input.tokenCounter,
-                targetTokens,
-                hardMaxTokens,
-                overlapTokens,
-            ));
-        }
+        const sourceChunks = await chunkUnits(
+            built.units,
+            input.tokenCounter,
+            targetTokens,
+            hardMaxTokens,
+            overlapTokens,
+            chunkConcurrency,
+        );
         const chunksByUnit = new Map<string, string[]>();
         for (const chunk of sourceChunks) {
             const ids = chunksByUnit.get(chunk.canonicalUnitId) ?? [];
