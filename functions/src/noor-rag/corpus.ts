@@ -9,7 +9,7 @@ export const CHUNKING_VERSION = 'raw-paragraph-sentence-900-1400-overlap-80-v1';
 export const DEFAULT_TARGET_TOKENS = 900;
 export const DEFAULT_HARD_MAX_TOKENS = 1400;
 export const DEFAULT_OVERLAP_TOKENS = 80;
-export const MAX_CHUNKING_CONCURRENCY = 8;
+export const MAX_CHUNKING_CONCURRENCY = 32;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const SOURCE_ORDER: readonly NoorSource[] = ['ibn_kathir_en_abridged', 'al_sadi_ar'];
@@ -322,20 +322,27 @@ function candidateEnds(text: string, start: number): number[] {
     return [...ends].filter(end => end > start).sort((left, right) => left - right);
 }
 
+interface CountedEnd {
+    end: number;
+    tokenCount: number;
+}
+
 async function largestEndWithin(
     text: string,
     start: number,
     maximumTokens: number,
     counter: TokenCounter,
-): Promise<number> {
+): Promise<CountedEnd> {
     let low = start + 1;
     let high = text.length;
     let best = start;
+    let bestCount = 0;
     while (low <= high) {
         const midpoint = Math.floor((low + high) / 2);
         const count = await counter.countTokens(text.slice(start, midpoint));
         if (count <= maximumTokens) {
             best = midpoint;
+            bestCount = count;
             low = midpoint + 1;
         } else {
             high = midpoint - 1;
@@ -346,11 +353,14 @@ async function largestEndWithin(
     }
     if (best < text.length) {
         const whitespace = text.slice(start, best).search(/\s+\S*$/u);
-        if (whitespace > 0 && await counter.countTokens(text.slice(start, start + whitespace)) > 0) {
-            return start + whitespace;
+        if (whitespace > 0) {
+            const whitespaceCount = await counter.countTokens(text.slice(start, start + whitespace));
+            if (whitespaceCount > 0) {
+                return { end: start + whitespace, tokenCount: whitespaceCount };
+            }
         }
     }
-    return best;
+    return { end: best, tokenCount: bestCount };
 }
 
 async function chooseEnd(
@@ -359,23 +369,50 @@ async function chooseEnd(
     targetTokens: number,
     hardMaxTokens: number,
     counter: TokenCounter,
-): Promise<number> {
-    let bestTarget = start;
-    for (const end of candidateEnds(text, start)) {
+): Promise<CountedEnd> {
+    const ends = candidateEnds(text, start);
+    const counts = new Map<number, number>();
+    const countAt = async (index: number): Promise<number> => {
+        const cached = counts.get(index);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const end = ends[index];
+        if (end === undefined) {
+            throw new Error(`Missing chunk candidate at index ${index}`);
+        }
         const count = await counter.countTokens(text.slice(start, end));
-        if (count <= targetTokens) {
-            bestTarget = end;
-            continue;
+        counts.set(index, count);
+        return count;
+    };
+    let low = 0;
+    let high = ends.length - 1;
+    let firstAboveTarget = ends.length;
+    while (low <= high) {
+        const midpoint = Math.floor((low + high) / 2);
+        if (await countAt(midpoint) <= targetTokens) {
+            low = midpoint + 1;
+        } else {
+            firstAboveTarget = midpoint;
+            high = midpoint - 1;
         }
-        if (bestTarget > start) {
-            return bestTarget;
-        }
-        if (count <= hardMaxTokens) {
-            return end;
-        }
-        return largestEndWithin(text, start, hardMaxTokens, counter);
     }
-    return text.length;
+    if (firstAboveTarget > 0) {
+        const selectedIndex = firstAboveTarget - 1;
+        return {
+            end: ends[selectedIndex]!,
+            tokenCount: await countAt(selectedIndex),
+        };
+    }
+    const firstEnd = ends[0];
+    if (firstEnd === undefined) {
+        throw new Error('No chunk candidate available');
+    }
+    const firstCount = await countAt(0);
+    if (firstCount <= hardMaxTokens) {
+        return { end: firstEnd, tokenCount: firstCount };
+    }
+    return largestEndWithin(text, start, hardMaxTokens, counter);
 }
 
 async function overlapStart(
@@ -414,11 +451,17 @@ async function chunkUnit(
     const chunks: CorpusChunk[] = [];
     let start = 0;
     while (start < unit.originalText.length) {
-        const end = await chooseEnd(unit.originalText, start, targetTokens, hardMaxTokens, tokenCounter);
+        const selected = await chooseEnd(
+            unit.originalText,
+            start,
+            targetTokens,
+            hardMaxTokens,
+            tokenCounter,
+        );
+        const { end, tokenCount } = selected;
         const originalText = unit.originalText.slice(start, end);
         const contentHash = sha256(originalText);
         const chunkIndex = chunks.length;
-        const tokenCount = await tokenCounter.countTokens(originalText);
         if (tokenCount > hardMaxTokens || end <= start) {
             throw new Error(`Unable to satisfy chunk maximum for ${unit.canonicalUnitId}`);
         }

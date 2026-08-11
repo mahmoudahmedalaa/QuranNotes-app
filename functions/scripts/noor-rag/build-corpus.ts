@@ -8,9 +8,15 @@ import {
     serializeCorpusArtifact,
     type TokenCounter,
 } from '../../src/noor-rag/corpus';
+import {
+    createVertexBatchTokenCounter,
+} from '../../src/noor-rag/vertex-token-counter';
 
 const GENERATION_MODEL = 'gemini-3.5-flash-lite';
-const VERTEX_COUNTER_CONCURRENCY = 8;
+const VERTEX_CHUNK_CONCURRENCY = 32;
+const VERTEX_COUNTER_BATCH_SIZE = 32;
+const VERTEX_COUNTER_CONCURRENCY = 2;
+const VERTEX_COUNTER_TIMEOUT_MS = 30_000;
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 function argument(name: string): string | undefined {
@@ -35,17 +41,15 @@ function vertexCounter(): TokenCounter {
         throw new Error('Vertex counter mode requires GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION; refusing local approximation');
     }
     const client = new GoogleGenAI({ vertexai: true, project, location });
-    return {
-        mode: 'vertex-production',
-        model: GENERATION_MODEL,
-        countTokens: async (text: string): Promise<number> => {
-            const result = await client.models.countTokens({ model: GENERATION_MODEL, contents: text });
-            if (!Number.isInteger(result.totalTokens) || (result.totalTokens ?? -1) < 0) {
-                throw new Error('Vertex countTokens returned no valid totalTokens value');
-            }
-            return result.totalTokens as number;
+    return createVertexBatchTokenCounter(
+        client,
+        GENERATION_MODEL,
+        {
+            batchSize: VERTEX_COUNTER_BATCH_SIZE,
+            concurrency: VERTEX_COUNTER_CONCURRENCY,
+            timeoutMs: VERTEX_COUNTER_TIMEOUT_MS,
         },
-    };
+    );
 }
 
 function selectedCounter(): TokenCounter {
@@ -72,7 +76,7 @@ async function main(): Promise<void> {
         corpusVersion,
         sources,
         tokenCounter,
-        chunkConcurrency: tokenCounter.mode === 'vertex-production' ? VERTEX_COUNTER_CONCURRENCY : undefined,
+        chunkConcurrency: tokenCounter.mode === 'vertex-production' ? VERTEX_CHUNK_CONCURRENCY : undefined,
     });
     const outputDirectory = resolve(functionsRoot, '.generated/noor-corpus', corpusVersion);
     mkdirSync(outputDirectory, { recursive: true });

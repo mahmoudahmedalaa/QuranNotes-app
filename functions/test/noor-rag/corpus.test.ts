@@ -132,6 +132,53 @@ describe('Noor canonical corpus', () => {
         assert.deepEqual(concurrent, sequential);
     });
 
+    it('preserves the legacy chunk artifact exactly while reducing exact token counts', async () => {
+        let calls = 0;
+        const countingCounter: TokenCounter = {
+            mode: 'm',
+            model: 'x',
+            countTokens: async (text: string): Promise<number> => {
+                calls += 1;
+                return Array.from(text).length;
+            },
+        };
+        const original = 'Alpha one. Beta two! Gamma three? Delta four. Epsilon five. Zeta six.';
+
+        const result = await buildCorpus({
+            corpusVersion: 'v',
+            tokenCounter: countingCounter,
+            targetTokens: 22,
+            hardMaxTokens: 28,
+            overlapTokens: 6,
+            sources: [{
+                source: 'al_sadi_ar',
+                sourceTitle: 'S',
+                language: 'ar',
+                resourceId: 1,
+                upstreamReference: 'u',
+                editionLabel: 'e',
+                files: [{ surah: 1, verses: { '1': { text: original } } }],
+            }],
+        });
+
+        assert.deepEqual(result.chunks.map(chunk => [
+            chunk.originalStart,
+            chunk.originalEnd,
+            chunk.tokenCount,
+        ]), [
+            [0, 21, 21],
+            [15, 34, 19],
+            [28, 46, 18],
+            [40, 60, 20],
+            [54, 69, 15],
+        ]);
+        assert.equal(
+            result.manifest.aggregateSha256,
+            '1d3792aa392583c3d5d3b4f70b887123fe4af812f3d2e3e290ff59d9ff205779',
+        );
+        assert.ok(calls < 37, `expected fewer than the legacy 37 counts, received ${calls}`);
+    });
+
     it('propagates token counter failures from concurrent workers', async () => {
         const failingCounter: TokenCounter = {
             mode: counter.mode,
