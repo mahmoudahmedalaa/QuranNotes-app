@@ -14,6 +14,27 @@ const MAX_HISTORY_TURNS = 6;
 const MAX_HISTORY_TURN_CHARACTERS = 1000;
 const MAX_HISTORY_CHARACTERS = 6000;
 
+const NON_QUOTA_ANSWER_KEYS: readonly string[] = [
+    'requestId',
+    'answer',
+    'status',
+    'citations',
+];
+const QUOTA_ANSWER_KEYS: readonly string[] = [
+    ...NON_QUOTA_ANSWER_KEYS,
+    'nextResetAt',
+];
+const CITATION_KEYS: readonly string[] = [
+    'chunkId',
+    'canonicalUnitId',
+    'source',
+    'sourceTitle',
+    'surah',
+    'verseStart',
+    'verseEnd',
+    'corpusVersion',
+];
+
 const SURAH_VERSE_COUNTS: readonly number[] = [
     7, 286, 200, 176, 120, 165, 206, 75, 129, 109,
     123, 111, 43, 52, 99, 128, 111, 110, 98, 135,
@@ -53,6 +74,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasExactOwnKeys(value: Record<string, unknown>, expectedKeys: readonly string[]): boolean {
+    const ownKeys = Reflect.ownKeys(value);
+    return ownKeys.length === expectedKeys.length
+        && expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
 function invalidRequest(): never {
     throw new Error('Invalid Noor request');
 }
@@ -65,11 +92,23 @@ function isValidRequestId(value: unknown): value is string {
     return typeof value === 'string' && UUID_PATTERN.test(value);
 }
 
+function getBoundedCodePointLength(value: string, maximumLength: number): number | null {
+    let length = 0;
+    for (const _codePoint of value) {
+        length += 1;
+        if (length > maximumLength) {
+            return null;
+        }
+    }
+    return length;
+}
+
 function isBoundedNonblankString(value: unknown, maximumLength: number): value is string {
-    return typeof value === 'string'
-        && value.length >= 1
-        && value.length <= maximumLength
-        && value.trim().length > 0;
+    if (typeof value !== 'string') {
+        return false;
+    }
+    const length = getBoundedCodePointLength(value, maximumLength);
+    return length !== null && length >= 1 && value.trim() !== '';
 }
 
 function isNoorSource(value: unknown): value is NoorSource {
@@ -108,10 +147,18 @@ function parseHistory(value: unknown): NoorHistoryTurn[] {
         if (turn.role !== 'user' && turn.role !== 'assistant') {
             return invalidRequest();
         }
-        if (!isBoundedNonblankString(turn.content, MAX_HISTORY_TURN_CHARACTERS)) {
+        if (typeof turn.content !== 'string') {
             return invalidRequest();
         }
-        totalCharacters += turn.content.length;
+        const remainingCharacters = MAX_HISTORY_CHARACTERS - totalCharacters;
+        const maximumCharacters = Math.min(MAX_HISTORY_TURN_CHARACTERS, remainingCharacters);
+        const contentCharacters = getBoundedCodePointLength(turn.content, maximumCharacters);
+        if (contentCharacters === null
+            || contentCharacters < 1
+            || turn.content.trim() === '') {
+            return invalidRequest();
+        }
+        totalCharacters += contentCharacters;
         return {
             role: turn.role,
             content: turn.content,
@@ -193,6 +240,7 @@ export function parseNoorRequest(value: unknown): NoorRequest {
 
 function parseCitation(value: unknown): NoorCitation {
     if (!isRecord(value)
+        || !hasExactOwnKeys(value, CITATION_KEYS)
         || !isBoundedNonblankString(value.chunkId, Number.MAX_SAFE_INTEGER)
         || !isBoundedNonblankString(value.canonicalUnitId, Number.MAX_SAFE_INTEGER)
         || !isNoorSource(value.source)
@@ -234,9 +282,16 @@ function isValidUtcTimestamp(value: unknown): value is string {
 
 export function parseNoorAnswer(value: unknown): NoorAnswer {
     if (!isRecord(value)
+        || !isNoorStatus(value.status)) {
+        return invalidAnswer();
+    }
+
+    const answerKeys = value.status === 'quota_exceeded'
+        ? QUOTA_ANSWER_KEYS
+        : NON_QUOTA_ANSWER_KEYS;
+    if (!hasExactOwnKeys(value, answerKeys)
         || !isValidRequestId(value.requestId)
         || typeof value.answer !== 'string'
-        || !isNoorStatus(value.status)
         || !Array.isArray(value.citations)) {
         return invalidAnswer();
     }
@@ -256,9 +311,6 @@ export function parseNoorAnswer(value: unknown): NoorAnswer {
         };
     }
 
-    if ('nextResetAt' in value) {
-        return invalidAnswer();
-    }
     return {
         requestId: value.requestId,
         answer: value.answer,

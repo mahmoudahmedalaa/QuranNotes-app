@@ -112,6 +112,28 @@ describe('parseNoorRequest', () => {
         });
     });
 
+    it('counts astral question text as Unicode code points', () => {
+        const astralCharacter = '😀';
+        const questionAtLimit = astralCharacter.repeat(500);
+        const parsed = parseNoorRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: questionAtLimit,
+            history: [],
+        });
+
+        if (parsed.mode !== 'chat') {
+            assert.fail('Expected a chat request');
+        }
+        assert.equal(parsed.question, questionAtLimit);
+        expectInvalidRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: astralCharacter.repeat(501),
+            history: [],
+        });
+    });
+
     it('accepts at most six allowlisted history turns and 6000 total characters', () => {
         const history = Array.from({ length: 6 }, (_, index) => ({
             role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
@@ -154,6 +176,44 @@ describe('parseNoorRequest', () => {
             question: 'Question',
             history: [{ role: 'user', content: 'x'.repeat(1001) }],
         });
+    });
+
+    it('counts each astral history message as Unicode code points', () => {
+        const astralCharacter = '😀';
+        const contentAtLimit = astralCharacter.repeat(1000);
+        const parsed = parseNoorRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: 'Question',
+            history: [{ role: 'user', content: contentAtLimit }],
+        });
+
+        assert.equal(parsed.mode, 'chat');
+        assert.equal(parsed.history[0]?.content, contentAtLimit);
+        expectInvalidRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: 'Question',
+            history: [{ role: 'user', content: astralCharacter.repeat(1001) }],
+        });
+    });
+
+    it('accepts exactly 6000 aggregate astral history code points', () => {
+        const contentAtTurnLimit = '😀'.repeat(1000);
+        const history = Array.from({ length: 6 }, (_, index) => ({
+            role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+            content: contentAtTurnLimit,
+        }));
+        const parsed = parseNoorRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: 'Question',
+            history,
+        });
+
+        assert.equal(parsed.mode, 'chat');
+        assert.equal(parsed.history.length, 6);
+        assert.deepEqual(parsed.history, history);
     });
 
     it('creates a new allowlisted object and strips extra or client-trust fields', () => {
@@ -267,6 +327,64 @@ describe('parseNoorRequest', () => {
 });
 
 describe('parseNoorAnswer', () => {
+    it('rejects unknown own properties for quota and non-quota answers', () => {
+        expectInvalidAnswer({
+            requestId: VALID_REQUEST_ID,
+            answer: 'Answer',
+            status: 'answered',
+            citations: [],
+            untrustedMetadata: true,
+        });
+        expectInvalidAnswer({
+            requestId: VALID_REQUEST_ID,
+            answer: 'Quota reached',
+            status: 'quota_exceeded',
+            citations: [],
+            nextResetAt: '2026-08-12T00:00:00.000Z',
+            untrustedMetadata: true,
+        });
+
+        const hiddenExtra = {
+            requestId: VALID_REQUEST_ID,
+            answer: 'Answer',
+            status: 'answered',
+            citations: [],
+        };
+        Object.defineProperty(hiddenExtra, 'hiddenExtra', {
+            value: true,
+            enumerable: false,
+        });
+        expectInvalidAnswer(hiddenExtra);
+    });
+
+    it('rejects unknown own properties within citations', () => {
+        expectInvalidAnswer({
+            requestId: VALID_REQUEST_ID,
+            answer: 'Answer',
+            status: 'answered',
+            citations: [{ ...VALID_CITATION, untrustedMetadata: true }],
+        });
+    });
+
+    it('accepts exact answer and citation own-key sets with safe prototypes', () => {
+        const citation: Record<string, unknown> = Object.create({ inheritedMetadata: true });
+        Object.assign(citation, VALID_CITATION);
+        const answer: Record<string, unknown> = Object.create(null);
+        Object.assign(answer, {
+            requestId: VALID_REQUEST_ID,
+            answer: 'Answer',
+            status: 'answered',
+            citations: [citation],
+        });
+
+        assert.deepEqual(parseNoorAnswer(answer), {
+            requestId: VALID_REQUEST_ID,
+            answer: 'Answer',
+            status: 'answered',
+            citations: [VALID_CITATION],
+        });
+    });
+
     it('requires a valid UTC reset timestamp for quota_exceeded', () => {
         const answer = parseNoorAnswer({
             requestId: VALID_REQUEST_ID,
