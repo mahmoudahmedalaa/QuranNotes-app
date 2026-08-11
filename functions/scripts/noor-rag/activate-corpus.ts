@@ -6,6 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { parseNoorRuntimeConfig } from '../../src/noor-rag/config';
 import { EMBEDDING_DIMENSION, EMBEDDING_MODEL } from '../../src/noor-rag/embedding';
 import type { NoorSource } from '../../src/noor-rag/generatedContract';
+import { validateProvenance } from '../../src/noor-rag/provenance';
 import {
     LOCKED_CORPUS_VERSION,
     LOCKED_PROJECT,
@@ -41,6 +42,11 @@ export interface ActivationRepository {
 export interface ActivationPreflightResult {
     ready: boolean;
     exitCode: 0 | 1;
+    blockers: string[];
+}
+
+export interface ActivationProvenanceReadiness {
+    publicActivationApproved: boolean;
     blockers: string[];
 }
 
@@ -82,6 +88,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export function inspectActivationProvenance(
+    value: unknown,
+    currentUtcDate: string,
+): ActivationProvenanceReadiness {
+    const declaredBlockers = isRecord(value) && Array.isArray(value.activationBlockers)
+        ? value.activationBlockers.filter((blocker): blocker is string => typeof blocker === 'string')
+        : [];
+    const validation = validateProvenance(value, { currentUtcDate });
+    const valid = validation.errors.length === 0;
+    return {
+        publicActivationApproved: valid
+            && isRecord(value)
+            && value.publicActivationApproved === true
+            && declaredBlockers.length === 0,
+        blockers: [...(!valid ? ['provenance_record_invalid'] : []), ...new Set(declaredBlockers)],
+    };
+}
+
 function positiveInteger(value: unknown): value is number {
     return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
@@ -95,6 +119,39 @@ function assertExpectedManifest(value: ExpectedManifest, version: string): void 
         || !positiveInteger(value.largestChunkCharacters)) {
         throw new Error('Invalid locked local corpus manifest');
     }
+}
+
+export function parseExpectedManifestArtifacts(
+    manifest: unknown,
+    chunks: unknown,
+    version: string,
+): ExpectedManifest {
+    if (!isRecord(manifest)
+        || typeof manifest.corpusVersion !== 'string'
+        || !positiveInteger(manifest.unitCount)
+        || !positiveInteger(manifest.chunkCount)
+        || !positiveInteger(manifest.lookupCount)
+        || typeof manifest.aggregateSha256 !== 'string'
+        || !Array.isArray(chunks)
+        || chunks.length !== manifest.chunkCount) {
+        throw new Error('Invalid locked local corpus manifest');
+    }
+    const chunkLengths = chunks.map(chunk => {
+        if (!isRecord(chunk) || typeof chunk.originalText !== 'string' || chunk.originalText.length === 0) {
+            throw new Error('Invalid locked local corpus manifest');
+        }
+        return chunk.originalText.length;
+    });
+    const expected = {
+        corpusVersion: manifest.corpusVersion,
+        unitCount: manifest.unitCount,
+        chunkCount: manifest.chunkCount,
+        lookupCount: manifest.lookupCount,
+        aggregateSha256: manifest.aggregateSha256,
+        largestChunkCharacters: Math.max(...chunkLengths),
+    };
+    assertExpectedManifest(expected, version);
+    return expected;
 }
 
 function assertProductionManifest(value: unknown, expected: ExpectedManifest): void {
@@ -149,7 +206,7 @@ export async function activateCorpus(input: {
 export async function preflightActivation(input: {
     options: ActivationOptions;
     repository: ActivationRepository;
-    expectedManifest: ExpectedManifest;
+    expectedManifest: ExpectedManifest | null;
     publicActivationApproved: boolean;
     provenanceBlockers: readonly string[];
     probeIndex(source: NoorSource): Promise<boolean>;
@@ -162,12 +219,16 @@ export async function preflightActivation(input: {
             : ['provenance:public_activation_not_approved']));
     }
 
-    let localManifestValid = true;
-    try {
-        assertExpectedManifest(input.expectedManifest, input.options.version);
-    } catch {
-        localManifestValid = false;
+    let localManifestValid = input.expectedManifest !== null;
+    if (input.expectedManifest === null) {
         blockers.push('locked_local_corpus_manifest_invalid');
+    } else {
+        try {
+            assertExpectedManifest(input.expectedManifest, input.options.version);
+        } catch {
+            localManifestValid = false;
+            blockers.push('locked_local_corpus_manifest_invalid');
+        }
     }
 
     let config: ReturnType<typeof parseNoorRuntimeConfig> | undefined;
@@ -181,7 +242,7 @@ export async function preflightActivation(input: {
         blockers.push('runtime_config_missing_or_invalid');
     }
 
-    if (localManifestValid) {
+    if (localManifestValid && input.expectedManifest !== null) {
         try {
             assertProductionManifest(await input.repository.readManifest(input.options.version), input.expectedManifest);
         } catch {
@@ -211,16 +272,7 @@ function loadExpectedManifest(version: string): ExpectedManifest {
     const directory = resolve(__dirname, '../../..', '.generated/noor-corpus', version);
     const manifest = readJson(resolve(directory, 'manifest.json'));
     const chunks = readJson(resolve(directory, 'chunks.json'));
-    if (!isRecord(manifest) || !Array.isArray(chunks)) throw new Error('Locked local corpus artifacts are missing');
-    const lengths = chunks.map(chunk => isRecord(chunk) && typeof chunk.originalText === 'string' ? chunk.originalText.length : 0);
-    return {
-        corpusVersion: String(manifest.corpusVersion),
-        unitCount: Number(manifest.unitCount),
-        chunkCount: Number(manifest.chunkCount),
-        lookupCount: Number(manifest.lookupCount),
-        aggregateSha256: String(manifest.aggregateSha256),
-        largestChunkCharacters: Math.max(0, ...lengths),
-    };
+    return parseExpectedManifestArtifacts(manifest, chunks, version);
 }
 
 async function createRepository(options: ActivationOptions): Promise<ActivationRepository> {
@@ -256,12 +308,22 @@ async function main(): Promise<void> {
     const options = preflight ? parseActivationPreflightArguments(args) : parseActivationArguments(args);
     const repositoryRoot = resolve(__dirname, '../../../..');
     const provenance = readJson(resolve(repositoryRoot, 'docs/noor-rag/corpus-provenance.json'));
-    const approved = isRecord(provenance) && provenance.publicActivationApproved === true;
-    if (!preflight && !approved) throw new Error('Corpus provenance public activation is not approved');
+    const provenanceReadiness = inspectActivationProvenance(
+        provenance, new Date().toISOString().slice(0, 10),
+    );
+    if (!preflight && !provenanceReadiness.publicActivationApproved) {
+        throw new Error('Corpus provenance public activation is not approved');
+    }
     const indexProbe = await createAdminIndexProbe(options);
     const vector = createDeterministicProbeVector();
     const repository = await createRepository(options);
-    const expectedManifest = loadExpectedManifest(options.version);
+    let expectedManifest: ExpectedManifest | null;
+    try {
+        expectedManifest = loadExpectedManifest(options.version);
+    } catch (error: unknown) {
+        if (!preflight) throw error;
+        expectedManifest = null;
+    }
     const probeIndex = async (source: NoorSource): Promise<boolean> => {
         try {
             const response = await indexProbe.query({ ...options, source, vector, limit: 1 });
@@ -271,22 +333,21 @@ async function main(): Promise<void> {
         }
     };
     if (preflight) {
-        const provenanceBlockers = isRecord(provenance) && Array.isArray(provenance.activationBlockers)
-            ? provenance.activationBlockers.filter((value): value is string => typeof value === 'string')
-            : [];
         const result = await preflightActivation({
-            options, repository, expectedManifest, publicActivationApproved: approved,
-            provenanceBlockers, probeIndex,
+            options, repository, expectedManifest,
+            publicActivationApproved: provenanceReadiness.publicActivationApproved,
+            provenanceBlockers: provenanceReadiness.blockers, probeIndex,
         });
         process.stdout.write(`${JSON.stringify(result, undefined, 2)}\n`);
         process.exitCode = result.exitCode;
         return;
     }
+    if (expectedManifest === null) throw new Error('Invalid locked local corpus manifest');
     const result = await activateCorpus({
         options,
         repository,
         expectedManifest,
-        publicActivationApproved: approved,
+        publicActivationApproved: provenanceReadiness.publicActivationApproved,
         probeIndex,
     });
     process.stdout.write(`${JSON.stringify(result)}\n`);

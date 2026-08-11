@@ -1,12 +1,16 @@
 import * as assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 import {
     LOCKED_CORPUS_VERSION,
     LOCKED_PROJECT,
     activateCorpus,
+    inspectActivationProvenance,
     parseActivationArguments,
     parseActivationPreflightArguments,
+    parseExpectedManifestArtifacts,
     preflightActivation,
     type ActivationRepository,
 } from '../../scripts/noor-rag/activate-corpus';
@@ -38,6 +42,28 @@ class FakeRepository implements ActivationRepository {
 }
 
 describe('Noor corpus activation', () => {
+    it('rejects a contradictory approval after validating the full provenance record', () => {
+        const provenance = JSON.parse(readFileSync(resolve(
+            __dirname, '../../../..', 'docs/noor-rag/corpus-provenance.json',
+        ), 'utf8')) as Record<string, unknown>;
+        const result = inspectActivationProvenance({
+            ...provenance,
+            publicActivationApproved: true,
+        }, '2026-08-12');
+
+        assert.equal(result.publicActivationApproved, false);
+        assert.ok(result.blockers.includes('provenance_record_invalid'));
+        assert.ok(result.blockers.includes('commercial_redistribution_license_not_proven'));
+    });
+
+    it('rejects malformed or count-mismatched local chunk artifacts', () => {
+        assert.throws(() => parseExpectedManifestArtifacts({}, [], LOCKED_CORPUS_VERSION), /local corpus/i);
+        assert.throws(() => parseExpectedManifestArtifacts({ ...EXPECTED, chunkCount: 1 }, [{}], LOCKED_CORPUS_VERSION), /local corpus/i);
+        assert.throws(() => parseExpectedManifestArtifacts(
+            { ...EXPECTED, chunkCount: 2 }, [{ originalText: 'one' }], LOCKED_CORPUS_VERSION,
+        ), /local corpus/i);
+    });
+
     it('parses an explicit zero-write preflight and rejects production execution', () => {
         const args = [
             `--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`,
@@ -69,6 +95,26 @@ describe('Noor corpus activation', () => {
                 'runtime_config_missing_or_invalid',
             ],
         });
+        assert.deepEqual(repository.activations, []);
+    });
+
+    it('aggregates a missing local artifact with independent readiness blockers', async () => {
+        const repository = new FakeRepository(null, MANIFEST);
+        const result = await preflightActivation({
+            options: { project: LOCKED_PROJECT, version: LOCKED_CORPUS_VERSION, expectedCurrent: 'none', execute: false },
+            repository,
+            expectedManifest: null,
+            publicActivationApproved: false,
+            provenanceBlockers: ['commercial_redistribution_license_not_proven'],
+            probeIndex: async source => source === 'ibn_kathir_en_abridged',
+        });
+
+        assert.deepEqual(result.blockers, [
+            'provenance:commercial_redistribution_license_not_proven',
+            'locked_local_corpus_manifest_invalid',
+            'runtime_config_missing_or_invalid',
+            'vector_index_not_ready:al_sadi_ar',
+        ]);
         assert.deepEqual(repository.activations, []);
     });
 
