@@ -1,5 +1,6 @@
 import type { NoorRuntimeConfig } from './config';
 import type { EntitlementDecision } from './entitlement';
+import { getGenerationDiagnostics, type NoorGenerationErrorClass } from './generation';
 import type { NoorPolicyCategory } from './policy';
 import type { ClaimResult, FinalizeResult, NoorEntitlementClass } from './usage';
 import type { NoorAnswer, NoorRequest, RetrievedEvidence } from './types';
@@ -27,6 +28,7 @@ export type NoorHandlerErrorClass =
     | 'insufficient_evidence'
     | 'retrieval_unavailable'
     | 'generation_unavailable'
+    | NoorGenerationErrorClass
     | 'response_invalid'
     | 'finalization_unavailable'
     | null;
@@ -43,6 +45,8 @@ export interface NoorHandlerTelemetryEvent {
     retrievedChunkIds: string[];
     errorClass: NoorHandlerErrorClass;
     durationMs: number;
+    retrievalMs: number;
+    generationMs: number;
 }
 
 export interface NoorHandlerUsageInput {
@@ -146,6 +150,8 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let config: NoorRuntimeConfig | null = null;
     let entitlementClass: NoorEntitlementClass | null = null;
     let retrievedChunkIds: string[] = [];
+    let retrievalMs = 0;
+    let generationMs = 0;
 
     const finish = async (response: NoorAnswer, errorClass: NoorHandlerErrorClass): Promise<NoorAnswer> => {
         const event: NoorHandlerTelemetryEvent = {
@@ -162,9 +168,11 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 .map(chunkId => chunkId.slice(0, MAX_TELEMETRY_CHUNK_ID_CHARACTERS)),
             errorClass,
             durationMs: duration(startedAt, safeNow(dependencies)),
+            retrievalMs,
+            generationMs,
         };
         try {
-            await dependencies.emitTelemetry(event);
+            Promise.resolve(dependencies.emitTelemetry(event)).catch(() => undefined);
         } catch {
             // Telemetry is best effort and must never alter an application outcome.
         }
@@ -253,12 +261,15 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         }
 
         let evidence: readonly RetrievedEvidence[];
+        const retrievalStartedAt = safeNow(dependencies);
         try {
             evidence = request.mode === 'chat'
                 ? await dependencies.retrieveSemantic({ request, config })
                 : await dependencies.retrieveExact({ request, config });
         } catch {
             throw new HandlerFailure('retrieval_unavailable');
+        } finally {
+            retrievalMs = duration(retrievalStartedAt, safeNow(dependencies));
         }
         retrievedChunkIds = evidence.map(item => item.chunk.chunkId);
         if (evidence.length === 0) {
@@ -268,11 +279,15 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         }
 
         let generated: unknown;
+        const generationStartedAt = safeNow(dependencies);
         try {
             generated = await dependencies.generateGroundedAnswer({ request, evidence, config });
         } catch {
             throw new HandlerFailure('generation_unavailable');
+        } finally {
+            generationMs = duration(generationStartedAt, safeNow(dependencies));
         }
+        const generationDiagnostics = getGenerationDiagnostics(generated);
         const response = validateResponse(generated, request.requestId);
         if (response.status === 'answered') {
             try {
@@ -283,7 +298,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         } else {
             await dependencies.finalizeNonAnswer(finalizationInput(response));
         }
-        return finish(response, responseErrorClass(response));
+        return finish(response, generationDiagnostics?.errorClass ?? responseErrorClass(response));
     } catch (error) {
         const response = temporaryAnswer(request.requestId);
         try {

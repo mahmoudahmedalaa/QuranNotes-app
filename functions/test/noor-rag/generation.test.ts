@@ -109,6 +109,13 @@ describe('Noor grounded generation', () => {
         assert.deepEqual(provider.requests[0], provider.requests[1]);
     });
 
+    it('retries one transient provider failure before giving up', async () => {
+        const provider = new SequenceProvider([new Error('transient Vertex failure'), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}']);
+        const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 2);
+    });
+
     it('fails calmly after a second invalid output or provider timeout without leaking details', async () => {
         const invalidProvider = new SequenceProvider(['bad-json-with-secret', '{"answer":"still uncited","citationIds":[]}']);
         const invalid = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider: invalidProvider });

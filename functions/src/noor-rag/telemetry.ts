@@ -4,6 +4,7 @@ import type { NoorHandlerTelemetryEvent } from './handler';
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_SUBJECT_ENTRIES = 10;
+const MAX_STAGE_DURATION_MS = 120_000;
 
 interface SnapshotLike { exists: boolean; data(): unknown }
 interface ReferenceLike { path?: string; get(): Promise<SnapshotLike>; set(value: unknown, options: { merge: false }): Promise<void> }
@@ -37,6 +38,12 @@ function parseEntries(value: unknown): SubjectEntry[] {
     });
 }
 
+function boundedStageDuration(value: number): number {
+    return Number.isFinite(value)
+        ? Math.max(0, Math.min(MAX_STAGE_DURATION_MS, Math.floor(value)))
+        : 0;
+}
+
 export function createNoorPseudonym(uid: string, secret: string): string {
     if (!uid || !secret) throw new Error('Invalid Noor telemetry identity');
     return createHmac('sha256', secret).update(uid, 'utf8').digest('hex');
@@ -52,6 +59,8 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
     const expiresAt = new Date(input.now.getTime() + RETENTION_MS);
     const telemetry = {
         ...input.event,
+        retrievalMs: boundedStageDuration(input.event.retrievalMs),
+        generationMs: boundedStageDuration(input.event.generationMs),
         pseudonym,
         pseudonymKeyVersion: input.pseudonymKeyVersion,
         serverTraceId: input.traceId,

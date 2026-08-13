@@ -53,12 +53,15 @@ describe('Noor telemetry', () => {
                 requestId: '123e4567-e89b-42d3-a456-426614174000', mode: 'chat', entitlementClass: 'paid',
                 generationModel: 'gemini-3.5-flash-lite', corpusVersion: VERSION, promptVersion: 'p1',
                 outcome: 'answered', citationCount: 1, retrievedChunkIds: ['c1'], errorClass: null, durationMs: 10,
+                retrievalMs: 3, generationMs: 7,
             } });
         const serialized = JSON.stringify(documents.get('noorTelemetry/trace-1'));
         for (const forbidden of ['user-1', 'raw question text', 'raw answer text', 'person@example.com', 'provider response body']) {
             assert.equal(serialized.includes(forbidden), false);
         }
         const telemetry = documents.get('noorTelemetry/trace-1') as Record<string, unknown>;
+        assert.equal(telemetry.retrievalMs, 3);
+        assert.equal(telemetry.generationMs, 7);
         for (const forbiddenKey of ['uid', 'question', 'history', 'answer', 'email', 'callablePayload', 'providerBody']) {
             assert.equal(Object.prototype.hasOwnProperty.call(telemetry, forbiddenKey), false);
         }

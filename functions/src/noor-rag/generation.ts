@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 import type { NoorAnswer, NoorRequest } from './generatedContract';
-import { parseAndValidateGeneratedAnswer } from './citations';
+import { parseAndValidateGeneratedAnswer, validateGeneratedAnswer, type ValidatedGeneratedAnswer } from './citations';
 import { classifyRequestPolicy } from './policy';
 import type { RetrievedEvidence } from './types';
 
@@ -47,6 +47,26 @@ export interface GenerateGroundedAnswerInput {
     evidence: readonly RetrievedEvidence[];
     maxEvidenceCharacters: number;
     provider: GenerationProvider;
+}
+
+export type NoorGenerationErrorClass =
+    | 'provider_transient_failure'
+    | 'provider_timeout'
+    | 'malformed_json'
+    | 'citation_validation_failure'
+    | 'answer_validation_failure'
+    | null;
+
+export interface GenerationDiagnostics {
+    errorClass: NoorGenerationErrorClass;
+    attempts: number;
+}
+
+const GENERATION_DIAGNOSTICS = new WeakMap<object, GenerationDiagnostics>();
+
+export function getGenerationDiagnostics(value: unknown): GenerationDiagnostics | null {
+    if (typeof value !== 'object' || value === null) return null;
+    return GENERATION_DIAGNOSTICS.get(value) ?? null;
 }
 
 const RESPONSE_SCHEMA: Readonly<Record<string, unknown>> = {
@@ -126,8 +146,52 @@ function providerRequest(prompt: string): VertexGenerationRequest {
     };
 }
 
-function fixedAnswer(requestId: string, status: 'policy_refusal' | 'insufficient_evidence' | 'temporarily_unavailable', answer: string): NoorAnswer {
-    return { requestId, answer, status, citations: [] };
+function fixedAnswer(
+    requestId: string,
+    status: 'policy_refusal' | 'insufficient_evidence' | 'temporarily_unavailable',
+    answer: string,
+    diagnostics: GenerationDiagnostics | null = null,
+): NoorAnswer {
+    const response = { requestId, answer, status, citations: [] } as NoorAnswer;
+    if (diagnostics !== null) GENERATION_DIAGNOSTICS.set(response, diagnostics);
+    return response;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isProviderTimeout(error: unknown): boolean {
+    if (error instanceof Error) return /deadline|timeout|timed[_ -]?out|abort/i.test(error.message);
+    if (!isRecord(error)) return false;
+    const code = typeof error.code === 'string' ? error.code : '';
+    const name = typeof error.name === 'string' ? error.name : '';
+    return /deadline|timeout|timed[_ -]?out|abort/i.test(`${code} ${name}`);
+}
+
+function validationErrorClass(text: string, evidence: readonly RetrievedEvidence[]): NoorGenerationErrorClass {
+    let value: unknown;
+    try {
+        value = JSON.parse(text) as unknown;
+    } catch {
+        return 'malformed_json';
+    }
+    try {
+        validateGeneratedAnswer(value, evidence);
+        return null;
+    } catch {
+        if (!isRecord(value) || typeof value.answer !== 'string' || value.answer.trim().length === 0) {
+            return 'answer_validation_failure';
+        }
+        const markers = value.answer.match(/\[S\d+\]/g) ?? [];
+        return markers.length === 0 ? 'answer_validation_failure' : 'citation_validation_failure';
+    }
+}
+
+function parseGeneratedOutput(text: string, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
+    const errorClass = validationErrorClass(text, evidence);
+    if (errorClass !== null) throw new Error(errorClass);
+    return parseAndValidateGeneratedAnswer(text, evidence);
 }
 
 export function createVertexGenerationProvider(
@@ -157,22 +221,45 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         let text: string;
         try {
             text = await input.provider.generate(request);
-        } catch {
-            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE);
+        } catch (error: unknown) {
+            // Vertex can transiently fail while the request is otherwise valid.
+            // Retry once inside the callable deadline; never leak provider details.
+            const errorClass: NoorGenerationErrorClass = isProviderTimeout(error)
+                ? 'provider_timeout'
+                : 'provider_transient_failure';
+            if (errorClass === 'provider_transient_failure' && attempt === 0) continue;
+            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
+                errorClass,
+                attempts: attempt + 1,
+            });
         }
         try {
-            const validated = parseAndValidateGeneratedAnswer(text, built.evidence);
-            return {
+            const validated = parseGeneratedOutput(text, built.evidence);
+            const response: NoorAnswer = {
                 requestId: input.request.requestId,
                 answer: validated.answer,
                 status: 'answered',
                 citations: validated.citations,
             };
-        } catch {
+            GENERATION_DIAGNOSTICS.set(response, { errorClass: null, attempts: attempt + 1 });
+            return response;
+        } catch (error: unknown) {
+            const errorClass = error instanceof Error
+                && (error.message === 'malformed_json'
+                    || error.message === 'citation_validation_failure'
+                    || error.message === 'answer_validation_failure')
+                ? error.message
+                : 'answer_validation_failure';
             if (attempt === 1) {
-                return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE);
+                return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
+                    errorClass,
+                    attempts: attempt + 1,
+                });
             }
         }
     }
-    return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE);
+    return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
+        errorClass: 'provider_transient_failure',
+        attempts: 2,
+    });
 }

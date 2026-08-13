@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { NoorEntitlementUnavailableError } from '../../src/noor-rag/entitlement';
+import { generateGroundedAnswer, type GenerationProvider } from '../../src/noor-rag/generation';
 import {
     handleNoorRequest,
     type NoorHandlerDependencies,
@@ -208,13 +209,43 @@ describe('handleNoorRequest', () => {
         assert.equal(value.telemetry.length, 1);
         assert.deepEqual(Object.keys(value.telemetry[0]!).sort(), [
             'citationCount', 'corpusVersion', 'durationMs', 'entitlementClass', 'errorClass',
-            'generationModel', 'mode', 'outcome', 'promptVersion', 'requestId', 'retrievedChunkIds',
+            'generationModel', 'generationMs', 'mode', 'outcome', 'promptVersion', 'requestId', 'retrievalMs', 'retrievedChunkIds',
         ]);
         const serialized = JSON.stringify(value.telemetry[0]);
         assert.doesNotMatch(serialized, /sensitive|example\.com|Grounded answer|source|provider/i);
         assert.deepEqual(value.telemetry[0]?.retrievedChunkIds, ['chunk-1']);
         assert.equal(Number.isInteger(value.telemetry[0]?.durationMs), true);
+        assert.equal(Number.isInteger(value.telemetry[0]?.retrievalMs), true);
+        assert.equal(Number.isInteger(value.telemetry[0]?.generationMs), true);
         const telemetryFailure = harness({ emitTelemetry: async () => { throw new Error('telemetry down'); } });
         assert.equal((await run(telemetryFailure)).status, 'answered');
+    });
+
+    it('records bounded generation error classes while preserving safe public statuses', async () => {
+        const provider = (results: Array<string | Error>): GenerationProvider => ({
+            generate: async () => {
+                const result = results.shift();
+                if (result instanceof Error) throw result;
+                if (result === undefined) throw new Error('fixture exhausted');
+                return result;
+            },
+        });
+        const cases = [
+            { results: ['not-json', 'still-not-json'], status: 'temporarily_unavailable', errorClass: 'malformed_json' },
+            { results: ['{"answer":"Grounded. [S9]","citationIds":["S9"]}', '{"answer":"Grounded. [S9]","citationIds":["S9"]}'], status: 'temporarily_unavailable', errorClass: 'citation_validation_failure' },
+            { results: ['{"answer":"Uncited answer","citationIds":[]}', '{"answer":"Uncited answer","citationIds":[]}'], status: 'temporarily_unavailable', errorClass: 'answer_validation_failure' },
+            { results: [Object.assign(new Error('DEADLINE_EXCEEDED provider-secret'), { code: 'DEADLINE_EXCEEDED' })], status: 'temporarily_unavailable', errorClass: 'provider_timeout' },
+            { results: [new Error('temporary upstream failure'), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}'], status: 'answered', errorClass: null },
+        ] as const;
+        for (const value of cases) {
+            const generated = await generateGroundedAnswer({
+                request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: CONFIG.maxEvidenceCharacters,
+                provider: provider([...value.results]),
+            });
+            const harnessValue = harness({ generateGroundedAnswer: async () => generated });
+            const response = await run(harnessValue);
+            assert.equal(response.status, value.status);
+            assert.equal(harnessValue.telemetry[0]?.errorClass, value.errorClass);
+        }
     });
 });
