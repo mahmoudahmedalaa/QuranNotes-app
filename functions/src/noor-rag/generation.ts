@@ -51,6 +51,7 @@ export interface GenerateGroundedAnswerInput {
 
 export type NoorGenerationErrorClass =
     | 'provider_transient_failure'
+    | 'provider_permanent_failure'
     | 'provider_timeout'
     | 'malformed_json'
     | 'citation_validation_failure'
@@ -161,12 +162,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isProviderTimeout(error: unknown): boolean {
-    if (error instanceof Error) return /deadline|timeout|timed[_ -]?out|abort/i.test(error.message);
-    if (!isRecord(error)) return false;
-    const code = typeof error.code === 'string' ? error.code : '';
-    const name = typeof error.name === 'string' ? error.name : '';
-    return /deadline|timeout|timed[_ -]?out|abort/i.test(`${code} ${name}`);
+function numericProviderCode(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isInteger(value)) return value;
+    if (typeof value === 'string' && /^[0-9]+$/.test(value)) return Number(value);
+    return null;
+}
+
+function classifyProviderFailure(error: unknown): Exclude<NoorGenerationErrorClass, null> {
+    const record = isRecord(error) ? error : null;
+    const status = numericProviderCode(record?.status ?? record?.statusCode ?? record?.code);
+    const codeValue = record?.code ?? record?.status ?? record?.statusCode;
+    const code = typeof codeValue === 'string' ? codeValue.toUpperCase() : '';
+    const name = typeof record?.name === 'string' ? record.name : '';
+    const message = error instanceof Error ? error.message : '';
+    if (status === 408 || status === 504 || /deadline|timeout|timed[_ -]?out|abort/i.test(`${code} ${name} ${message}`)) {
+        return 'provider_timeout';
+    }
+    if (status === 429 || (status !== 504 && status !== null && status >= 500 && status <= 599)) {
+        return 'provider_transient_failure';
+    }
+    if (['RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'ABORTED', 'INTERNAL'].includes(code)) {
+        return 'provider_transient_failure';
+    }
+    return 'provider_permanent_failure';
 }
 
 function validationErrorClass(text: string, evidence: readonly RetrievedEvidence[]): NoorGenerationErrorClass {
@@ -224,9 +242,7 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         } catch (error: unknown) {
             // Vertex can transiently fail while the request is otherwise valid.
             // Retry once inside the callable deadline; never leak provider details.
-            const errorClass: NoorGenerationErrorClass = isProviderTimeout(error)
-                ? 'provider_timeout'
-                : 'provider_transient_failure';
+            const errorClass = classifyProviderFailure(error);
             if (errorClass === 'provider_transient_failure' && attempt === 0) continue;
             return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
                 errorClass,

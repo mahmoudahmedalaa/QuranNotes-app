@@ -38,13 +38,17 @@ class SequenceProvider implements GenerationProvider {
     }
 }
 
+function providerError(message: string, fields: Record<string, unknown>): Error {
+    return Object.assign(new Error(message), fields);
+}
+
 describe('Noor generation reliability diagnostics', () => {
     const input = (provider: GenerationProvider) => ({
         request: REQUEST, evidence: [evidence()], maxEvidenceCharacters: 1000, provider,
     });
 
     it('classifies a transient provider failure while preserving a grounded success', async () => {
-        const provider = new SequenceProvider([new Error('temporary upstream failure'), '{"answer":"Grounded. [S1]","citationIds":["S1"]}']);
+        const provider = new SequenceProvider([providerError('temporary upstream failure', { status: 503 }), '{"answer":"Grounded. [S1]","citationIds":["S1"]}']);
         const answer = await generateGroundedAnswer(input(provider));
         assert.equal(answer.status, 'answered');
         assert.equal(getGenerationDiagnostics(answer)?.errorClass, null);
@@ -78,5 +82,50 @@ describe('Noor generation reliability diagnostics', () => {
         assert.equal(getGenerationDiagnostics(answer)?.errorClass, 'provider_timeout');
         assert.equal(provider.requests.length, 1);
         assert.doesNotMatch(answer.answer, /DEADLINE|secret|provider/i);
+    });
+
+    it('fails permanent provider errors once without retrying or leaking provider details', async () => {
+        for (const error of [
+            providerError('bad request with secret', { status: 400 }),
+            providerError('unauthorized provider body', { status: 401 }),
+            providerError('forbidden provider body', { status: 403 }),
+            providerError('invalid argument provider body', { code: 'INVALID_ARGUMENT' }),
+            providerError('permission denied provider body', { code: 'PERMISSION_DENIED' }),
+        ]) {
+            const provider = new SequenceProvider([error]);
+            const answer = await generateGroundedAnswer(input(provider));
+            assert.equal(answer.status, 'temporarily_unavailable');
+            assert.equal(getGenerationDiagnostics(answer)?.errorClass, 'provider_permanent_failure');
+            assert.equal(provider.requests.length, 1);
+            assert.doesNotMatch(answer.answer, /secret|provider|unauthorized|forbidden/i);
+        }
+    });
+
+    it('retries explicitly transient numeric provider statuses exactly once', async () => {
+        for (const status of [429, 500, 502, 503, 'UNAVAILABLE']) {
+            const provider = new SequenceProvider([
+                providerError(`transient ${status}`, { status }),
+                '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+            ]);
+            const answer = await generateGroundedAnswer(input(provider));
+            assert.equal(answer.status, 'answered');
+            assert.equal(provider.requests.length, 2);
+        }
+    });
+
+    it('treats numeric 408 and 504 and timeout names as non-retryable timeouts', async () => {
+        for (const error of [
+            providerError('request timeout', { status: 408 }),
+            providerError('gateway timeout', { status: 504 }),
+            providerError('deadline exceeded', { code: 'DEADLINE_EXCEEDED' }),
+            providerError('deadline exceeded status', { status: 'DEADLINE_EXCEEDED' }),
+            providerError('aborted', { name: 'AbortError' }),
+        ]) {
+            const provider = new SequenceProvider([error]);
+            const answer = await generateGroundedAnswer(input(provider));
+            assert.equal(answer.status, 'temporarily_unavailable');
+            assert.equal(getGenerationDiagnostics(answer)?.errorClass, 'provider_timeout');
+            assert.equal(provider.requests.length, 1);
+        }
     });
 });

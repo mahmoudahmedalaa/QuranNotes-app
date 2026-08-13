@@ -235,7 +235,7 @@ describe('handleNoorRequest', () => {
             { results: ['{"answer":"Grounded. [S9]","citationIds":["S9"]}', '{"answer":"Grounded. [S9]","citationIds":["S9"]}'], status: 'temporarily_unavailable', errorClass: 'citation_validation_failure' },
             { results: ['{"answer":"Uncited answer","citationIds":[]}', '{"answer":"Uncited answer","citationIds":[]}'], status: 'temporarily_unavailable', errorClass: 'answer_validation_failure' },
             { results: [Object.assign(new Error('DEADLINE_EXCEEDED provider-secret'), { code: 'DEADLINE_EXCEEDED' })], status: 'temporarily_unavailable', errorClass: 'provider_timeout' },
-            { results: [new Error('temporary upstream failure'), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}'], status: 'answered', errorClass: null },
+            { results: [Object.assign(new Error('temporary upstream failure'), { status: 503 }), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}'], status: 'answered', errorClass: null },
         ] as const;
         for (const value of cases) {
             const generated = await generateGroundedAnswer({

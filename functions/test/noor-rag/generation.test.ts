@@ -110,7 +110,7 @@ describe('Noor grounded generation', () => {
     });
 
     it('retries one transient provider failure before giving up', async () => {
-        const provider = new SequenceProvider([new Error('transient Vertex failure'), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}']);
+        const provider = new SequenceProvider([Object.assign(new Error('transient Vertex failure'), { status: 503 }), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}']);
         const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
         assert.equal(answer.status, 'answered');
         assert.equal(provider.requests.length, 2);
