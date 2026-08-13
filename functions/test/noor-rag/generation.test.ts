@@ -100,6 +100,21 @@ describe('Noor grounded generation', () => {
         assert.equal(missing.requestId, REQUEST_ID);
     });
 
+    it('uses friendly scope copy and keeps ambiguous Quran questions evidence-bound', async () => {
+        const provider = new SequenceProvider([]);
+        const outOfScope = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'Why is my floor dirty?' }, evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000, provider,
+        });
+        assert.equal(outOfScope.status, 'policy_refusal');
+        assert.equal(outOfScope.answer, 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.');
+        const ambiguous = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'What does this verse mean?' }, evidence: [],
+            maxEvidenceCharacters: 1000, provider,
+        });
+        assert.equal(ambiguous.status, 'insufficient_evidence');
+    });
+
     it('retries invalid output once with identical evidence and then succeeds', async () => {
         const provider = new SequenceProvider(['{"answer":"uncited","citationIds":[]}', '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}']);
         const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
@@ -122,7 +137,7 @@ describe('Noor grounded generation', () => {
         assert.equal(invalid.status, 'temporarily_unavailable');
         assert.deepEqual(invalid.citations, []);
         assert.equal(invalidProvider.requests.length, 2);
-        const timeoutProvider = new SequenceProvider([new Error('DEADLINE_EXCEEDED provider-secret-body')]);
+        const timeoutProvider = new SequenceProvider([Object.assign(new Error('provider-secret-body'), { code: 'DEADLINE_EXCEEDED' })]);
         const timeout = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider: timeoutProvider });
         assert.equal(timeout.status, 'temporarily_unavailable');
         assert.doesNotMatch(timeout.answer, /DEADLINE|secret|provider/i);

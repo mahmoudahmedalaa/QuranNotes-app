@@ -10,6 +10,7 @@ export const VERTEX_GENERATION_LOCATION = 'global' as const;
 const MAX_OUTPUT_TOKENS = 800;
 
 const POLICY_REFUSAL = 'Noor only explains Quran passages using Tafsir Ibn Kathir and Tafsir Al-Sa\'di. For personal rulings, please speak with a qualified scholar.';
+const SCOPE_REFUSAL = 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.';
 const INSUFFICIENT_EVIDENCE = 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.';
 const TEMPORARILY_UNAVAILABLE = 'Noor is temporarily unavailable. Please try again shortly.';
 
@@ -174,14 +175,13 @@ function classifyProviderFailure(error: unknown): Exclude<NoorGenerationErrorCla
     const codeValue = record?.code ?? record?.status ?? record?.statusCode;
     const code = typeof codeValue === 'string' ? codeValue.toUpperCase() : '';
     const name = typeof record?.name === 'string' ? record.name : '';
-    const message = error instanceof Error ? error.message : '';
-    if (status === 408 || status === 504 || /deadline|timeout|timed[_ -]?out|abort/i.test(`${code} ${name} ${message}`)) {
+    if (status === 408 || status === 504 || /DEADLINE_EXCEEDED/i.test(code) || /^AbortError$/i.test(name)) {
         return 'provider_timeout';
     }
     if (status === 429 || (status !== 504 && status !== null && status >= 500 && status <= 599)) {
         return 'provider_transient_failure';
     }
-    if (['RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'ABORTED', 'INTERNAL'].includes(code)) {
+    if (code === 'UNAVAILABLE') {
         return 'provider_transient_failure';
     }
     return 'provider_permanent_failure';
@@ -227,8 +227,9 @@ export function createVertexGenerationProvider(
 }
 
 export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput): Promise<NoorAnswer> {
-    if (classifyRequestPolicy(input.request) !== 'allowed') {
-        return fixedAnswer(input.request.requestId, 'policy_refusal', POLICY_REFUSAL);
+    const policy = classifyRequestPolicy(input.request);
+    if (policy !== 'allowed') {
+        return fixedAnswer(input.request.requestId, 'policy_refusal', policy === 'out_of_scope' ? SCOPE_REFUSAL : POLICY_REFUSAL);
     }
     const built = buildGroundedPrompt(input.request, input.evidence, input.maxEvidenceCharacters);
     if (built.evidence.length === 0) {

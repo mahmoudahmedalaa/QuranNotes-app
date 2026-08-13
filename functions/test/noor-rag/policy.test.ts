@@ -73,4 +73,8 @@ describe('Noor policy', () => {
     it('allows a tafsir question', () => {
         assert.equal(classifyPolicy('What do Ibn Kathir and Al-Sa\'di explain about patience in 2:153?'), 'allowed');
     });
+
+    it('classifies clearly unrelated questions as out of scope', () => {
+        assert.equal(classifyPolicy('Why is my floor dirty?'), 'out_of_scope');
+    });
 });

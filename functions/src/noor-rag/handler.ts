@@ -7,6 +7,7 @@ import type { NoorAnswer, NoorRequest, RetrievedEvidence } from './types';
 import { parseNoorAnswer } from './validation';
 
 const POLICY_REFUSAL = 'Noor only explains Quran passages using Tafsir Ibn Kathir and Tafsir Al-Sa\'di. For personal rulings, please speak with a qualified scholar.';
+const SCOPE_REFUSAL = 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.';
 const INSUFFICIENT_EVIDENCE = 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.';
 const TEMPORARILY_UNAVAILABLE = 'Noor is temporarily unavailable. Please try again shortly.';
 const NOT_ENTITLED = 'Noor is available with an active QuranNotes subscription.';
@@ -254,8 +255,9 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         uid, requestId: request.requestId, invocationId, response,
     });
     try {
-        if (dependencies.classifyPolicy(request) !== 'allowed') {
-            const response = nonQuotaAnswer(request.requestId, 'policy_refusal', POLICY_REFUSAL);
+        const policy = dependencies.classifyPolicy(request);
+        if (policy !== 'allowed') {
+            const response = nonQuotaAnswer(request.requestId, 'policy_refusal', policy === 'out_of_scope' ? SCOPE_REFUSAL : POLICY_REFUSAL);
             await dependencies.finalizeNonAnswer(finalizationInput(response));
             return finish(response, 'policy_refusal');
         }

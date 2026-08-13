@@ -5,7 +5,8 @@ export type NoorPolicyCategory =
     | 'personal_ruling'
     | 'standalone_hadith'
     | 'medical_legal_crisis'
-    | 'prompt_injection';
+    | 'prompt_injection'
+    | 'out_of_scope';
 
 const PROMPT_INJECTION = /(?:ignore|disregard|override|bypass|reveal|show|repeat).{0,100}(?:system|developer|hidden|prior).{0,40}(?:instruction|prompt|message|rule)|jailbreak|prompt\s+injection/i;
 const MEDICAL_LEGAL_CRISIS = /(?:overdos|suicid|self[- ]harm|medical emergency|what medicine|diagnos|legal advice|lawyer|attorney|arrested|court case|criminal charge)/i;
@@ -13,6 +14,7 @@ const UNSAFE_HADITH_INTENT = /(?:(?:write|create|generate|compose|author|produce
 const KNOWN_TAFSIR_SOURCE = /(?:ibn kathir|al-sa['’]?di|ابن كثير|السعدي)/i;
 const HADITH_MENTION = /(?:hadith|حديث)/i;
 const CITED_IN_VERSE_CONTEXT = /(?:(?:cit|mention|explain).{0,70}(?:this|the) verse|(?:ذكر|أورد|استشهد|شرح).{0,70}(?:تفسير )?(?:هذه|تلك) الآية|تفسير (?:هذه|تلك) الآية)/i;
+const IN_SCOPE_HINT = /(?:qur['’]?an|verse|ayah|surah|tafsir|ibn kathir|al-sa['’]?di|allah|islam|muslim|patience|mercy|guidance|prayer|faith|sabr|رحمة|قرآن|آية|سورة|تفسير|الله|إيمان|صبر)/i;
 const STANDALONE_HADITH = /(?:(?:give|show|quote|find|tell me|share|is there|invent|fabricate|make up|create|write).{0,50}(?:a |the )?hadith|(?:is (?:this|the) hadith authentic|verify.{0,40}authenticity.{0,40}hadith|authenticate.{0,40}hadith)|(?:حديث|أعطني حديث))/i;
 const PERSONAL_RULING = /(?:\b(?:halal|haram|permissible|forbidden|fatwa|ruling)\b|(?:حلال|حرام|فتوى|حكم شرعي)).{0,100}(?:\b(?:for me|can i|should i|must i|may i)\b|[؟?])|\b(?:can i|should i|must i|may i)\b.{0,100}\b(?:halal|haram|permissible|forbidden)\b/i;
 
@@ -29,6 +31,7 @@ export function classifyPolicy(content: string): NoorPolicyCategory {
     if (UNSAFE_HADITH_INTENT.test(content)) return 'standalone_hadith';
     if (isTafsirHadithContext(content)) return 'allowed';
     if (STANDALONE_HADITH.test(content)) return 'standalone_hadith';
+    if (!IN_SCOPE_HINT.test(content)) return 'out_of_scope';
     return 'allowed';
 }
 
