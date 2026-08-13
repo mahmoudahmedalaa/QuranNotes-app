@@ -91,6 +91,9 @@ describe('Noor generation reliability diagnostics', () => {
             providerError('forbidden provider body', { status: 403 }),
             providerError('invalid argument provider body', { code: 'INVALID_ARGUMENT' }),
             providerError('permission denied provider body', { code: 'PERMISSION_DENIED' }),
+            providerError('resource exhausted provider body', { code: 'RESOURCE_EXHAUSTED' }),
+            providerError('aborted provider body', { code: 'ABORTED' }),
+            providerError('internal provider body', { code: 'INTERNAL' }),
         ]) {
             const provider = new SequenceProvider([error]);
             const answer = await generateGroundedAnswer(input(provider));
@@ -111,6 +114,18 @@ describe('Noor generation reliability diagnostics', () => {
             assert.equal(answer.status, 'answered');
             assert.equal(provider.requests.length, 2);
         }
+        const timeoutMessage = new SequenceProvider([
+            providerError('timeout wording but retryable status', { status: 500 }),
+            '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+        ]);
+        assert.equal((await generateGroundedAnswer(input(timeoutMessage))).status, 'answered');
+        assert.equal(timeoutMessage.requests.length, 2);
+        const nearDeadlineCode = new SequenceProvider([
+            providerError('near deadline code', { status: 500, code: 'NOT_DEADLINE_EXCEEDED' }),
+            '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+        ]);
+        assert.equal((await generateGroundedAnswer(input(nearDeadlineCode))).status, 'answered');
+        assert.equal(nearDeadlineCode.requests.length, 2);
     });
 
     it('treats numeric 408 and 504 and timeout names as non-retryable timeouts', async () => {

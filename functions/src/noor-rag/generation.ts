@@ -175,7 +175,7 @@ function classifyProviderFailure(error: unknown): Exclude<NoorGenerationErrorCla
     const codeValue = record?.code ?? record?.status ?? record?.statusCode;
     const code = typeof codeValue === 'string' ? codeValue.toUpperCase() : '';
     const name = typeof record?.name === 'string' ? record.name : '';
-    if (status === 408 || status === 504 || /DEADLINE_EXCEEDED/i.test(code) || /^AbortError$/i.test(name)) {
+    if (status === 408 || status === 504 || code === 'DEADLINE_EXCEEDED' || name === 'AbortError') {
         return 'provider_timeout';
     }
     if (status === 429 || (status !== 504 && status !== null && status >= 500 && status <= 599)) {
