@@ -15,16 +15,42 @@ import {
     verifyCorpusReady,
 } from './firestore';
 import { createVertexGenerationProvider, generateGroundedAnswer, type VertexGenerationClient } from './generation';
-import { handleNoorRequest } from './handler';
+import { handleNoorRequest, type NoorSanitizedTrace } from './handler';
 import { classifyRequestPolicy } from './policy';
-import { createFirestoreRetrievalRepository, retrieveExactVerse, retrieveSemantic } from './retrieval';
-import { recordNoorTelemetry } from './telemetry';
+import { parseValidatedConversationState } from './queryRewrite';
+import { createFirestoreRetrievalRepository, retrieveExactVerse, retrieveSemanticWithStats } from './retrieval';
+import { recordNoorSanitizedTrace, recordNoorTelemetry } from './telemetry';
 import { claimRequest, finalizeAnswered, finalizeNonAnswer, readCompletedReplay } from './usage';
 import { parseNoorRequest } from './validation';
 
 export const NOOR_PROJECT = 'qurannotes-9f7a1' as const;
 export const REVENUECAT_SECRET_API_KEY = defineSecret('REVENUECAT_SECRET_API_KEY');
 export const NOOR_TELEMETRY_HMAC_KEY = defineSecret('NOOR_TELEMETRY_HMAC_KEY');
+
+export interface NoorSanitizedTraceSinkInput {
+    firestore: object;
+    uid: string;
+    secret: string;
+    pseudonymKeyVersion: string | (() => string);
+    traceId: string;
+    now?: () => Date;
+}
+
+export function createNoorSanitizedTraceSink(input: NoorSanitizedTraceSinkInput): (trace: NoorSanitizedTrace) => Promise<void> {
+    return trace => recordNoorSanitizedTrace({
+        firestore: input.firestore,
+        uid: input.uid,
+        secret: input.secret,
+        pseudonymKeyVersion: typeof input.pseudonymKeyVersion === 'function'
+            ? input.pseudonymKeyVersion()
+            : input.pseudonymKeyVersion,
+        traceId: input.traceId,
+        now: input.now?.() ?? new Date(),
+        trace,
+    });
+}
+
+export type { NoorSanitizedTrace } from './handler';
 
 function requireProjectId(): typeof NOOR_PROJECT {
     const configured = getApp().options.projectId
@@ -92,8 +118,8 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
             }),
             claimUsage: input => claimRequest({ ...input, repository: usageRepository }),
             classifyPolicy: classifyRequestPolicy,
-            retrieveSemantic: input => retrieveSemantic({
-                content: input.request.question,
+            retrieveSemantic: input => retrieveSemanticWithStats({
+                content: input.query,
                 config: input.config,
                 embedder,
                 repository: retrievalRepository,
@@ -113,6 +139,15 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
             }),
             finalizeAnswered: input => finalizeAnswered({ ...input, repository: usageRepository }),
             finalizeNonAnswer: input => finalizeNonAnswer({ ...input, repository: usageRepository }),
+            readValidatedConversationState: async input => parseValidatedConversationState(
+                await readDocument(firestore, `noorConversationState/${input.uid}`),
+            ),
+            writeValidatedConversationState: async input => {
+                await firestore.doc(`noorConversationState/${input.uid}`).set({
+                    ...input.state,
+                    expiresAt: new Date(input.state.expiresAt),
+                }, { merge: false });
+            },
             emitTelemetry: event => recordNoorTelemetry({
                 firestore,
                 uid,
@@ -121,6 +156,13 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
                 traceId: serverTraceId,
                 now: new Date(),
                 event,
+            }),
+            emitSanitizedTrace: createNoorSanitizedTraceSink({
+                firestore,
+                uid,
+                secret: telemetrySecret,
+                pseudonymKeyVersion: () => telemetryKeyVersion,
+                traceId: serverTraceId,
             }),
             nowMs: Date.now,
         },

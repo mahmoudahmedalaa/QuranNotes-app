@@ -185,6 +185,7 @@ export const onUserDeleted = functions.auth.user().onDelete(async (user) => {
     const collectionsToClean = ["notes", "recordings", "folders"];
     const batch = db.batch();
     let totalDeleted = 0;
+    let hasPendingDeletes = false;
 
     for (const collectionName of collectionsToClean) {
         try {
@@ -196,6 +197,7 @@ export const onUserDeleted = functions.auth.user().onDelete(async (user) => {
             snapshot.docs.forEach((doc) => {
                 batch.delete(doc.ref);
                 totalDeleted++;
+                hasPendingDeletes = true;
             });
         } catch (error) {
             functions.logger.error(
@@ -209,11 +211,17 @@ export const onUserDeleted = functions.auth.user().onDelete(async (user) => {
     try {
         const rateLimitRef = db.collection("_rateLimits").doc(uid);
         batch.delete(rateLimitRef);
+        hasPendingDeletes = true;
     } catch (error) {
         functions.logger.warn("Error deleting rate limit doc:", error);
     }
 
-    if (totalDeleted > 0) {
+    // Noor's validated context and subject pseudonym index are user-scoped.
+    batch.delete(db.collection("noorConversationState").doc(uid));
+    batch.delete(db.collection("noorTelemetrySubjects").doc(uid));
+    hasPendingDeletes = true;
+
+    if (hasPendingDeletes) {
         await batch.commit();
         functions.logger.info(
             `Deleted ${totalDeleted} documents for user ${uid}`

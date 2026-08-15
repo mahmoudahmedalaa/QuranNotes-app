@@ -94,6 +94,12 @@ export interface SemanticRetrievalInput {
     repository: RetrievalRepository;
 }
 
+export interface SemanticRetrievalResult {
+    evidence: readonly SemanticRetrievedEvidence[];
+    vectorHitCount: number;
+    lexicalHitCount: number;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -327,7 +333,7 @@ function roundRobin<T>(groups: readonly (readonly T[])[]): T[] {
     return output;
 }
 
-export async function retrieveSemantic(input: SemanticRetrievalInput): Promise<SemanticRetrievedEvidence[]> {
+export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): Promise<SemanticRetrievalResult> {
     const queryVector = validateEmbedding(await input.embedder.embed(formatEmbeddingQuery(input.content)));
     const sourceResults = await Promise.all(SOURCE_ORDER.map(source => input.repository.searchChunks({
         corpusVersion: input.config.activeCorpusVersion,
@@ -337,6 +343,7 @@ export async function retrieveSemantic(input: SemanticRetrievalInput): Promise<S
         limit: VECTOR_SEARCH_LIMIT,
         distanceResultField: DISTANCE_RESULT_FIELD,
     })));
+    const vectorHitCount = sourceResults.reduce((total, hits) => total + hits.length, 0);
     const merged = roundRobin(sourceResults.map((hits, index) => selectPerSource(
         hits,
         SOURCE_ORDER[index]!,
@@ -349,12 +356,22 @@ export async function retrieveSemantic(input: SemanticRetrievalInput): Promise<S
         selected.push(value);
         characters += value.chunk.originalText.length;
     }
-    return selected.map((value, index) => ({
+    return {
+        evidence: selected.map((value, index) => ({
         kind: 'semantic',
         promptSourceId: `S${index + 1}`,
         chunk: value.chunk,
         similarity: value.similarity,
-    }));
+        })),
+        vectorHitCount,
+        // The lexical route is intentionally absent until the bounded hybrid slice.
+        // Keep this explicit so trace metrics never infer lexical hits from evidence.
+        lexicalHitCount: 0,
+    };
+}
+
+export async function retrieveSemantic(input: SemanticRetrievalInput): Promise<SemanticRetrievedEvidence[]> {
+    return (await retrieveSemanticWithStats(input)).evidence as SemanticRetrievedEvidence[];
 }
 
 export function createFirestoreRetrievalRepository(firestore: object): RetrievalRepository {

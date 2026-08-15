@@ -1,13 +1,13 @@
 import { createHmac } from 'node:crypto';
 
-import type { NoorHandlerTelemetryEvent } from './handler';
+import type { NoorHandlerTelemetryEvent, NoorSanitizedTrace } from './handler';
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_SUBJECT_ENTRIES = 10;
 const MAX_STAGE_DURATION_MS = 120_000;
 
 interface SnapshotLike { exists: boolean; data(): unknown }
-interface ReferenceLike { path?: string; get(): Promise<SnapshotLike>; set(value: unknown, options: { merge: false }): Promise<void> }
+interface ReferenceLike { path?: string; get(): Promise<SnapshotLike>; set(value: unknown, options: { merge: boolean }): Promise<void> }
 interface TransactionLike { get(reference: ReferenceLike): Promise<SnapshotLike>; set(reference: ReferenceLike, value: unknown, options: { merge: false }): void }
 interface FirestoreLike { doc(path: string): ReferenceLike; runTransaction<T>(worker: (transaction: TransactionLike) => Promise<T>): Promise<T> }
 
@@ -44,6 +44,55 @@ function boundedStageDuration(value: number): number {
         : 0;
 }
 
+function boundedCount(value: number, maximum: number): number {
+    return Number.isFinite(value) ? Math.max(0, Math.min(maximum, Math.floor(value))) : 0;
+}
+
+function safeTraceCase(value: string): 'riba-followup' | 'noor-request' {
+    return value === 'riba-followup' ? value : 'noor-request';
+}
+
+function safeTraceFinalCopy(value: string): string {
+    return [
+        'Answer available with validated tafsir citations.',
+        'I could not find enough reliable tafsir evidence to answer that safely.',
+        'I cannot help with that request.',
+        'Noor is available with an active QuranNotes subscription.',
+        'Your daily Noor answer limit has been reached.',
+        'Please revise your question and try again.',
+        'Noor is temporarily unavailable. Please try again shortly.',
+        'Please name the Quran topic, verse, or person you mean so I can search the tafsir.',
+    ].includes(value) ? value : 'Noor trace recorded.';
+}
+
+function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
+    return {
+        case: safeTraceCase(trace.case),
+        policy: trace.policy,
+        status: trace.status,
+        citationCount: boundedCount(trace.citationCount, 8),
+        conversationState: trace.conversationState,
+        contextSelected: trace.contextSelected === true,
+        selectedPriorUserContext: trace.selectedPriorUserContext,
+        queryVariantCount: boundedCount(trace.queryVariantCount, 2),
+        queryVariantKinds: trace.queryVariantKinds.filter(value => value === 'original' || value === 'context_enriched').slice(0, 2),
+        vectorHitCount: boundedCount(trace.vectorHitCount, 100),
+        lexicalHitCount: boundedCount(trace.lexicalHitCount, 100),
+        evidenceIds: trace.evidenceIds.filter(value => /^E\d{1,2}$/u.test(value)).slice(0, 8),
+        evidenceCount: boundedCount(trace.evidenceCount, 8),
+        generationStatus: trace.generationStatus,
+        citationValidation: trace.citationValidation,
+        stageMs: {
+            policy: boundedStageDuration(trace.stageMs.policy),
+            context: boundedStageDuration(trace.stageMs.context),
+            retrieval: boundedStageDuration(trace.stageMs.retrieval),
+            generation: boundedStageDuration(trace.stageMs.generation),
+            citationValidation: boundedStageDuration(trace.stageMs.citationValidation),
+        },
+        finalCopy: safeTraceFinalCopy(trace.finalCopy),
+    };
+}
+
 export function createNoorPseudonym(uid: string, secret: string): string {
     if (!uid || !secret) throw new Error('Invalid Noor telemetry identity');
     return createHmac('sha256', secret).update(uid, 'utf8').digest('hex');
@@ -67,7 +116,7 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
         createdAt,
         expiresAt,
     };
-    await db.doc(`noorTelemetry/${input.traceId}`).set(telemetry, { merge: false });
+    await db.doc(`noorTelemetry/${input.traceId}`).set(telemetry, { merge: true });
     await db.runTransaction(async transaction => {
         const reference = db.doc(`noorTelemetrySubjects/${input.uid}`);
         const snapshot = await transaction.get(reference);
@@ -79,4 +128,32 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
         unique.push(next);
         transaction.set(reference, { entries: unique.slice(-MAX_SUBJECT_ENTRIES), updatedAt: createdAt }, { merge: false });
     });
+}
+
+export interface NoorSanitizedTraceInput {
+    firestore: object;
+    uid: string;
+    secret: string;
+    pseudonymKeyVersion: string;
+    traceId: string;
+    now: Date;
+    trace: NoorSanitizedTrace;
+}
+
+export async function recordNoorSanitizedTrace(input: NoorSanitizedTraceInput): Promise<void> {
+    if (!Number.isFinite(input.now.getTime()) || !input.pseudonymKeyVersion || !input.traceId) {
+        throw new Error('Invalid Noor sanitized trace input');
+    }
+    const db = input.firestore as FirestoreLike;
+    const pseudonym = createNoorPseudonym(input.uid, input.secret);
+    const createdAt = new Date(input.now.getTime());
+    const expiresAt = new Date(input.now.getTime() + RETENTION_MS);
+    await db.doc(`noorTelemetry/${input.traceId}`).set({
+        sanitizedTrace: sanitizeNoorTrace(input.trace),
+        pseudonym,
+        pseudonymKeyVersion: input.pseudonymKeyVersion,
+        serverTraceId: input.traceId,
+        createdAt,
+        expiresAt,
+    }, { merge: true });
 }

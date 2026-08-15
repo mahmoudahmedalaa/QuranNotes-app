@@ -2,6 +2,12 @@ import type { NoorRuntimeConfig } from './config';
 import type { EntitlementDecision } from './entitlement';
 import { getGenerationDiagnostics, type NoorGenerationErrorClass } from './generation';
 import type { NoorPolicyCategory } from './policy';
+import {
+    buildChatQueryPlan,
+    createValidatedConversationState,
+    type ChatQueryPlan,
+    type ValidatedConversationState,
+} from './queryRewrite';
 import type { ClaimResult, FinalizeResult, NoorEntitlementClass } from './usage';
 import type { NoorAnswer, NoorRequest, RetrievedEvidence } from './types';
 import { parseNoorAnswer } from './validation';
@@ -9,6 +15,7 @@ import { parseNoorAnswer } from './validation';
 const POLICY_REFUSAL = 'Noor only explains Quran passages using Tafsir Ibn Kathir and Tafsir Al-Sa\'di. For personal rulings, please speak with a qualified scholar.';
 const SCOPE_REFUSAL = 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.';
 const INSUFFICIENT_EVIDENCE = 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.';
+const CLARIFICATION_REQUIRED = 'Please name the Quran topic, verse, or person you mean so I can search the tafsir.';
 const TEMPORARILY_UNAVAILABLE = 'Noor is temporarily unavailable. Please try again shortly.';
 const NOT_ENTITLED = 'Noor is available with an active QuranNotes subscription.';
 const QUOTA_EXCEEDED = 'You have reached today\'s Noor answer limit. Please try again after the reset.';
@@ -50,6 +57,40 @@ export interface NoorHandlerTelemetryEvent {
     generationMs: number;
 }
 
+export interface NoorSanitizedTrace {
+    case: string;
+    policy: NoorPolicyCategory;
+    status: NoorAnswer['status'];
+    citationCount: number;
+    conversationState: ChatQueryPlan['conversationState'];
+    contextSelected: boolean;
+    selectedPriorUserContext: 'validated_prior_subject' | 'none';
+    queryVariantCount: number;
+    queryVariantKinds: Array<'original' | 'context_enriched'>;
+    vectorHitCount: number;
+    lexicalHitCount: number;
+    evidenceIds: string[];
+    evidenceCount: number;
+    generationStatus: NoorAnswer['status'] | 'not_run';
+    citationValidation: 'passed' | 'failed' | 'not_run';
+    stageMs: {
+        policy: number;
+        context: number;
+        retrieval: number;
+        generation: number;
+        citationValidation: number;
+    };
+    finalCopy: string;
+}
+
+export interface NoorSemanticRetrievalResult {
+    evidence: readonly RetrievedEvidence[];
+    vectorHitCount: number;
+    lexicalHitCount: number;
+}
+
+type NoorSemanticRetrievalOutput = readonly RetrievedEvidence[] | NoorSemanticRetrievalResult;
+
 export interface NoorHandlerUsageInput {
     uid: string;
     requestId: string;
@@ -71,7 +112,11 @@ export interface NoorHandlerDependencies {
     resolveEntitlement(input: Readonly<{ uid: string }>): Promise<EntitlementDecision>;
     claimUsage(input: NoorHandlerUsageInput): Promise<ClaimResult>;
     classifyPolicy(request: NoorRequest): NoorPolicyCategory;
-    retrieveSemantic(input: Readonly<{ request: Extract<NoorRequest, { mode: 'chat' }>; config: NoorRuntimeConfig }>): Promise<readonly RetrievedEvidence[]>;
+    retrieveSemantic(input: Readonly<{
+        request: Extract<NoorRequest, { mode: 'chat' }>;
+        config: NoorRuntimeConfig;
+        query: string;
+    }>): Promise<NoorSemanticRetrievalOutput>;
     retrieveExact(input: Readonly<{
         request: Extract<NoorRequest, { mode: 'verse_summary' | 'verse_question' }>;
         config: NoorRuntimeConfig;
@@ -84,6 +129,9 @@ export interface NoorHandlerDependencies {
     finalizeAnswered(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
     finalizeNonAnswer(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
     emitTelemetry(event: NoorHandlerTelemetryEvent): Promise<void> | void;
+    emitSanitizedTrace?(trace: NoorSanitizedTrace): Promise<void> | void;
+    readValidatedConversationState?(input: Readonly<{ uid: string }>): Promise<ValidatedConversationState | null>;
+    writeValidatedConversationState?(input: Readonly<{ uid: string; state: ValidatedConversationState }>): Promise<void>;
     nowMs(): number;
 }
 
@@ -91,6 +139,8 @@ export interface HandleNoorRequestInput {
     request: NoorRequest;
     uid: string;
     invocationId: string;
+    conversationState?: ValidatedConversationState | null;
+    traceCase?: string;
     dependencies: NoorHandlerDependencies;
 }
 
@@ -130,6 +180,9 @@ function validateResponse(value: unknown, requestId: string): NoorAnswer {
         throw new HandlerFailure('response_invalid');
     }
     if (response.requestId !== requestId) throw new HandlerFailure('response_invalid');
+    if (response.status === 'answered' && response.citations.length === 0) {
+        throw new HandlerFailure('citation_validation_failure');
+    }
     return response;
 }
 
@@ -145,6 +198,49 @@ function responseErrorClass(response: NoorAnswer): NoorHandlerErrorClass {
     }
 }
 
+const TRACE_COPY: Record<NoorAnswer['status'], string> = {
+    answered: 'Answer available with validated tafsir citations.',
+    insufficient_evidence: 'I could not find enough reliable tafsir evidence to answer that safely.',
+    policy_refusal: 'I cannot help with that request.',
+    not_entitled: 'Noor is available with an active QuranNotes subscription.',
+    quota_exceeded: 'Your daily Noor answer limit has been reached.',
+    invalid_request: 'Please revise your question and try again.',
+    temporarily_unavailable: 'Noor is temporarily unavailable. Please try again shortly.',
+};
+
+function normalizeSemanticRetrieval(value: NoorSemanticRetrievalOutput): NoorSemanticRetrievalResult {
+    if (!isSemanticRetrievalResult(value)) {
+        return { evidence: value, vectorHitCount: 0, lexicalHitCount: 0 };
+    }
+    return {
+        evidence: value.evidence,
+        vectorHitCount: Number.isFinite(value.vectorHitCount) ? Math.max(0, Math.floor(value.vectorHitCount)) : 0,
+        lexicalHitCount: Number.isFinite(value.lexicalHitCount) ? Math.max(0, Math.floor(value.lexicalHitCount)) : 0,
+    };
+}
+
+function isSemanticRetrievalResult(value: NoorSemanticRetrievalOutput): value is NoorSemanticRetrievalResult {
+    return !Array.isArray(value) && typeof value === 'object' && value !== null && 'evidence' in value;
+}
+
+function mergeEvidence(values: readonly (readonly RetrievedEvidence[])[]): RetrievedEvidence[] {
+    const seen = new Set<string>();
+    const merged: RetrievedEvidence[] = [];
+    for (const group of values) {
+        for (const item of group) {
+            const key = `${item.chunk.source}:${item.chunk.chunkId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            merged.push(item);
+        }
+    }
+    return merged.map((item, index) => ({ ...item, promptSourceId: `S${index + 1}` }));
+}
+
+function traceEvidenceIds(evidence: readonly RetrievedEvidence[]): string[] {
+    return evidence.slice(0, MAX_TELEMETRY_CHUNK_IDS).map((_item, index) => `E${index + 1}`);
+}
+
 export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<NoorAnswer> {
     const { request, uid, invocationId, dependencies } = input;
     const startedAt = safeNow(dependencies);
@@ -153,8 +249,25 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let retrievedChunkIds: string[] = [];
     let retrievalMs = 0;
     let generationMs = 0;
+    let policy: NoorPolicyCategory = 'out_of_scope';
+    let queryPlan: ChatQueryPlan = request.mode === 'chat'
+        ? buildChatQueryPlan({ request, validatedConversationState: null })
+        : { variants: [], contextSelected: false, conversationState: 'none', requiresClarification: false };
+    let vectorHitCount = 0;
+    let lexicalHitCount = 0;
+    let evidence: readonly RetrievedEvidence[] = [];
+    let generationStatus: NoorSanitizedTrace['generationStatus'] = 'not_run';
+    let citationValidation: NoorSanitizedTrace['citationValidation'] = 'not_run';
+    let traceStatus: NoorAnswer['status'] = 'temporarily_unavailable';
+    let citationCount = 0;
+    const stageMs: NoorSanitizedTrace['stageMs'] = {
+        policy: 0, context: 0, retrieval: 0, generation: 0, citationValidation: 0,
+    };
+    let traceEmitted = false;
 
     const finish = async (response: NoorAnswer, errorClass: NoorHandlerErrorClass): Promise<NoorAnswer> => {
+        traceStatus = response.status;
+        citationCount = response.citations.length;
         const event: NoorHandlerTelemetryEvent = {
             requestId: request.requestId,
             mode: request.mode,
@@ -176,6 +289,35 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             Promise.resolve(dependencies.emitTelemetry(event)).catch(() => undefined);
         } catch {
             // Telemetry is best effort and must never alter an application outcome.
+        }
+        if (!traceEmitted && dependencies.emitSanitizedTrace) {
+            traceEmitted = true;
+            const trace: NoorSanitizedTrace = {
+                case: input.traceCase ?? 'noor-request',
+                policy,
+                status: traceStatus,
+                citationCount,
+                conversationState: queryPlan.conversationState,
+                contextSelected: queryPlan.contextSelected,
+                selectedPriorUserContext: queryPlan.contextSelected ? 'validated_prior_subject' : 'none',
+                queryVariantCount: queryPlan.variants.length,
+                queryVariantKinds: queryPlan.variants.map(variant => variant.kind),
+                vectorHitCount,
+                lexicalHitCount,
+                evidenceIds: traceEvidenceIds(evidence),
+                evidenceCount: evidence.length,
+                generationStatus,
+                citationValidation,
+                stageMs: { ...stageMs },
+                finalCopy: queryPlan.requiresClarification && policy === 'allowed'
+                    ? CLARIFICATION_REQUIRED
+                    : TRACE_COPY[response.status],
+            };
+            try {
+                await Promise.resolve(dependencies.emitSanitizedTrace(trace)).catch(() => undefined);
+            } catch {
+                // Sanitized trace emission is best effort and cannot alter an application outcome.
+            }
         }
         return response;
     };
@@ -255,19 +397,48 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         uid, requestId: request.requestId, invocationId, response,
     });
     try {
-        const policy = dependencies.classifyPolicy(request);
+        const policyStartedAt = safeNow(dependencies);
+        policy = dependencies.classifyPolicy(request);
+        stageMs.policy = duration(policyStartedAt, safeNow(dependencies));
         if (policy !== 'allowed') {
             const response = nonQuotaAnswer(request.requestId, 'policy_refusal', policy === 'out_of_scope' ? SCOPE_REFUSAL : POLICY_REFUSAL);
             await dependencies.finalizeNonAnswer(finalizationInput(response));
             return finish(response, 'policy_refusal');
         }
 
-        let evidence: readonly RetrievedEvidence[];
+        const contextStartedAt = safeNow(dependencies);
+        let validatedConversationState = input.conversationState ?? null;
+        if (request.mode === 'chat' && validatedConversationState === null && dependencies.readValidatedConversationState) {
+            try {
+                validatedConversationState = await dependencies.readValidatedConversationState({ uid });
+            } catch {
+                validatedConversationState = null;
+            }
+        }
+        if (request.mode === 'chat') {
+            queryPlan = buildChatQueryPlan({ request, validatedConversationState });
+        }
+        stageMs.context = duration(contextStartedAt, safeNow(dependencies));
+
+        if (queryPlan.requiresClarification) {
+            const response = nonQuotaAnswer(request.requestId, 'insufficient_evidence', CLARIFICATION_REQUIRED);
+            await dependencies.finalizeNonAnswer(finalizationInput(response));
+            return finish(response, 'insufficient_evidence');
+        }
+
         const retrievalStartedAt = safeNow(dependencies);
         try {
-            evidence = request.mode === 'chat'
-                ? await dependencies.retrieveSemantic({ request, config })
-                : await dependencies.retrieveExact({ request, config });
+            if (request.mode === 'chat') {
+                const results = await Promise.all(queryPlan.variants.map(variant => dependencies.retrieveSemantic({
+                    request, config, query: variant.query,
+                })));
+                const normalized = results.map(normalizeSemanticRetrieval);
+                vectorHitCount = normalized.reduce((total, value) => total + value.vectorHitCount, 0);
+                lexicalHitCount = normalized.reduce((total, value) => total + value.lexicalHitCount, 0);
+                evidence = mergeEvidence(normalized.map(value => value.evidence));
+            } else {
+                evidence = await dependencies.retrieveExact({ request, config });
+            }
         } catch {
             throw new HandlerFailure('retrieval_unavailable');
         } finally {
@@ -288,14 +459,39 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             throw new HandlerFailure('generation_unavailable');
         } finally {
             generationMs = duration(generationStartedAt, safeNow(dependencies));
+            stageMs.generation = generationMs;
         }
         const generationDiagnostics = getGenerationDiagnostics(generated);
-        const response = validateResponse(generated, request.requestId);
+        const citationStartedAt = safeNow(dependencies);
+        let response: NoorAnswer;
+        try {
+            response = validateResponse(generated, request.requestId);
+            citationValidation = generationDiagnostics?.errorClass === 'citation_validation_failure'
+                ? 'failed'
+                : response.status === 'answered' && response.citations.length > 0 ? 'passed' : 'not_run';
+        } catch (error) {
+            citationValidation = 'failed';
+            if (error instanceof HandlerFailure) throw error;
+            throw new HandlerFailure('response_invalid');
+        } finally {
+            stageMs.citationValidation = duration(citationStartedAt, safeNow(dependencies));
+        }
+        generationStatus = response.status;
         if (response.status === 'answered') {
             try {
                 await dependencies.finalizeAnswered(finalizationInput(response));
             } catch {
                 throw new HandlerFailure('finalization_unavailable');
+            }
+            const nextState = request.mode === 'chat'
+                ? createValidatedConversationState({ request, response, evidence })
+                : null;
+            if (nextState && dependencies.writeValidatedConversationState) {
+                try {
+                    await dependencies.writeValidatedConversationState({ uid, state: nextState });
+                } catch {
+                    // Conversation state is optional context and must never invalidate a grounded answer.
+                }
             }
         } else {
             await dependencies.finalizeNonAnswer(finalizationInput(response));
@@ -303,6 +499,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         return finish(response, generationDiagnostics?.errorClass ?? responseErrorClass(response));
     } catch (error) {
         const response = temporaryAnswer(request.requestId);
+        generationStatus = 'temporarily_unavailable';
         try {
             await dependencies.finalizeNonAnswer(finalizationInput(response));
         } catch {

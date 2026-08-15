@@ -6,6 +6,7 @@ import {
     createFirestoreRetrievalRepository,
     retrieveExactVerse,
     retrieveSemantic,
+    retrieveSemanticWithStats,
     type RetrievalRepository,
     type SemanticSearchRequest,
     type StoredDocument,
@@ -343,6 +344,20 @@ describe('Noor semantic retrieval', () => {
             ['S2', 'a1', 0.7],
         ]);
         assert.ok(result.every(value => value.kind === 'semantic' && Number.isFinite(value.similarity)));
+    });
+
+    it('reports raw vector hits separately from selected evidence and unavailable lexical hits', async () => {
+        const repository = new FakeRepository({}, {
+            ibn_kathir_en_abridged: [{ chunk: chunk('ibn_kathir_en_abridged', 'i1'), distance: 0.1 }],
+            al_sadi_ar: [{ chunk: chunk('al_sadi_ar', 'a1'), distance: 0.1 }],
+        });
+        const result = await retrieveSemanticWithStats({
+            content: 'question', config: config(), repository, embedder: { embed: async () => vector },
+        });
+
+        assert.equal(result.vectorHitCount, 2);
+        assert.equal(result.lexicalHitCount, 0);
+        assert.equal(result.evidence.length, 2);
     });
 
     it('sorts stably, dedupes chunks and canonical units, caps each source, and merges round-robin', async () => {

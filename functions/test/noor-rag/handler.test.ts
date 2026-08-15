@@ -7,6 +7,7 @@ import {
     handleNoorRequest,
     type NoorHandlerDependencies,
     type NoorHandlerTelemetryEvent,
+    type NoorSanitizedTrace,
 } from '../../src/noor-rag/handler';
 import type { NoorRuntimeConfig } from '../../src/noor-rag/config';
 import type { ClaimResult } from '../../src/noor-rag/usage';
@@ -16,7 +17,7 @@ const UID = 'sensitive-user@example.com';
 const REQUEST_ID = '11111111-1111-4111-8111-111111111111';
 const INVOCATION_ID = 'invocation-1';
 const REQUEST: NoorRequest = {
-    mode: 'chat', requestId: REQUEST_ID, question: 'sensitive patience question',
+    mode: 'chat', requestId: REQUEST_ID, question: 'What is patience?',
     history: [{ role: 'user', content: 'sensitive history' }],
 };
 const CONFIG: NoorRuntimeConfig = {
@@ -157,6 +158,24 @@ describe('handleNoorRequest', () => {
         }
     });
 
+    it('clarifies structural follow-ups without validated prior evidence and skips retrieval and generation', async () => {
+        const value = harness({
+            retrieveSemantic: async () => { value.events.push('unexpected-semantic'); return EVIDENCE; },
+            generateGroundedAnswer: async () => { value.events.push('unexpected-model'); return ANSWERED; },
+        });
+        const response = await run(value, {
+            mode: 'chat',
+            requestId: '22222222-2222-4222-8222-222222222222',
+            question: 'What is the Islamic alternative?',
+            history: [{ role: 'user', content: 'Is riba haram?' }],
+        });
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.match(response.answer, /name|context|topic|verse/i);
+        assert.ok(!value.events.includes('unexpected-semantic'));
+        assert.ok(!value.events.includes('unexpected-model'));
+        assert.ok(value.events.includes('finalize-non-answer'));
+    });
+
     it('releases every generated non-answer and handles empty evidence and retrieval exceptions', async () => {
         for (const status of ['policy_refusal', 'insufficient_evidence', 'not_entitled', 'invalid_request', 'temporarily_unavailable'] as const) {
             const value = harness({ generateGroundedAnswer: async () => ({ requestId: REQUEST_ID, status, answer: 'safe', citations: [] }) });
@@ -191,6 +210,44 @@ describe('handleNoorRequest', () => {
         const mismatch = harness({ generateGroundedAnswer: async () => ({ ...ANSWERED, requestId: '22222222-2222-4222-8222-222222222222' }) });
         assert.equal((await run(mismatch)).status, 'temporarily_unavailable');
         assert.ok(mismatch.events.includes('finalize-non-answer'));
+    });
+
+    it('rejects answered responses without citations and records citation failures', async () => {
+        const traces: NoorSanitizedTrace[] = [];
+        const noCitations = harness({
+            generateGroundedAnswer: async () => ({ requestId: REQUEST_ID, status: 'answered', answer: 'Uncited answer', citations: [] }),
+            emitSanitizedTrace: trace => { traces.push(trace); },
+        });
+        const response = await run(noCitations);
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.equal(noCitations.telemetry[0]?.errorClass, 'citation_validation_failure');
+
+        const replay = harness({
+            claimUsage: async () => ({
+                kind: 'replay',
+                response: { requestId: REQUEST_ID, status: 'answered', answer: 'Uncited replay', citations: [] },
+            }),
+        });
+        assert.equal((await run(replay)).status, 'temporarily_unavailable');
+        assert.ok(!replay.events.includes('policy'));
+
+        const provider = (results: Array<string | Error>): GenerationProvider => ({
+            generate: async () => {
+                const result = results.shift();
+                if (result instanceof Error) throw result;
+                if (result === undefined) throw new Error('fixture exhausted');
+                return result;
+            },
+        });
+        const generated = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: CONFIG.maxEvidenceCharacters,
+            provider: provider(['{"answer":"Grounded. [S9]","citationIds":["S9"]}', '{"answer":"Grounded. [S9]","citationIds":["S9"]}']),
+        });
+        const citationFailure = harness({ generateGroundedAnswer: async () => generated, emitSanitizedTrace: trace => { traces.push(trace); } });
+        assert.equal((await run(citationFailure)).status, 'temporarily_unavailable');
+        assert.equal(traces.at(-1)?.citationValidation, 'failed');
     });
 
     it('returns claim replay without policy/retrieval/model and fails closed on replay ID mismatch', async () => {

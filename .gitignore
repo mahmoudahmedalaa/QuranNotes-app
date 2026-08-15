@@ -53,6 +53,7 @@ functions/lib/
 functions/node_modules/
 functions/.generated/noor-corpus/
 functions/lib-scripts/
+functions/lib-test/
 .firebase/
 
 

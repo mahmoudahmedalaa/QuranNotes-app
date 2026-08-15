@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { parseNoorRuntimeConfig } from '../../src/noor-rag/config';
+import { createNoorSanitizedTraceSink, type NoorSanitizedTrace } from '../../src/noor-rag/callable';
 import { createEntitlementRepository, createUsageRepository, readRuntimeConfig, verifyCorpusReady } from '../../src/noor-rag/firestore';
 import { createNoorPseudonym, recordNoorTelemetry } from '../../src/noor-rag/telemetry';
 
@@ -43,6 +44,54 @@ describe('Noor production Firestore wiring', () => {
 });
 
 describe('Noor telemetry', () => {
+    it('wires the callable trace sink through privacy-safe telemetry without raw values', async () => {
+        const documents = new Map<string, unknown>();
+        const firestore = fakeFirestore(documents);
+        const trace: NoorSanitizedTrace = {
+            case: 'riba-followup',
+            policy: 'allowed',
+            status: 'answered',
+            citationCount: 1,
+            conversationState: 'validated_subject_and_evidence',
+            contextSelected: true,
+            selectedPriorUserContext: 'validated_prior_subject',
+            queryVariantCount: 2,
+            queryVariantKinds: ['original', 'context_enriched'],
+            vectorHitCount: 8,
+            lexicalHitCount: 4,
+            evidenceIds: ['E1'],
+            evidenceCount: 1,
+            generationStatus: 'answered',
+            citationValidation: 'passed',
+            stageMs: { policy: 1, context: 2, retrieval: 3, generation: 4, citationValidation: 5 },
+            finalCopy: 'Answer available with validated tafsir citations.',
+        };
+        const sink = createNoorSanitizedTraceSink({
+            firestore,
+            uid: 'sensitive-user@example.com',
+            secret: 'telemetry-secret',
+            pseudonymKeyVersion: 'key-v1',
+            traceId: 'server-trace-1',
+            now: () => new Date('2026-08-15T00:00:00.000Z'),
+        });
+
+        await sink(trace);
+
+        const stored = documents.get('noorTelemetry/server-trace-1') as Record<string, unknown>;
+        assert.deepEqual(stored.sanitizedTrace, trace);
+        const serialized = JSON.stringify(stored);
+        for (const forbidden of [
+            'sensitive-user@example.com',
+            'telemetry-secret',
+            'raw question text',
+            'provider response body',
+            'chunk-riba-secret',
+            '11111111-1111-4111-8111-111111111111',
+        ]) {
+            assert.equal(serialized.includes(forbidden), false);
+        }
+    });
+
     it('uses key-versioned pseudonyms and excludes sensitive fields', async () => {
         const documents = new Map<string, unknown>();
         const firestore = fakeFirestore(documents);
@@ -72,7 +121,11 @@ describe('Noor telemetry', () => {
 
 function fakeFirestore(documents: Map<string, unknown>): object {
     const reference = (path: string) => ({ path, get: async () => ({ exists: documents.has(path), data: () => documents.get(path) }),
-        set: async (value: unknown, options: unknown) => { assert.deepEqual(options, { merge: false }); documents.set(path, value); } });
+        set: async (value: unknown, options: unknown) => {
+            if (path.startsWith('noorTelemetry/')) assert.deepEqual(options, { merge: true });
+            else assert.deepEqual(options, { merge: false });
+            documents.set(path, value);
+        } });
     return { doc: reference, runTransaction: async (worker: (transaction: object) => Promise<unknown>) => worker({
         get: async (ref: { path: string }) => ({ exists: documents.has(ref.path), data: () => documents.get(ref.path) }),
         set: (ref: { path: string }, value: unknown, options: unknown) => { assert.deepEqual(options, { merge: false }); documents.set(ref.path, value); },
