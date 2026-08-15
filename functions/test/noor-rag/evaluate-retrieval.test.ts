@@ -35,6 +35,21 @@ describe('Noor generic aggregate evaluator', () => {
         assert.equal(parsed.traces[0]?.case, 'story-paraphrase');
     });
 
+    it('rejects malformed trace records before aggregation', () => {
+        assert.throws(
+            () => parseNoorEvaluationInput({ traces: [trace({ status: 'not-a-status' as NoorSanitizedTrace['status'] })] }),
+            /invalid sanitized trace/i,
+        );
+        assert.throws(
+            () => parseNoorEvaluationInput({ traces: [trace({ queryVariantCount: 1, queryVariantKinds: [] })] }),
+            /invalid sanitized trace/i,
+        );
+        assert.throws(
+            () => parseNoorEvaluationInput({ traces: [trace({ evidenceCount: 0, evidenceIds: ['E1'] })] }),
+            /invalid sanitized trace/i,
+        );
+    });
+
     it('aggregates arbitrary case labels and evaluates external expectations without raw values', () => {
         const result = aggregateNoorEvaluation({
             traces: [

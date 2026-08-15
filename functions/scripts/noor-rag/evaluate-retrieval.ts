@@ -66,6 +66,77 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const TRACE_CASE_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
+const TRACE_STATUSES = new Set<NoorAnswer['status']>([
+    'answered', 'insufficient_evidence', 'policy_refusal', 'not_entitled',
+    'quota_exceeded', 'invalid_request', 'temporarily_unavailable',
+]);
+const TRACE_POLICIES = new Set<NoorPolicyCategory>([
+    'allowed', 'personal_ruling', 'standalone_hadith', 'medical_legal_crisis',
+    'prompt_injection', 'out_of_scope',
+]);
+const TRACE_QUERY_VARIANTS = new Set(['original', 'context_enriched']);
+const TRACE_CONVERSATION_STATES = new Set(['validated_subject_and_evidence', 'none']);
+const TRACE_LEXICAL_STATUSES = new Set(['available', 'unavailable', 'not_configured']);
+const TRACE_GENERATION_STATUSES = new Set([...TRACE_STATUSES, 'not_run']);
+const TRACE_CITATION_VALIDATION = new Set(['passed', 'failed', 'not_run']);
+const MAX_TRACE_EVIDENCE = 8;
+const MAX_TRACE_VARIANTS = 2;
+const MAX_TRACE_DURATION_MS = 120_000;
+const MAX_TRACE_COPY_CHARACTERS = 2_000;
+
+function isBoundedInteger(value: unknown, maximum: number): value is number {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= maximum;
+}
+
+function isStringArray(value: unknown, maximum: number): value is string[] {
+    return Array.isArray(value)
+        && value.length <= maximum
+        && value.every(item => typeof item === 'string' && item.length > 0 && item.length <= 256);
+}
+
+function isStageMs(value: unknown): value is NoorSanitizedTrace['stageMs'] {
+    return isRecord(value)
+        && ['policy', 'context', 'retrieval', 'generation', 'citationValidation'].every(name => (
+            isBoundedInteger(value[name], MAX_TRACE_DURATION_MS)
+        ));
+}
+
+function isSanitizedTrace(value: unknown): value is NoorSanitizedTrace {
+    if (!isRecord(value)
+        || typeof value.case !== 'string' || !TRACE_CASE_PATTERN.test(value.case)
+        || typeof value.policy !== 'string' || !TRACE_POLICIES.has(value.policy as NoorPolicyCategory)
+        || typeof value.status !== 'string' || !TRACE_STATUSES.has(value.status as NoorAnswer['status'])
+        || !isBoundedInteger(value.citationCount, MAX_TRACE_EVIDENCE)
+        || typeof value.conversationState !== 'string' || !TRACE_CONVERSATION_STATES.has(value.conversationState)
+        || typeof value.contextSelected !== 'boolean'
+        || !['validated_prior_subject', 'none'].includes(value.selectedPriorUserContext as string)
+        || !isBoundedInteger(value.queryVariantCount, MAX_TRACE_VARIANTS)
+        || !Array.isArray(value.queryVariantKinds)
+        || value.queryVariantKinds.length !== value.queryVariantCount
+        || !value.queryVariantKinds.every(item => typeof item === 'string' && TRACE_QUERY_VARIANTS.has(item))
+        || new Set(value.queryVariantKinds).size !== value.queryVariantKinds.length
+        || !isBoundedInteger(value.vectorHitCount, Number.MAX_SAFE_INTEGER)
+        || !isBoundedInteger(value.lexicalHitCount, Number.MAX_SAFE_INTEGER)
+        || typeof value.lexicalSearchStatus !== 'string' || !TRACE_LEXICAL_STATUSES.has(value.lexicalSearchStatus)
+        || !isStringArray(value.evidenceIds, MAX_TRACE_EVIDENCE)
+        || !isBoundedInteger(value.evidenceCount, MAX_TRACE_EVIDENCE)
+        || value.evidenceIds.length > value.evidenceCount
+        || typeof value.generationStatus !== 'string' || !TRACE_GENERATION_STATUSES.has(value.generationStatus)
+        || typeof value.citationValidation !== 'string' || !TRACE_CITATION_VALIDATION.has(value.citationValidation)
+        || !isStageMs(value.stageMs)
+        || typeof value.finalCopy !== 'string'
+        || value.finalCopy.length > MAX_TRACE_COPY_CHARACTERS) {
+        return false;
+    }
+    return true;
+}
+
+function parseSanitizedTrace(value: unknown): NoorSanitizedTrace {
+    if (!isSanitizedTrace(value)) throw new Error('Invalid sanitized trace');
+    return value;
+}
+
 export function parseNoorEvaluationInput(value: unknown): NoorEvaluationInput {
     if (!isRecord(value) || !Array.isArray(value.traces)) {
         throw new Error('Noor evaluation input requires a traces array');
@@ -74,7 +145,7 @@ export function parseNoorEvaluationInput(value: unknown): NoorEvaluationInput {
         throw new Error('Noor evaluation expectations must be an object');
     }
     return {
-        traces: value.traces as NoorSanitizedTrace[],
+        traces: value.traces.map(parseSanitizedTrace),
         expectations: value.expectations as Readonly<Record<string, NoorEvaluationExpectation>> | undefined,
     };
 }
