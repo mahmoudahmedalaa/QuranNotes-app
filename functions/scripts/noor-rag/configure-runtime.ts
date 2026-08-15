@@ -31,6 +31,7 @@ export interface RuntimeConfigRepository {
 
 const UID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const REVIEWED_CONFIG_PATH = 'docs/noor-rag/runtime-config.2026-08-10-v1.json';
+const LEGACY_RUNTIME_FIELDS = ['lexicalTermsExpected', 'lexicalTermsReady'] as const;
 
 function values(args: readonly string[], name: string): string[] {
     const prefix = `--${name}=`;
@@ -109,6 +110,15 @@ function assertReviewedDarkConfig(value: unknown): NoorRuntimeConfig {
     return config;
 }
 
+function parseExistingRuntimeConfig(value: unknown): NoorRuntimeConfig {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return parseNoorRuntimeConfig(value);
+    }
+    const normalized = { ...(value as Record<string, unknown>) };
+    for (const field of LEGACY_RUNTIME_FIELDS) delete normalized[field];
+    return parseNoorRuntimeConfig(normalized);
+}
+
 function canonical(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(canonical);
     if (typeof value === 'object' && value !== null) {
@@ -143,11 +153,11 @@ export async function configureRuntime(input: {
         next = reviewed;
     } else {
         if (currentValue === null) throw new Error('Runtime config is missing');
-        const current = parseNoorRuntimeConfig(currentValue);
+        const current = parseExistingRuntimeConfig(currentValue);
         if (current.enabled !== input.options.expectedEnabled || current.publicEnabled !== input.options.expectedPublic) {
             throw new Error('Runtime config compare-and-set expectation failed');
         }
-        expected = current;
+        expected = currentValue;
         if (input.options.mode === 'owner-only') {
             next = parseNoorRuntimeConfig({ ...current, enabled: true, publicEnabled: false, ownerUids: input.options.ownerUids });
         } else if (input.options.mode === 'public') {

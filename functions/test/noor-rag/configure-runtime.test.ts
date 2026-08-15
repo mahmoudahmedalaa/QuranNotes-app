@@ -120,4 +120,29 @@ describe('Noor runtime configuration', () => {
         assert.equal(disabled.next.enabled, false);
         assert.equal(disabled.next.publicEnabled, false);
     });
+
+    it('repairs only the known legacy lexical fields during a compare-and-set update', async () => {
+        const legacyPublic = {
+            ...DARK_CONFIG,
+            enabled: true,
+            publicEnabled: true,
+            activeCorpusVersion: LOCKED_CORPUS_VERSION,
+            lexicalTermsExpected: 9248,
+            lexicalTermsReady: true,
+        };
+        const repository = new FakeRepository(legacyPublic);
+        const result = await configureRuntime({
+            options: parseRuntimeArguments([
+                `--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`,
+                '--disabled', '--expected-enabled=true', '--expected-public=true',
+                '--execute-production-write',
+            ]),
+            repository,
+            reviewedConfig: DARK_CONFIG,
+        });
+        assert.equal(result.next.enabled, false);
+        assert.equal(result.next.publicEnabled, false);
+        assert.equal(Object.prototype.hasOwnProperty.call(result.next, 'lexicalTermsReady'), false);
+        assert.deepEqual(repository.writes, [{ ...DARK_CONFIG, activeCorpusVersion: LOCKED_CORPUS_VERSION }]);
+    });
 });
