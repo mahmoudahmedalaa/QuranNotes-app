@@ -4,7 +4,7 @@
 
 - Carrier: `/Users/mahmoudalaaeldin/.codex/worktrees/faae/QuranApp`
 - Branch: `codex/noor-surgical-rag-recovery`
-- HEAD: `60ba5bf37d662980cd87f0c5cdfc0658e58a9bc4`
+- HEAD: `85776d73faa3d8633bac44ceea93f92baa84a4d0`
 - Status: clean
 - Empty-status SHA-256 (NUL and newline forms): `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
 - The dirty candidate `/Users/mahmoudalaaeldin/.codex/worktrees/noor-release-candidate` remains preserved and untouched.
@@ -24,9 +24,12 @@
 - Functions scripts build passed.
 - Noor contract check passed.
 - Root TypeScript check passed.
+- Root mobile Jest: `25/25` suites and `200/200` tests passed after excluding backend/script-owned Node suites from the Expo Jest boundary.
 - Focused Noor/Tafsir UI tests: `12/12` passed.
 - Case validator passed with `11` cases.
 - `git diff --check` passed.
+
+The dedicated Functions runner remains the source of truth for backend tests: `197/197` tests passed. The root mobile runner now excludes `/functions/` and `/scripts/`, which prevents Node-test files from being executed by the Expo Jest environment and does not alter runtime code.
 
 ## Local corpus preparation and second preflight
 
@@ -56,6 +59,8 @@ The zero-write preflight was rerun after local preparation. It remains `ready: f
 - `retrieval_indexes_not_ready:al_sadi_ar`
 
 No Firebase write occurred.
+
+The separate read-only index verification also returned `not-ready` for the locked project/version.
 
 ## Zero-write Firebase corpus/index preflight
 
