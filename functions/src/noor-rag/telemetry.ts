@@ -48,8 +48,8 @@ function boundedCount(value: number, maximum: number): number {
     return Number.isFinite(value) ? Math.max(0, Math.min(maximum, Math.floor(value))) : 0;
 }
 
-function safeTraceCase(value: string): 'riba-followup' | 'noor-request' {
-    return value === 'riba-followup' ? value : 'noor-request';
+function safeTraceCase(value: string): string {
+    return /^[a-z0-9][a-z0-9_-]{0,63}$/u.test(value) ? value : 'noor-request';
 }
 
 function safeTraceFinalCopy(value: string): string {

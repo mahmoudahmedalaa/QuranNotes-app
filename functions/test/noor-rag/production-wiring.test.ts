@@ -92,6 +92,23 @@ describe('Noor telemetry', () => {
         }
     });
 
+    it('preserves arbitrary bounded evaluation class labels without a production topic list', async () => {
+        const documents = new Map<string, unknown>();
+        const firestore = fakeFirestore(documents);
+        const sink = createNoorSanitizedTraceSink({
+            firestore, uid: 'user-1', secret: 'secret', pseudonymKeyVersion: 'key-v1', traceId: 'trace-class',
+        });
+        await sink({
+            case: 'modern-concept-paraphrase', policy: 'allowed', status: 'insufficient_evidence', citationCount: 0,
+            conversationState: 'none', contextSelected: false, selectedPriorUserContext: 'none', queryVariantCount: 1,
+            queryVariantKinds: ['original'], vectorHitCount: 0, lexicalHitCount: 0, evidenceIds: [], evidenceCount: 0,
+            generationStatus: 'not_run', citationValidation: 'not_run',
+            stageMs: { policy: 1, context: 1, retrieval: 1, generation: 0, citationValidation: 0 },
+            finalCopy: 'I could not find enough reliable tafsir evidence to answer that safely.',
+        });
+        assert.equal((documents.get('noorTelemetry/trace-class') as { sanitizedTrace: NoorSanitizedTrace }).sanitizedTrace.case, 'modern-concept-paraphrase');
+    });
+
     it('uses key-versioned pseudonyms and excludes sensitive fields', async () => {
         const documents = new Map<string, unknown>();
         const firestore = fakeFirestore(documents);
