@@ -11,6 +11,7 @@
         "noor:corpus:ingest": "npm run build:scripts && node lib-scripts/scripts/noor-rag/ingest-corpus.js",
         "noor:index:verify": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-index.js",
         "noor:eval": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluate-retrieval.js",
+        "noor:eval:validate-cases": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluation-cases.js --input=evals/noor-evaluation-cases.json",
         "noor:runtime:configure": "npm run build:scripts && node lib-scripts/scripts/noor-rag/configure-runtime.js",
         "noor:activation:preflight": "npm run build:scripts && node lib-scripts/scripts/noor-rag/activate-corpus.js --preflight",
         "noor:corpus:activate": "npm run build:scripts && node lib-scripts/scripts/noor-rag/activate-corpus.js",

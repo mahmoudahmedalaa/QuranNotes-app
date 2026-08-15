@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { NoorPolicyCategory } from '../../src/noor-rag/policy';
 import type { NoorSanitizedTrace } from '../../src/noor-rag/handler';
 import type { NoorAnswer } from '../../src/noor-rag/types';
+import { buildNoorEvaluationExpectations, parseNoorEvaluationManifest } from './evaluation-cases';
 
 export interface NoorLatencySummary {
     minimum: number;
@@ -175,7 +176,11 @@ function main(): void {
     const inputPath = argument('input');
     if (!inputPath) throw new Error('Noor evaluation requires --input=<sanitized-json-path>');
     const input = parseNoorEvaluationInput(JSON.parse(readFileSync(inputPath, 'utf8')) as unknown);
-    process.stdout.write(`${JSON.stringify(aggregateNoorEvaluation(input), undefined, 2)}\n`);
+    const casesPath = argument('cases');
+    const expectations = casesPath === undefined
+        ? input.expectations
+        : buildNoorEvaluationExpectations(parseNoorEvaluationManifest(JSON.parse(readFileSync(casesPath, 'utf8')) as unknown));
+    process.stdout.write(`${JSON.stringify(aggregateNoorEvaluation({ ...input, expectations }), undefined, 2)}\n`);
 }
 
 if (require.main === module) {
