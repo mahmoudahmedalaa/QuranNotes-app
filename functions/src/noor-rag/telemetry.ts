@@ -78,6 +78,9 @@ function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
         queryVariantKinds: trace.queryVariantKinds.filter(value => value === 'original' || value === 'context_enriched').slice(0, 2),
         vectorHitCount: boundedCount(trace.vectorHitCount, 100),
         lexicalHitCount: boundedCount(trace.lexicalHitCount, 100),
+        lexicalSearchStatus: trace.lexicalSearchStatus === 'available' || trace.lexicalSearchStatus === 'unavailable'
+            ? trace.lexicalSearchStatus
+            : 'not_configured',
         evidenceIds: trace.evidenceIds.filter(value => /^E\d{1,2}$/u.test(value)).slice(0, 8),
         evidenceCount: boundedCount(trace.evidenceCount, 8),
         generationStatus: trace.generationStatus,

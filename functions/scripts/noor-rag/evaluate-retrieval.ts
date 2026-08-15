@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import type { NoorPolicyCategory } from '../../src/noor-rag/policy';
 import type { NoorSanitizedTrace } from '../../src/noor-rag/handler';
 import type { NoorAnswer } from '../../src/noor-rag/types';
@@ -13,6 +15,8 @@ export interface NoorEvaluationExpectation {
     minimumContextSelected?: number;
     minimumEvidenceFound?: number;
     minimumCitationValidationPassed?: number;
+    minimumLexicalAvailable?: number;
+    maximumLexicalUnavailable?: number;
     allowedStatuses?: readonly NoorAnswer['status'][];
 }
 
@@ -22,6 +26,8 @@ export interface NoorExpectationResult {
     contextSelectedCount: number;
     evidenceFoundCount: number;
     citationValidationPassedCount: number;
+    lexicalAvailableCount: number;
+    lexicalUnavailableCount: number;
 }
 
 export interface NoorRagEvaluationSummary {
@@ -33,6 +39,8 @@ export interface NoorRagEvaluationSummary {
     evidenceFoundCount: number;
     generationNotRunCount: number;
     citationValidationPassedCount: number;
+    lexicalAvailableCount: number;
+    lexicalUnavailableCount: number;
     queryVariantCount: {
         total: number;
         minimum: number;
@@ -46,6 +54,28 @@ export interface NoorRagEvaluationSummary {
         citationValidation: NoorLatencySummary;
     };
     expectations: Record<string, NoorExpectationResult>;
+}
+
+export interface NoorEvaluationInput {
+    traces: readonly NoorSanitizedTrace[];
+    expectations?: Readonly<Record<string, NoorEvaluationExpectation>>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function parseNoorEvaluationInput(value: unknown): NoorEvaluationInput {
+    if (!isRecord(value) || !Array.isArray(value.traces)) {
+        throw new Error('Noor evaluation input requires a traces array');
+    }
+    if (value.expectations !== undefined && !isRecord(value.expectations)) {
+        throw new Error('Noor evaluation expectations must be an object');
+    }
+    return {
+        traces: value.traces as NoorSanitizedTrace[],
+        expectations: value.expectations as Readonly<Record<string, NoorEvaluationExpectation>> | undefined,
+    };
 }
 
 function percentile(values: readonly number[], rank: number): number {
@@ -69,10 +99,7 @@ function increment<K extends string>(counts: Partial<Record<K, number>>, key: K)
     counts[key] = (counts[key] ?? 0) + 1;
 }
 
-export function aggregateNoorEvaluation(input: Readonly<{
-    traces: readonly NoorSanitizedTrace[];
-    expectations?: Readonly<Record<string, NoorEvaluationExpectation>>;
-}>): NoorRagEvaluationSummary {
+export function aggregateNoorEvaluation(input: NoorEvaluationInput): NoorRagEvaluationSummary {
     const traces = input.traces;
     const caseCounts: Record<string, number> = {};
     const statusCounts: Partial<Record<NoorAnswer['status'], number>> = {};
@@ -92,6 +119,8 @@ export function aggregateNoorEvaluation(input: Readonly<{
         const contextSelectedCount = selected.filter(trace => trace.contextSelected).length;
         const evidenceFoundCount = selected.filter(trace => trace.evidenceCount > 0).length;
         const citationValidationPassedCount = selected.filter(trace => trace.citationValidation === 'passed').length;
+        const lexicalAvailableCount = selected.filter(trace => trace.lexicalSearchStatus === 'available').length;
+        const lexicalUnavailableCount = selected.filter(trace => trace.lexicalSearchStatus === 'unavailable').length;
         const statusesValid = expectation.allowedStatuses === undefined
             || selected.every(trace => expectation.allowedStatuses!.includes(trace.status));
         expectations[caseLabel] = {
@@ -100,10 +129,14 @@ export function aggregateNoorEvaluation(input: Readonly<{
                 && statusesValid
                 && (expectation.minimumContextSelected === undefined || contextSelectedCount >= expectation.minimumContextSelected)
                 && (expectation.minimumEvidenceFound === undefined || evidenceFoundCount >= expectation.minimumEvidenceFound)
-                && (expectation.minimumCitationValidationPassed === undefined || citationValidationPassedCount >= expectation.minimumCitationValidationPassed),
+                && (expectation.minimumCitationValidationPassed === undefined || citationValidationPassedCount >= expectation.minimumCitationValidationPassed)
+                && (expectation.minimumLexicalAvailable === undefined || lexicalAvailableCount >= expectation.minimumLexicalAvailable)
+                && (expectation.maximumLexicalUnavailable === undefined || lexicalUnavailableCount <= expectation.maximumLexicalUnavailable),
             contextSelectedCount,
             evidenceFoundCount,
             citationValidationPassedCount,
+            lexicalAvailableCount,
+            lexicalUnavailableCount,
         };
     }
     return {
@@ -115,6 +148,8 @@ export function aggregateNoorEvaluation(input: Readonly<{
         evidenceFoundCount: traces.filter(trace => trace.evidenceCount > 0).length,
         generationNotRunCount: traces.filter(trace => trace.generationStatus === 'not_run').length,
         citationValidationPassedCount: traces.filter(trace => trace.citationValidation === 'passed').length,
+        lexicalAvailableCount: traces.filter(trace => trace.lexicalSearchStatus === 'available').length,
+        lexicalUnavailableCount: traces.filter(trace => trace.lexicalSearchStatus === 'unavailable').length,
         queryVariantCount: {
             total: queryCounts.reduce((total, count) => total + count, 0),
             minimum: queryCounts.length > 0 ? Math.min(...queryCounts) : 0,
@@ -129,4 +164,25 @@ export function aggregateNoorEvaluation(input: Readonly<{
         },
         expectations,
     };
+}
+
+function argument(name: string): string | undefined {
+    const prefix = `--${name}=`;
+    return process.argv.slice(2).find(value => value.startsWith(prefix))?.slice(prefix.length);
+}
+
+function main(): void {
+    const inputPath = argument('input');
+    if (!inputPath) throw new Error('Noor evaluation requires --input=<sanitized-json-path>');
+    const input = parseNoorEvaluationInput(JSON.parse(readFileSync(inputPath, 'utf8')) as unknown);
+    process.stdout.write(`${JSON.stringify(aggregateNoorEvaluation(input), undefined, 2)}\n`);
+}
+
+if (require.main === module) {
+    try {
+        main();
+    } catch (error: unknown) {
+        process.stderr.write(`${error instanceof Error ? error.message : 'Noor evaluation failed'}\n`);
+        process.exitCode = 1;
+    }
 }

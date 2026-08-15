@@ -120,7 +120,7 @@ describe('riba follow-up sanitized trace', () => {
             classifyPolicy: () => 'allowed',
             retrieveSemantic: async ({ query }) => {
                 queries.push(query);
-                return { evidence: firstEvidence, vectorHitCount: 4, lexicalHitCount: 2 };
+                return { evidence: firstEvidence, vectorHitCount: 4, lexicalHitCount: 2, lexicalSearchStatus: 'available' as const };
             },
             retrieveExact: async () => firstEvidence,
             generateGroundedAnswer: async ({ request: currentRequest }) => ({
@@ -166,6 +166,7 @@ describe('riba follow-up sanitized trace', () => {
             queryVariantKinds: ['original', 'context_enriched'],
             vectorHitCount: 8,
             lexicalHitCount: 4,
+            lexicalSearchStatus: 'available',
             evidenceIds: ['E1'],
             evidenceCount: 1,
             generationStatus: 'answered',

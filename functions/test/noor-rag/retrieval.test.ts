@@ -493,4 +493,40 @@ describe('Firestore retrieval adapter', () => {
         assert.equal(nearest.distanceResultField, '_noorVectorDistance');
         assert.deepEqual(results.map(value => [value.chunk.chunkId, value.distance]), [['a1', 0.25]]);
     });
+
+    it('uses one bounded array-contains-any query for lexical tokens and scores token overlap', async () => {
+        const events: Array<readonly unknown[]> = [];
+        const first = chunk('al_sadi_ar', 'a1', 'u1', 'first');
+        const second = chunk('al_sadi_ar', 'a2', 'u2', 'second');
+        const query = {
+            where: (field: string, operator: string, value: unknown) => {
+                events.push(['where', field, operator, value]);
+                return query;
+            },
+            limit: (count: number) => {
+                events.push(['limit', count]);
+                return query;
+            },
+            get: async () => ({ docs: [
+                { id: first.chunkId, data: () => ({ ...first, lexicalTokens: ['patience', 'mercy'] }) },
+                { id: second.chunkId, data: () => ({ ...second, lexicalTokens: ['patience'] }) },
+            ] }),
+            findNearest: () => ({ get: async () => ({ docs: [] }) }),
+        };
+        const repository = createFirestoreRetrievalRepository({ collectionGroup: () => query });
+        const results = await repository.searchLexical!({
+            corpusVersion: VERSION,
+            source: 'al_sadi_ar',
+            tokens: ['patience', 'mercy'],
+            limit: 8,
+        });
+
+        assert.deepEqual(events, [
+            ['where', 'corpusVersion', '==', VERSION],
+            ['where', 'source', '==', 'al_sadi_ar'],
+            ['where', 'lexicalTokens', 'array-contains-any', ['patience', 'mercy']],
+            ['limit', 8],
+        ]);
+        assert.deepEqual(results.map(value => [value.chunk.chunkId, value.score]), [['a1', 2], ['a2', 1]]);
+    });
 });

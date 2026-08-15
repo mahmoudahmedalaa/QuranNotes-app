@@ -23,6 +23,7 @@ export interface IndexProbeResponse {
     count: number;
     corpusVersion: string | null;
     source: string | null;
+    lexicalCount: number;
 }
 
 export interface IndexProbe {
@@ -38,7 +39,9 @@ export interface IndexVerificationResult {
 interface SnapshotLike { data(): unknown }
 interface VectorQueryLike { get(): Promise<{ docs: readonly SnapshotLike[] }> }
 interface QueryLike {
-    where(field: string, operator: '==', value: string): QueryLike;
+    where(field: string, operator: '==' | 'array-contains', value: string): QueryLike;
+    limit(count: number): QueryLike;
+    get(): Promise<{ docs: readonly SnapshotLike[] }>;
     findNearest(options: Readonly<Record<string, unknown>>): VectorQueryLike;
 }
 interface FirestoreLike { collectionGroup(name: string): QueryLike }
@@ -76,7 +79,8 @@ export async function verifyIndex(input: { options: IndexOptions; probe: IndexPr
             checkedSources.push(source);
             if (response.count !== 1
                 || response.corpusVersion !== input.options.version
-                || response.source !== source) {
+                || response.source !== source
+                || response.lexicalCount !== 1) {
                 return { ready: false, exitCode: 1, checkedSources };
             }
         }
@@ -103,10 +107,22 @@ export async function createAdminIndexProbe(options: IndexOptions): Promise<Inde
                     limit: request.limit,
                 }).get();
             const data = snapshot.docs[0]?.data();
+            const lexicalTokens = isRecord(data) && Array.isArray(data.lexicalTokens)
+                ? data.lexicalTokens.filter((value): value is string => typeof value === 'string' && value.length > 0)
+                : [];
+            const lexicalCount = lexicalTokens.length === 0
+                ? 0
+                : (await firestore.collectionGroup('chunks')
+                    .where('corpusVersion', '==', request.version)
+                    .where('source', '==', request.source)
+                    .where('lexicalTokens', 'array-contains', lexicalTokens[0]!)
+                    .limit(1)
+                    .get()).docs.length;
             return {
                 count: snapshot.docs.length,
                 corpusVersion: isRecord(data) && typeof data.corpusVersion === 'string' ? data.corpusVersion : null,
                 source: isRecord(data) && typeof data.source === 'string' ? data.source : null,
+                lexicalCount,
             };
         },
     };

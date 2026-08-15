@@ -69,6 +69,7 @@ export interface NoorSanitizedTrace {
     queryVariantKinds: Array<'original' | 'context_enriched'>;
     vectorHitCount: number;
     lexicalHitCount: number;
+    lexicalSearchStatus: 'available' | 'unavailable' | 'not_configured';
     evidenceIds: string[];
     evidenceCount: number;
     generationStatus: NoorAnswer['status'] | 'not_run';
@@ -87,6 +88,7 @@ export interface NoorSemanticRetrievalResult {
     evidence: readonly RetrievedEvidence[];
     vectorHitCount: number;
     lexicalHitCount: number;
+    lexicalSearchStatus: 'available' | 'unavailable' | 'not_configured';
 }
 
 type NoorSemanticRetrievalOutput = readonly RetrievedEvidence[] | NoorSemanticRetrievalResult;
@@ -210,12 +212,15 @@ const TRACE_COPY: Record<NoorAnswer['status'], string> = {
 
 function normalizeSemanticRetrieval(value: NoorSemanticRetrievalOutput): NoorSemanticRetrievalResult {
     if (!isSemanticRetrievalResult(value)) {
-        return { evidence: value, vectorHitCount: 0, lexicalHitCount: 0 };
+        return { evidence: value, vectorHitCount: 0, lexicalHitCount: 0, lexicalSearchStatus: 'not_configured' };
     }
     return {
         evidence: value.evidence,
         vectorHitCount: Number.isFinite(value.vectorHitCount) ? Math.max(0, Math.floor(value.vectorHitCount)) : 0,
         lexicalHitCount: Number.isFinite(value.lexicalHitCount) ? Math.max(0, Math.floor(value.lexicalHitCount)) : 0,
+        lexicalSearchStatus: value.lexicalSearchStatus === 'unavailable' || value.lexicalSearchStatus === 'available'
+            ? value.lexicalSearchStatus
+            : 'not_configured',
     };
 }
 
@@ -223,16 +228,52 @@ function isSemanticRetrievalResult(value: NoorSemanticRetrievalOutput): value is
     return !Array.isArray(value) && typeof value === 'object' && value !== null && 'evidence' in value;
 }
 
-function mergeEvidence(values: readonly (readonly RetrievedEvidence[])[]): RetrievedEvidence[] {
-    const seen = new Set<string>();
-    const merged: RetrievedEvidence[] = [];
-    for (const group of values) {
-        for (const item of group) {
-            const key = `${item.chunk.source}:${item.chunk.chunkId}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            merged.push(item);
+function mergeEvidence(
+    values: readonly (readonly RetrievedEvidence[])[],
+    config: NoorRuntimeConfig,
+): RetrievedEvidence[] {
+    const candidates = new Map<string, { item: RetrievedEvidence; variants: number; score: number; first: number }>();
+    let first = 0;
+    values.forEach(group => group.forEach(item => {
+        const key = `${item.chunk.source}:${item.chunk.canonicalUnitId}`;
+        const score = item.kind === 'semantic' ? item.similarity : 0;
+        const existing = candidates.get(key);
+        if (existing) {
+            existing.variants += 1;
+            existing.score = Math.max(existing.score, score);
+        } else {
+            candidates.set(key, { item, variants: 1, score, first });
         }
+        first += 1;
+    }));
+    const ranked = [...candidates.values()].sort((left, right) => (
+        right.variants - left.variants
+        || right.score - left.score
+        || left.item.chunk.source.localeCompare(right.item.chunk.source)
+        || left.item.chunk.chunkId.localeCompare(right.item.chunk.chunkId)
+        || left.first - right.first
+    ));
+    const bySource = new Map<string, typeof ranked>();
+    for (const candidate of ranked) {
+        const group = bySource.get(candidate.item.chunk.source) ?? [];
+        group.push(candidate);
+        bySource.set(candidate.item.chunk.source, group);
+    }
+    const merged: RetrievedEvidence[] = [];
+    let characters = 0;
+    const maximum = config.maxChunksPerSource * 2;
+    while (merged.length < maximum) {
+        let added = false;
+        for (const source of ['ibn_kathir_en_abridged', 'al_sadi_ar'] as const) {
+            const group = bySource.get(source);
+            const candidate = group?.shift();
+            if (!candidate || characters + candidate.item.chunk.originalText.length > config.maxEvidenceCharacters) continue;
+            merged.push(candidate.item);
+            characters += candidate.item.chunk.originalText.length;
+            added = true;
+            if (merged.length >= maximum) break;
+        }
+        if (!added) break;
     }
     return merged.map((item, index) => ({ ...item, promptSourceId: `S${index + 1}` }));
 }
@@ -255,6 +296,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         : { variants: [], contextSelected: false, conversationState: 'none', requiresClarification: false };
     let vectorHitCount = 0;
     let lexicalHitCount = 0;
+    let lexicalSearchStatus: NoorSanitizedTrace['lexicalSearchStatus'] = 'not_configured';
     let evidence: readonly RetrievedEvidence[] = [];
     let generationStatus: NoorSanitizedTrace['generationStatus'] = 'not_run';
     let citationValidation: NoorSanitizedTrace['citationValidation'] = 'not_run';
@@ -304,6 +346,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 queryVariantKinds: queryPlan.variants.map(variant => variant.kind),
                 vectorHitCount,
                 lexicalHitCount,
+                lexicalSearchStatus,
                 evidenceIds: traceEvidenceIds(evidence),
                 evidenceCount: evidence.length,
                 generationStatus,
@@ -435,7 +478,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 const normalized = results.map(normalizeSemanticRetrieval);
                 vectorHitCount = normalized.reduce((total, value) => total + value.vectorHitCount, 0);
                 lexicalHitCount = normalized.reduce((total, value) => total + value.lexicalHitCount, 0);
-                evidence = mergeEvidence(normalized.map(value => value.evidence));
+                lexicalSearchStatus = normalized.some(value => value.lexicalSearchStatus === 'unavailable')
+                    ? 'unavailable'
+                    : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
+                evidence = mergeEvidence(normalized.map(value => value.evidence), config);
             } else {
                 evidence = await dependencies.retrieveExact({ request, config });
             }

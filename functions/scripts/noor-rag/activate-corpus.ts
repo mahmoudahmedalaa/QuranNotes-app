@@ -201,7 +201,7 @@ export async function activateCorpus(input: {
         throw new Error('Runtime evidence budget is smaller than the largest finalized chunk');
     }
     for (const source of LOCKED_SOURCES) {
-        if (!await input.probeIndex(source)) throw new Error(`Vector index is not ready for ${source}`);
+        if (!await input.probeIndex(source)) throw new Error(`Vector and lexical indexes are not ready for ${source}`);
     }
     if (input.options.execute) {
         await input.repository.activate(input.options.expectedCurrent, input.options.version);
@@ -261,9 +261,9 @@ export async function preflightActivation(input: {
 
     for (const source of LOCKED_SOURCES) {
         try {
-            if (!await input.probeIndex(source)) blockers.push(`vector_index_not_ready:${source}`);
+            if (!await input.probeIndex(source)) blockers.push(`retrieval_indexes_not_ready:${source}`);
         } catch {
-            blockers.push(`vector_index_not_ready:${source}`);
+            blockers.push(`retrieval_indexes_not_ready:${source}`);
         }
     }
 
@@ -333,7 +333,10 @@ async function main(): Promise<void> {
     const probeIndex = async (source: NoorSource): Promise<boolean> => {
         try {
             const response = await indexProbe.query({ ...options, source, vector, limit: 1 });
-            return response.count === 1 && response.corpusVersion === options.version && response.source === source;
+            return response.count === 1
+                && response.corpusVersion === options.version
+                && response.source === source
+                && response.lexicalCount === 1;
         } catch {
             return false;
         }

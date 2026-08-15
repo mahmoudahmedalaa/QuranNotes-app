@@ -59,6 +59,7 @@ describe('Noor telemetry', () => {
             queryVariantKinds: ['original', 'context_enriched'],
             vectorHitCount: 8,
             lexicalHitCount: 4,
+            lexicalSearchStatus: 'available',
             evidenceIds: ['E1'],
             evidenceCount: 1,
             generationStatus: 'answered',
@@ -101,7 +102,7 @@ describe('Noor telemetry', () => {
         await sink({
             case: 'modern-concept-paraphrase', policy: 'allowed', status: 'insufficient_evidence', citationCount: 0,
             conversationState: 'none', contextSelected: false, selectedPriorUserContext: 'none', queryVariantCount: 1,
-            queryVariantKinds: ['original'], vectorHitCount: 0, lexicalHitCount: 0, evidenceIds: [], evidenceCount: 0,
+            queryVariantKinds: ['original'], vectorHitCount: 0, lexicalHitCount: 0, lexicalSearchStatus: 'not_configured', evidenceIds: [], evidenceCount: 0,
             generationStatus: 'not_run', citationValidation: 'not_run',
             stageMs: { policy: 1, context: 1, retrieval: 1, generation: 0, citationValidation: 0 },
             finalCopy: 'I could not find enough reliable tafsir evidence to answer that safely.',

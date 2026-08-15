@@ -12,7 +12,7 @@ import {
     type IndexProbeRequest,
 } from '../../scripts/noor-rag/verify-index';
 
-describe('Noor production vector index verification', () => {
+describe('Noor production vector and lexical index verification', () => {
     it('requires the exact explicit production project and corpus version', () => {
         assert.throws(() => parseIndexArguments([]), /project/);
         assert.throws(() => parseIndexArguments([`--project=${LOCKED_PROJECT}`]), /version/);
@@ -30,7 +30,7 @@ describe('Noor production vector index verification', () => {
         const probe: IndexProbe = {
             query: async request => {
                 calls.push(request);
-                return { count: 1, corpusVersion: request.version, source: request.source };
+                return { count: 1, corpusVersion: request.version, source: request.source, lexicalCount: 1 };
             },
         };
         const result = await verifyIndex({
@@ -49,8 +49,9 @@ describe('Noor production vector index verification', () => {
 
     it('returns nonzero when either source is empty, mismatched, or FAILED_PRECONDITION', async () => {
         for (const query of [
-            async (request: IndexProbeRequest) => ({ count: request.source === 'al_sadi_ar' ? 0 : 1, corpusVersion: request.version, source: request.source }),
-            async (request: IndexProbeRequest) => ({ count: 1, corpusVersion: 'wrong', source: request.source }),
+            async (request: IndexProbeRequest) => ({ count: request.source === 'al_sadi_ar' ? 0 : 1, corpusVersion: request.version, source: request.source, lexicalCount: 1 }),
+            async (request: IndexProbeRequest) => ({ count: 1, corpusVersion: 'wrong', source: request.source, lexicalCount: 1 }),
+            async (request: IndexProbeRequest) => ({ count: 1, corpusVersion: request.version, source: request.source, lexicalCount: 0 }),
             async () => { throw Object.assign(new Error('index building'), { code: 9, details: 'FAILED_PRECONDITION' }); },
         ]) {
             const result = await verifyIndex({

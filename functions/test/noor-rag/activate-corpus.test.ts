@@ -113,7 +113,7 @@ describe('Noor corpus activation', () => {
             'provenance:commercial_redistribution_license_not_proven',
             'locked_local_corpus_manifest_invalid',
             'runtime_config_missing_or_invalid',
-            'vector_index_not_ready:al_sadi_ar',
+            'retrieval_indexes_not_ready:al_sadi_ar',
         ]);
         assert.deepEqual(repository.activations, []);
     });
@@ -151,7 +151,7 @@ describe('Noor corpus activation', () => {
             'runtime_config_not_disabled_private_owner_empty_or_expected_current',
             'production_ingestion_manifest_incomplete_or_mismatched',
             'runtime_evidence_budget_smaller_than_largest_chunk',
-            'vector_index_not_ready:al_sadi_ar',
+            'retrieval_indexes_not_ready:al_sadi_ar',
         ]);
         assert.deepEqual(repository.activations, []);
     });

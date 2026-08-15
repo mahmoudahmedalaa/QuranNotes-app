@@ -75,7 +75,7 @@ interface FirestoreVectorQueryLike {
 }
 
 interface FirestoreQueryLike {
-    where(field: string, operator: '==' | 'array-contains', value: unknown): FirestoreQueryLike;
+    where(field: string, operator: '==' | 'array-contains' | 'array-contains-any', value: unknown): FirestoreQueryLike;
     limit?(count: number): FirestoreQueryLike;
     get(): Promise<{ readonly docs: readonly FirestoreSnapshotLike[] }>;
     findNearest(options: Readonly<Record<string, unknown>>): FirestoreVectorQueryLike;
@@ -116,6 +116,7 @@ export interface SemanticRetrievalResult {
     evidence: readonly SemanticRetrievedEvidence[];
     vectorHitCount: number;
     lexicalHitCount: number;
+    lexicalSearchStatus: 'available' | 'unavailable' | 'not_configured';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -397,6 +398,9 @@ function roundRobin<T>(groups: readonly (readonly T[])[]): T[] {
 export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): Promise<SemanticRetrievalResult> {
     const lexicalTokens = tokenizeLexicalQuery(input.content);
     const queryVectorPromise = input.embedder.embed(formatEmbeddingQuery(input.content));
+    let lexicalSearchStatus: SemanticRetrievalResult['lexicalSearchStatus'] = input.repository.searchLexical && lexicalTokens.length > 0
+        ? 'available'
+        : 'not_configured';
     const lexicalPromise = Promise.all(SOURCE_ORDER.map(async source => {
         if (!input.repository.searchLexical || lexicalTokens.length === 0) return [] as readonly LexicalSearchHit[];
         try {
@@ -408,6 +412,7 @@ export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): 
             });
         } catch {
             // A missing/unbuilt lexical index must fall back to the vector route.
+            lexicalSearchStatus = 'unavailable';
             return [] as readonly LexicalSearchHit[];
         }
     }));
@@ -442,6 +447,7 @@ export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): 
         })),
         vectorHitCount,
         lexicalHitCount,
+        lexicalSearchStatus,
     };
 }
 
@@ -498,26 +504,24 @@ export function createFirestoreRetrievalRepository(firestore: object): Retrieval
         },
         searchLexical: async (request): Promise<readonly LexicalSearchHit[]> => {
             if (request.tokens.length === 0) return [];
-            const matches = new Map<string, { chunk: TafsirChunk; score: number }>();
-            await Promise.all(request.tokens.map(async token => {
-                let query = client.collectionGroup('chunks')
-                    .where('corpusVersion', '==', request.corpusVersion)
-                    .where('source', '==', request.source)
-                    .where('lexicalTokens', 'array-contains', token);
-                if (query.limit) query = query.limit(request.limit);
-                const snapshot = await query.get();
-                for (const document of snapshot.docs) {
-                    const data = document.data();
-                    if (!isRecord(data)) throw new Error('Invalid lexical search result document');
-                    const parsed = parseChunk({ id: document.id, data });
-                    if (parsed.corpusVersion !== request.corpusVersion || parsed.source !== request.source) {
-                        throw new Error('Invalid lexical search result metadata');
-                    }
-                    const existing = matches.get(parsed.chunkId);
-                    matches.set(parsed.chunkId, { chunk: parsed, score: (existing?.score ?? 0) + 1 });
+            let query = client.collectionGroup('chunks')
+                .where('corpusVersion', '==', request.corpusVersion)
+                .where('source', '==', request.source)
+                .where('lexicalTokens', 'array-contains-any', [...request.tokens]);
+            if (query.limit) query = query.limit(request.limit);
+            const snapshot = await query.get();
+            return snapshot.docs.map(document => {
+                const data = document.data();
+                if (!isRecord(data)) throw new Error('Invalid lexical search result document');
+                const parsed = parseChunk({ id: document.id, data });
+                if (parsed.corpusVersion !== request.corpusVersion || parsed.source !== request.source) {
+                    throw new Error('Invalid lexical search result metadata');
                 }
-            }));
-            return [...matches.values()]
+                const storedTokens = new Set(Array.isArray(data.lexicalTokens)
+                    ? data.lexicalTokens.filter((value): value is string => typeof value === 'string')
+                    : []);
+                return { chunk: parsed, score: request.tokens.filter(token => storedTokens.has(token)).length };
+            })
                 .sort((left, right) => right.score - left.score || left.chunk.chunkId.localeCompare(right.chunk.chunkId))
                 .slice(0, request.limit);
         },

@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { aggregateNoorEvaluation } from '../../scripts/noor-rag/evaluate-retrieval';
+import { aggregateNoorEvaluation, parseNoorEvaluationInput } from '../../scripts/noor-rag/evaluate-retrieval';
 import type { NoorSanitizedTrace } from '../../src/noor-rag/handler';
 
 function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace {
@@ -17,6 +17,7 @@ function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace 
         queryVariantKinds: ['original', 'context_enriched'],
         vectorHitCount: 8,
         lexicalHitCount: 4,
+        lexicalSearchStatus: 'available',
         evidenceIds: ['E1'],
         evidenceCount: 1,
         generationStatus: 'answered',
@@ -28,6 +29,12 @@ function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace 
 }
 
 describe('Noor generic aggregate evaluator', () => {
+    it('accepts external sanitized inputs without importing a topic list', () => {
+        assert.throws(() => parseNoorEvaluationInput({}), /traces array/);
+        const parsed = parseNoorEvaluationInput({ traces: [trace({ case: 'story-paraphrase' })] });
+        assert.equal(parsed.traces[0]?.case, 'story-paraphrase');
+    });
+
     it('aggregates arbitrary case labels and evaluates external expectations without raw values', () => {
         const result = aggregateNoorEvaluation({
             traces: [

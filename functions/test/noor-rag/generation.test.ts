@@ -100,14 +100,14 @@ describe('Noor grounded generation', () => {
         assert.equal(missing.requestId, REQUEST_ID);
     });
 
-    it('uses friendly scope copy and keeps ambiguous Quran questions evidence-bound', async () => {
+    it('keeps unfamiliar questions evidence-bound instead of keyword-refusing them', async () => {
         const provider = new SequenceProvider([]);
-        const outOfScope = await generateGroundedAnswer({
-            request: { ...REQUEST, question: 'Why is my floor dirty?' }, evidence: EVIDENCE,
+        const unfamiliar = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'Why is my floor dirty?' }, evidence: [],
             maxEvidenceCharacters: 1000, provider,
         });
-        assert.equal(outOfScope.status, 'policy_refusal');
-        assert.equal(outOfScope.answer, 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.');
+        assert.equal(unfamiliar.status, 'insufficient_evidence');
+        assert.equal(unfamiliar.answer, 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.');
         const ambiguous = await generateGroundedAnswer({
             request: { ...REQUEST, question: 'What does this verse mean?' }, evidence: [],
             maxEvidenceCharacters: 1000, provider,

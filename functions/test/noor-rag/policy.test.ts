@@ -90,11 +90,12 @@ describe('Noor policy', () => {
         assert.equal(classifyPolicy('Why?'), 'allowed');
     });
 
-    it('keeps unrelated multi-term collisions out of scope', () => {
-        assert.equal(classifyPolicy('What is the desk salary?'), 'out_of_scope');
+    it('lets unrelated multi-term questions reach grounded retrieval', () => {
+        assert.equal(classifyPolicy('What is the desk salary?'), 'allowed');
     });
 
-    it('classifies clearly unrelated questions as out of scope', () => {
-        assert.equal(classifyPolicy('Why is my floor dirty?'), 'out_of_scope');
+    it('lets unknown questions reach grounded retrieval instead of using a topic allowlist', () => {
+        assert.equal(classifyPolicy('Why is my floor dirty?'), 'allowed');
+        assert.equal(classifyPolicy('Explain an unfamiliar concept with punctuation!!!'), 'allowed');
     });
 });
