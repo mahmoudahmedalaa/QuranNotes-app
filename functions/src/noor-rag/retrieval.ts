@@ -14,10 +14,13 @@ import type {
     TafsirChunk,
     TafsirUnit,
 } from './types';
+import { tokenizeLexicalQuery } from './lexical';
+export { tokenizeLexicalQuery } from './lexical';
 
 const SOURCE_ORDER: readonly NoorSource[] = ['ibn_kathir_en_abridged', 'al_sadi_ar'];
 const VECTOR_SEARCH_LIMIT = 8 as const;
 const DISTANCE_RESULT_FIELD = '_noorVectorDistance' as const;
+const LEXICAL_SEARCH_LIMIT = 8 as const;
 
 export interface StoredDocument {
     id: string;
@@ -38,10 +41,23 @@ export interface SemanticSearchHit {
     distance: number;
 }
 
+export interface LexicalSearchRequest {
+    corpusVersion: string;
+    source: NoorSource;
+    tokens: readonly string[];
+    limit: typeof LEXICAL_SEARCH_LIMIT;
+}
+
+export interface LexicalSearchHit {
+    chunk: TafsirChunk;
+    score: number;
+}
+
 export interface RetrievalRepository {
     readDocument(path: string): Promise<StoredDocument | null>;
     readDocuments(paths: readonly string[]): Promise<readonly StoredDocument[]>;
     searchChunks(request: SemanticSearchRequest): Promise<readonly SemanticSearchHit[]>;
+    searchLexical?(request: LexicalSearchRequest): Promise<readonly LexicalSearchHit[]>;
 }
 
 interface FirestoreSnapshotLike {
@@ -59,7 +75,9 @@ interface FirestoreVectorQueryLike {
 }
 
 interface FirestoreQueryLike {
-    where(field: string, operator: '==', value: unknown): FirestoreQueryLike;
+    where(field: string, operator: '==' | 'array-contains', value: unknown): FirestoreQueryLike;
+    limit?(count: number): FirestoreQueryLike;
+    get(): Promise<{ readonly docs: readonly FirestoreSnapshotLike[] }>;
     findNearest(options: Readonly<Record<string, unknown>>): FirestoreVectorQueryLike;
 }
 
@@ -297,25 +315,68 @@ function validateSemanticHit(
     return hit;
 }
 
-function selectPerSource(
-    hits: readonly SemanticSearchHit[],
+function validateLexicalHit(
+    hit: LexicalSearchHit,
+    source: NoorSource,
+    corpusVersion: string,
+): LexicalSearchHit {
+    if (!Number.isFinite(hit.score)
+        || hit.score <= 0
+        || hit.chunk.source !== source
+        || hit.chunk.corpusVersion !== corpusVersion) {
+        throw new Error('Invalid lexical search result');
+    }
+    return hit;
+}
+
+function selectHybridPerSource(
+    vectorHits: readonly SemanticSearchHit[],
+    lexicalHits: readonly LexicalSearchHit[],
     source: NoorSource,
     config: NoorRuntimeConfig,
 ): Array<{ chunk: TafsirChunk; similarity: number }> {
-    const sorted = hits
-        .map(hit => validateSemanticHit(hit, source, config.activeCorpusVersion))
-        .map(hit => ({ ...hit, similarity: 1 - hit.distance }))
-        .filter(hit => hit.similarity >= config.sourceThresholds[source])
-        .sort((left, right) => left.distance - right.distance
-            || left.chunk.chunkId.localeCompare(right.chunk.chunkId));
-    const chunkIds = new Set<string>();
+    const candidates = new Map<string, {
+        chunk: TafsirChunk;
+        similarity: number;
+        lexicalScore: number;
+        vectorDistance: number;
+    }>();
+    for (const hit of vectorHits.map(value => validateSemanticHit(value, source, config.activeCorpusVersion))) {
+        const similarity = 1 - hit.distance;
+        if (similarity < config.sourceThresholds[source]) continue;
+        candidates.set(hit.chunk.chunkId, {
+            chunk: hit.chunk, similarity, lexicalScore: 0, vectorDistance: hit.distance,
+        });
+    }
+    for (const hit of lexicalHits.map(value => validateLexicalHit(value, source, config.activeCorpusVersion))) {
+        const existing = candidates.get(hit.chunk.chunkId);
+        if (existing) {
+            existing.lexicalScore = Math.max(existing.lexicalScore, hit.score);
+        } else {
+            candidates.set(hit.chunk.chunkId, {
+                chunk: hit.chunk,
+                // Lexical-only evidence remains below a vector match but is still usable.
+                similarity: config.sourceThresholds[source],
+                lexicalScore: hit.score,
+                vectorDistance: 2,
+            });
+        }
+    }
+    const sorted = [...candidates.values()].sort((left, right) => {
+        const leftAgreement = left.lexicalScore > 0 && left.vectorDistance < 2 ? 1 : 0;
+        const rightAgreement = right.lexicalScore > 0 && right.vectorDistance < 2 ? 1 : 0;
+        return rightAgreement - leftAgreement
+            || right.similarity - left.similarity
+            || right.lexicalScore - left.lexicalScore
+            || left.vectorDistance - right.vectorDistance
+            || left.chunk.chunkId.localeCompare(right.chunk.chunkId);
+    });
     const unitIds = new Set<string>();
     const selected: Array<{ chunk: TafsirChunk; similarity: number }> = [];
-    for (const hit of sorted) {
-        if (chunkIds.has(hit.chunk.chunkId) || unitIds.has(hit.chunk.canonicalUnitId)) continue;
-        chunkIds.add(hit.chunk.chunkId);
-        unitIds.add(hit.chunk.canonicalUnitId);
-        selected.push({ chunk: hit.chunk, similarity: hit.similarity });
+    for (const value of sorted) {
+        if (unitIds.has(value.chunk.canonicalUnitId)) continue;
+        unitIds.add(value.chunk.canonicalUnitId);
+        selected.push({ chunk: value.chunk, similarity: value.similarity });
         if (selected.length === config.maxChunksPerSource) break;
     }
     return selected;
@@ -334,8 +395,24 @@ function roundRobin<T>(groups: readonly (readonly T[])[]): T[] {
 }
 
 export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): Promise<SemanticRetrievalResult> {
-    const queryVector = validateEmbedding(await input.embedder.embed(formatEmbeddingQuery(input.content)));
-    const sourceResults = await Promise.all(SOURCE_ORDER.map(source => input.repository.searchChunks({
+    const lexicalTokens = tokenizeLexicalQuery(input.content);
+    const queryVectorPromise = input.embedder.embed(formatEmbeddingQuery(input.content));
+    const lexicalPromise = Promise.all(SOURCE_ORDER.map(async source => {
+        if (!input.repository.searchLexical || lexicalTokens.length === 0) return [] as readonly LexicalSearchHit[];
+        try {
+            return await input.repository.searchLexical({
+                corpusVersion: input.config.activeCorpusVersion,
+                source,
+                tokens: lexicalTokens,
+                limit: LEXICAL_SEARCH_LIMIT,
+            });
+        } catch {
+            // A missing/unbuilt lexical index must fall back to the vector route.
+            return [] as readonly LexicalSearchHit[];
+        }
+    }));
+    const queryVector = validateEmbedding(await queryVectorPromise);
+    const vectorPromise = Promise.all(SOURCE_ORDER.map(source => input.repository.searchChunks({
         corpusVersion: input.config.activeCorpusVersion,
         source,
         queryVector,
@@ -343,11 +420,11 @@ export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): 
         limit: VECTOR_SEARCH_LIMIT,
         distanceResultField: DISTANCE_RESULT_FIELD,
     })));
+    const [sourceResults, lexicalResults] = await Promise.all([vectorPromise, lexicalPromise]);
     const vectorHitCount = sourceResults.reduce((total, hits) => total + hits.length, 0);
-    const merged = roundRobin(sourceResults.map((hits, index) => selectPerSource(
-        hits,
-        SOURCE_ORDER[index]!,
-        input.config,
+    const lexicalHitCount = lexicalResults.reduce((total, hits) => total + hits.length, 0);
+    const merged = roundRobin(SOURCE_ORDER.map((source, index) => selectHybridPerSource(
+        sourceResults[index]!, lexicalResults[index]!, source, input.config,
     )));
     const selected: Array<{ chunk: TafsirChunk; similarity: number }> = [];
     let characters = 0;
@@ -364,9 +441,7 @@ export async function retrieveSemanticWithStats(input: SemanticRetrievalInput): 
         similarity: value.similarity,
         })),
         vectorHitCount,
-        // The lexical route is intentionally absent until the bounded hybrid slice.
-        // Keep this explicit so trace metrics never infer lexical hits from evidence.
-        lexicalHitCount: 0,
+        lexicalHitCount,
     };
 }
 
@@ -420,6 +495,31 @@ export function createFirestoreRetrievalRepository(firestore: object): Retrieval
                 }
                 return { chunk: parsed, distance };
             });
+        },
+        searchLexical: async (request): Promise<readonly LexicalSearchHit[]> => {
+            if (request.tokens.length === 0) return [];
+            const matches = new Map<string, { chunk: TafsirChunk; score: number }>();
+            await Promise.all(request.tokens.map(async token => {
+                let query = client.collectionGroup('chunks')
+                    .where('corpusVersion', '==', request.corpusVersion)
+                    .where('source', '==', request.source)
+                    .where('lexicalTokens', 'array-contains', token);
+                if (query.limit) query = query.limit(request.limit);
+                const snapshot = await query.get();
+                for (const document of snapshot.docs) {
+                    const data = document.data();
+                    if (!isRecord(data)) throw new Error('Invalid lexical search result document');
+                    const parsed = parseChunk({ id: document.id, data });
+                    if (parsed.corpusVersion !== request.corpusVersion || parsed.source !== request.source) {
+                        throw new Error('Invalid lexical search result metadata');
+                    }
+                    const existing = matches.get(parsed.chunkId);
+                    matches.set(parsed.chunkId, { chunk: parsed, score: (existing?.score ?? 0) + 1 });
+                }
+            }));
+            return [...matches.values()]
+                .sort((left, right) => right.score - left.score || left.chunk.chunkId.localeCompare(right.chunk.chunkId))
+                .slice(0, request.limit);
         },
     };
 }

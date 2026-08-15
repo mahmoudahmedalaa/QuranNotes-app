@@ -118,6 +118,7 @@ export const TafsirBottomSheet: React.FC<TafsirBottomSheetProps> = ({
         setScholarOpen(false);
         setScholarExpanded(false);
 
+        setRawCommentary(null);
         const result = getTafsirCommentary(source, data.surahNumber, data.verseNumber);
         const cleaned = result?.text ? cleanText(result.text) : null;
         setRawCommentary(cleaned);

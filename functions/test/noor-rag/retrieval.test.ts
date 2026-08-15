@@ -8,6 +8,8 @@ import {
     retrieveSemantic,
     retrieveSemanticWithStats,
     type RetrievalRepository,
+    type LexicalSearchRequest,
+    type LexicalSearchHit,
     type SemanticSearchRequest,
     type StoredDocument,
 } from '../../src/noor-rag/retrieval';
@@ -117,6 +119,10 @@ class FakeRepository implements RetrievalRepository {
     async searchChunks(request: SemanticSearchRequest): Promise<readonly { chunk: TafsirChunk; distance: number }[]> {
         this.searches.push(request);
         return this.searchResults[request.source] ?? [];
+    }
+
+    async searchLexical(_request: LexicalSearchRequest): Promise<readonly LexicalSearchHit[]> {
+        return [];
     }
 }
 
@@ -358,6 +364,26 @@ describe('Noor semantic retrieval', () => {
         assert.equal(result.vectorHitCount, 2);
         assert.equal(result.lexicalHitCount, 0);
         assert.equal(result.evidence.length, 2);
+    });
+
+    it('runs lexical retrieval alongside vectors and deterministically merges agreement before rank', async () => {
+        const ibn = chunk('ibn_kathir_en_abridged', 'i1', 'iu1', 'riba interest loan');
+        const lexicalOnly = chunk('ibn_kathir_en_abridged', 'i2', 'iu2', 'trade alternative');
+        const repository = new FakeRepository({}, {
+            ibn_kathir_en_abridged: [{ chunk: ibn, distance: 0.2 }],
+        });
+        repository.searchLexical = async (request: LexicalSearchRequest) => request.source === 'ibn_kathir_en_abridged'
+            ? [{ chunk: ibn, score: 3 }, { chunk: lexicalOnly, score: 2 }]
+            : [];
+
+        const result = await retrieveSemanticWithStats({
+            content: 'What is the alternative to riba?', config: config(), repository,
+            embedder: { embed: async () => vector },
+        });
+
+        assert.equal(result.vectorHitCount, 1);
+        assert.equal(result.lexicalHitCount, 2);
+        assert.deepEqual(result.evidence.map(value => value.chunk.chunkId), ['i1', 'i2']);
     });
 
     it('sorts stably, dedupes chunks and canonical units, caps each source, and merges round-robin', async () => {

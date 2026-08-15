@@ -5,6 +5,7 @@ import { EMBEDDING_DIMENSION, type Embedder } from '../../src/noor-rag/embedding
 import {
     LOCKED_CORPUS_VERSION,
     LOCKED_PROJECT,
+    backfillLexicalMetadata,
     ingestCorpus,
     cachedChunkMetadataReader,
     parseIngestArguments,
@@ -139,6 +140,38 @@ describe('Noor corpus ingestion', () => {
         assert.throws(() => parseIngestArguments([`--project=${LOCKED_PROJECT}`, '--execute-production-write']), /version/);
         assert.throws(() => parseIngestArguments(['--project=wrong', `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']), /project/);
         assert.equal(parseIngestArguments([`--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`, '--execute-production-write']).execute, true);
+        assert.equal(parseIngestArguments(['--lexical-metadata-backfill']).lexicalMetadataBackfill, true);
+    });
+
+    it('backfills lexical metadata without embedding or changing vector manifest status', async () => {
+        const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
+        const repository = new FakeRepository({
+            [manifestPath]: { status: 'complete', complete: true },
+            [`corpora/${LOCKED_CORPUS_VERSION}/chunks/c_0`]: {
+                contentHash: 'hash-0', embeddingModel: 'gemini-embedding-2', embeddingDimension: 768,
+                embeddingComplete: true, embeddingMetadata: { model: 'gemini-embedding-2', dimension: 768, complete: true },
+            },
+        });
+        const options = parseIngestArguments([
+            `--project=${LOCKED_PROJECT}`, `--version=${LOCKED_CORPUS_VERSION}`,
+            '--lexical-metadata-backfill', '--execute-production-write',
+        ]);
+        const result = await backfillLexicalMetadata({ options, artifacts: artifacts(), repository, report: () => undefined });
+
+        assert.deepEqual(result, { dryRun: false, complete: true, exitCode: 0, updated: 3, skipped: 0, failed: 0 });
+        assert.equal(repository.document(manifestPath)?.status, 'complete');
+        assert.equal(repository.calls.some(call => call.startsWith('manifest:')), false);
+        assert.deepEqual(repository.batches[0]?.[0]?.data.lexicalTokens, ['retrieval']);
+        const second = await backfillLexicalMetadata({ options, artifacts: artifacts(), repository, report: () => undefined });
+        assert.deepEqual(second, { dryRun: false, complete: true, exitCode: 0, updated: 0, skipped: 3, failed: 0 });
+    });
+
+    it('is idempotent and performs no vector work in lexical dry-run mode', async () => {
+        const repository = new FakeRepository();
+        const options = parseIngestArguments(['--lexical-metadata-backfill']);
+        const first = await backfillLexicalMetadata({ options, artifacts: artifacts(), repository, report: () => undefined });
+        assert.deepEqual(first, { dryRun: true, complete: false, exitCode: 0, updated: 0, skipped: 0, failed: 0 });
+        assert.deepEqual(repository.calls, []);
     });
 
     it('skips only complete matching vectors and resumes deterministic versioned paths', async () => {
@@ -172,6 +205,8 @@ describe('Noor corpus ingestion', () => {
             `corpora/${LOCKED_CORPUS_VERSION}/verseLookup/al_sadi_ar_1_1`,
         ]);
         assert.ok(paths.every(path => !path.includes('activeCorpusVersion') && !path.startsWith('noorConfig/')));
+        const firstChunkWrite = repository.batches.flat().find(write => write.path.endsWith('/chunks/c_1'));
+        assert.deepEqual(firstChunkWrite?.data.lexicalTokens, ['retrieval']);
     });
 
     it('treats a missing manifest as a fresh ingest without per-chunk reads', async () => {

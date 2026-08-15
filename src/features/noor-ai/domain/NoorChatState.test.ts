@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import fs from 'node:fs';
 import { createNoorMessage } from './NoorChatStore';
 import { loadConversation, saveConversation } from './NoorConversationHistory';
-import { getNoorStatusPresentation, getNoorSupportMetadata } from './NoorStatusPresentation';
+import { getNoorStatusPresentation } from './NoorStatusPresentation';
 
 describe('Noor chat response state', () => {
     beforeEach(() => (AsyncStorage.clear as jest.Mock)());
@@ -44,10 +45,10 @@ describe('Noor chat response state', () => {
         }).message).toContain('12 Aug 2026');
     });
 
-    it('exposes status and request ID as concise support metadata', () => {
-        expect(getNoorSupportMetadata({
-            status: 'answered',
-            requestId: '550e8400-e29b-41d4-a716-446655440000',
-        })).toBe('Status: answered · Request: 550e8400-e29b-41d4-a716-446655440000');
+    it('does not render raw status labels or request IDs in Noor bubbles', () => {
+        const source = fs.readFileSync(require.resolve('../presentation/NoorChatBubble'), 'utf8');
+
+        expect(source).not.toMatch(/getNoorSupportMetadata|supportMetadata/);
+        expect(source).not.toMatch(/Status:|Request:|message\.status|message\.requestId/);
     });
 });

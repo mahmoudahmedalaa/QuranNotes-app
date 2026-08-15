@@ -1,12 +1,12 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { aggregateRibaFollowUpEvaluation } from '../../scripts/noor-rag/evaluate-retrieval';
+import { aggregateNoorEvaluation } from '../../scripts/noor-rag/evaluate-retrieval';
 import type { NoorSanitizedTrace } from '../../src/noor-rag/handler';
 
 function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace {
     return {
-        case: 'riba-followup',
+        case: 'seed-follow-up',
         policy: 'allowed',
         status: 'answered',
         citationCount: 1,
@@ -27,44 +27,44 @@ function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace 
     };
 }
 
-describe('Noor aggregate retrieval evaluator', () => {
-    it('reports aggregate riba follow-up behavior without raw values or identifiers', () => {
-        const result = aggregateRibaFollowUpEvaluation([
-            trace(),
-            trace({
-                contextSelected: false,
-                conversationState: 'none',
-                selectedPriorUserContext: 'none',
-                queryVariantCount: 0,
-                queryVariantKinds: [],
-                evidenceIds: [],
-                evidenceCount: 0,
-                generationStatus: 'not_run',
-                citationValidation: 'not_run',
-                stageMs: { policy: 1, context: 1, retrieval: 0, generation: 0, citationValidation: 0 },
-                finalCopy: 'Please name the Quran topic, verse, or person you mean so I can search the tafsir.',
-            }),
-        ]);
+describe('Noor generic aggregate evaluator', () => {
+    it('aggregates arbitrary case labels and evaluates external expectations without raw values', () => {
+        const result = aggregateNoorEvaluation({
+            traces: [
+                trace(),
+                trace({
+                    case: 'unresolved-pronoun',
+                    status: 'insufficient_evidence',
+                    contextSelected: false,
+                    conversationState: 'none',
+                    selectedPriorUserContext: 'none',
+                    queryVariantCount: 0,
+                    queryVariantKinds: [],
+                    evidenceIds: [],
+                    evidenceCount: 0,
+                    generationStatus: 'not_run',
+                    citationValidation: 'not_run',
+                    stageMs: { policy: 1, context: 1, retrieval: 0, generation: 0, citationValidation: 0 },
+                    finalCopy: 'Please name the Quran topic, verse, or person you mean so I can search the tafsir.',
+                }),
+            ],
+            expectations: {
+                'seed-follow-up': { minimumContextSelected: 1, minimumEvidenceFound: 1, minimumCitationValidationPassed: 1, allowedStatuses: ['answered'] },
+                'unresolved-pronoun': { minimumEvidenceFound: 0, allowedStatuses: ['insufficient_evidence'] },
+            },
+        });
 
-        assert.equal(result.case, 'riba-followup');
-        assert.equal(result.sampleCount, 2);
-        assert.equal(result.contextSelectedCount, 1);
-        assert.equal(result.evidenceFoundCount, 1);
-        assert.equal(result.generationNotRunCount, 1);
-        assert.equal(result.citationValidationPassedCount, 1);
+        assert.deepEqual(result.caseCounts, { 'seed-follow-up': 1, 'unresolved-pronoun': 1 });
+        assert.deepEqual(result.statusCounts, { answered: 1, insufficient_evidence: 1 });
+        assert.equal(result.expectations['seed-follow-up']?.passed, true);
+        assert.equal(result.expectations['unresolved-pronoun']?.passed, true);
+        assert.equal(aggregateNoorEvaluation({ traces: [], expectations: { missing: {} } }).expectations.missing?.passed, false);
         assert.deepEqual(result.queryVariantCount, { total: 2, minimum: 0, maximum: 2 });
         assert.deepEqual(result.latencyMs.retrieval, { minimum: 0, maximum: 30, p50: 0, p95: 30 });
 
-        const allPositive = aggregateRibaFollowUpEvaluation([trace(), trace()]);
-        assert.equal(allPositive.queryVariantCount.minimum, 2);
-
         const serialized = JSON.stringify(result);
         for (const forbidden of [
-            'Is riba haram?',
-            'Provider answer text',
-            'chunk-riba-secret',
-            'secret-error',
-            'sensitive-user@example.com',
+            'Provider answer text', 'chunk-secret', 'secret-error', 'sensitive-user@example.com',
             '11111111-1111-4111-8111-111111111111',
         ]) {
             assert.equal(serialized.includes(forbidden), false);

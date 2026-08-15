@@ -12,11 +12,6 @@ export interface NoorStatusPresentation {
     action: NoorStatusAction;
 }
 
-export function getNoorSupportMetadata(input: { status?: NoorStatus; requestId?: string }): string | null {
-    if (!input.status || !input.requestId) return null;
-    return `Status: ${input.status} · Request: ${input.requestId}`;
-}
-
 function formatUtcReset(timestamp?: string): string | null {
     if (!timestamp || !timestamp.endsWith('Z')) return null;
     const date = new Date(timestamp);

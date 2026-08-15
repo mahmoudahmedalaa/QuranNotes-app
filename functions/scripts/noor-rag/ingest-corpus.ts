@@ -13,6 +13,7 @@ import {
     formatEmbeddingDocument,
     type Embedder,
 } from '../../src/noor-rag/embedding';
+import { tokenizeLexicalQuery } from '../../src/noor-rag/lexical';
 import type { CorpusArtifacts, CorpusChunk, CorpusManifest } from '../../src/noor-rag/corpus';
 
 export const LOCKED_PROJECT = 'qurannotes-9f7a1' as const;
@@ -28,6 +29,7 @@ export type IngestArtifacts = CorpusArtifacts;
 
 export interface IngestOptions {
     execute: boolean;
+    lexicalMetadataBackfill: boolean;
     project: typeof LOCKED_PROJECT;
     version: typeof LOCKED_CORPUS_VERSION;
 }
@@ -61,6 +63,15 @@ export interface IngestResult {
     };
 }
 
+export interface LexicalBackfillResult {
+    dryRun: boolean;
+    complete: boolean;
+    exitCode: 0 | 1;
+    updated: number;
+    skipped: number;
+    failed: number;
+}
+
 interface IngestInput {
     options: IngestOptions;
     artifacts: IngestArtifacts;
@@ -76,6 +87,7 @@ function valueArgument(args: readonly string[], name: string): string | undefine
 
 export function parseIngestArguments(args: readonly string[]): IngestOptions {
     const execute = args.includes('--execute-production-write');
+    const lexicalMetadataBackfill = args.includes('--lexical-metadata-backfill');
     const suppliedProject = valueArgument(args, 'project');
     const suppliedVersion = valueArgument(args, 'version');
     if (suppliedProject !== undefined && suppliedProject !== LOCKED_PROJECT) {
@@ -92,6 +104,7 @@ export function parseIngestArguments(args: readonly string[]): IngestOptions {
     }
     const known = new Set([
         '--execute-production-write',
+        '--lexical-metadata-backfill',
         ...(suppliedProject === undefined ? [] : [`--project=${suppliedProject}`]),
         ...(suppliedVersion === undefined ? [] : [`--version=${suppliedVersion}`]),
     ]);
@@ -101,6 +114,7 @@ export function parseIngestArguments(args: readonly string[]): IngestOptions {
     }
     return {
         execute,
+        lexicalMetadataBackfill,
         project: LOCKED_PROJECT,
         version: LOCKED_CORPUS_VERSION,
     };
@@ -233,6 +247,8 @@ function chunkWrite(
         path: `corpora/${version}/chunks/${chunk.chunkId}`,
         data: {
             ...chunk,
+            lexicalTokens: tokenizeLexicalQuery(chunk.retrievalText),
+            lexicalMetadata: { version: 'unicode-nfkc-v1', complete: true },
             embeddingModel: EMBEDDING_MODEL,
             embeddingDimension: EMBEDDING_DIMENSION,
             embeddingComplete: true,
@@ -244,6 +260,58 @@ function chunkWrite(
             embedding: FieldValue.vector([...embedding]),
         },
     };
+}
+
+function lexicalMetadataWrite(version: string, chunk: CorpusChunk): RepositoryWrite {
+    return {
+        path: `corpora/${version}/chunks/${chunk.chunkId}`,
+        data: {
+            lexicalTokens: tokenizeLexicalQuery(chunk.retrievalText),
+            lexicalMetadata: { version: 'unicode-nfkc-v1', complete: true },
+        },
+    };
+}
+
+function hasLexicalMetadata(chunk: CorpusChunk, metadata: Record<string, unknown> | null): boolean {
+    const lexicalMetadata = metadata?.lexicalMetadata;
+    return Array.isArray(metadata?.lexicalTokens)
+        && metadata.lexicalTokens.join('\u0000') === tokenizeLexicalQuery(chunk.retrievalText).join('\u0000')
+        && typeof lexicalMetadata === 'object'
+        && lexicalMetadata !== null
+        && (lexicalMetadata as Record<string, unknown>).version === 'unicode-nfkc-v1'
+        && (lexicalMetadata as Record<string, unknown>).complete === true;
+}
+
+export async function backfillLexicalMetadata(input: {
+    options: IngestOptions;
+    artifacts: IngestArtifacts;
+    repository: IngestRepository;
+    report: (message: string) => void;
+}): Promise<LexicalBackfillResult> {
+    if (!input.options.execute) {
+        input.report(JSON.stringify({ mode: 'lexical-metadata-backfill', plannedWrites: input.artifacts.chunks.length, skipped: 0, actualWrites: 0 }));
+        return { dryRun: true, complete: false, exitCode: 0, updated: 0, skipped: 0, failed: 0 };
+    }
+    const pending: RepositoryWrite[] = [];
+    let skipped = 0;
+    for (const chunk of input.artifacts.chunks) {
+        const metadata = await input.repository.readChunkMetadata(`corpora/${input.options.version}/chunks/${chunk.chunkId}`);
+        if (hasLexicalMetadata(chunk, metadata)) skipped += 1;
+        else pending.push(lexicalMetadataWrite(input.options.version, chunk));
+    }
+    let updated = 0;
+    let failed = 0;
+    for (let start = 0; start < pending.length; start += MAX_METADATA_BATCH_WRITES) {
+        try {
+            await input.repository.writeBatch(pending.slice(start, start + MAX_METADATA_BATCH_WRITES));
+            updated += pending.slice(start, start + MAX_METADATA_BATCH_WRITES).length;
+        } catch {
+            failed += pending.slice(start, start + MAX_METADATA_BATCH_WRITES).length;
+            break;
+        }
+    }
+    input.report(JSON.stringify({ mode: 'lexical-metadata-backfill', plannedWrites: pending.length, skipped, actualWrites: updated, failed }));
+    return { dryRun: false, complete: failed === 0, exitCode: failed === 0 ? 0 : 1, updated, skipped, failed };
 }
 
 function lookupWrite(version: string, lookup: IngestArtifacts['lookups'][number]): RepositoryWrite {
@@ -448,7 +516,7 @@ async function productionAdapters(options: IngestOptions): Promise<{
     const client = new GoogleGenAI({ vertexai: true, project, location });
     const readChunkMetadata = cachedChunkMetadataReader(async () => {
         const snapshot = await firestore.collection(`corpora/${options.version}/chunks`).select(
-            'contentHash', 'embeddingModel', 'embeddingDimension', 'embeddingComplete', 'embeddingMetadata',
+        'contentHash', 'embeddingModel', 'embeddingDimension', 'embeddingComplete', 'embeddingMetadata', 'lexicalTokens', 'lexicalMetadata',
         ).get();
         return new Map(snapshot.docs.map(document => [document.ref.path, document.data()]));
     });
@@ -480,6 +548,18 @@ async function productionAdapters(options: IngestOptions): Promise<{
 async function main(): Promise<void> {
     const options = parseIngestArguments(process.argv.slice(2));
     const artifacts = loadArtifacts(options.version);
+    if (options.lexicalMetadataBackfill) {
+        if (!options.execute) {
+            const result = await backfillLexicalMetadata({ options, artifacts, repository: {} as IngestRepository, report: message => process.stdout.write(`${message}\n`) });
+            process.exitCode = result.exitCode;
+            return;
+        }
+        assertProductionArtifact(artifacts.manifest);
+        const adapters = await productionAdapters(options);
+        const result = await backfillLexicalMetadata({ options, artifacts, repository: adapters.repository, report: message => process.stdout.write(`${message}\n`) });
+        process.exitCode = result.exitCode;
+        return;
+    }
     if (!options.execute) {
         const unavailable = new Proxy({}, { get: () => { throw new Error('Dry-run adapter access is forbidden'); } });
         const result = await ingestCorpus({

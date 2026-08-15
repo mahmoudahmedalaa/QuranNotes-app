@@ -22,4 +22,10 @@ describe('TafsirBottomSheet citation state', () => {
         const cleanup = effect.slice(effect.indexOf('return () =>'));
         expect(cleanup).not.toContain('setAnswerLoading');
     });
+
+    it('clears prior local commentary before resolving a new verse or source', () => {
+        const source = fs.readFileSync(require.resolve('./TafsirBottomSheet'), 'utf8');
+        const effect = source.slice(source.indexOf('// Load tafsir'), source.indexOf('const handleSourceChange'));
+        expect(effect).toMatch(/setRawCommentary\(null\);[\s\S]*getTafsirCommentary\(/);
+    });
 });
