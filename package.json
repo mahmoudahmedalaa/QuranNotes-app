@@ -19,7 +19,7 @@
     "paywall:activate": "node scripts/activate-paywall-rollout.js",
     "paywall:rollback": "node scripts/rollback-paywall-rollout.js",
     "backfill:grandfather-access": "node scripts/backfill-grandfathered-access.js",
-    "lint": "eslint .",
+    "lint": "eslint app src scripts index.js eslint.config.js",
     "clean": "rm -rf node_modules && npm cache clean --force && watchman watch-del-all && rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* && npm install",
     "clean:deep": "npm run clean && rm -rf ios android ~/Library/Developer/Xcode/DerivedData",
     "postinstall": "patch-package"

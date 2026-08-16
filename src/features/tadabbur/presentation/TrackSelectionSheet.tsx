@@ -157,7 +157,7 @@ export const IntentSelectionSheet: React.FC<IntentSelectionSheetProps> = ({
                             fontStyle: 'italic',
                         }}
                     >
-                        ✦ Verses curated by AI to match your heart
+                        ✦ Verses thoughtfully curated to match your heart
                     </Text>
 
                     <ScrollView
@@ -179,7 +179,7 @@ export const IntentSelectionSheet: React.FC<IntentSelectionSheetProps> = ({
                                             { color: theme.dark ? '#A78BFA' : '#7C3AED' },
                                         ]}
                                     >
-                                        Suggested for You
+                                        Curated for You
                                     </Text>
                                 </View>
 

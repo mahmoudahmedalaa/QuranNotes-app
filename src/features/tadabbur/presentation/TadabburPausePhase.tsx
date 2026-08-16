@@ -313,7 +313,7 @@ export const TadabburPausePhase: React.FC = () => {
                         transition={{ type: 'timing', duration: 2000, delay: 2000 }}
                     >
                         <Text style={[styles.reasonText, { color: guideColor }]}>
-                            "{currentPassage.selectionReason}"
+                            &quot;{currentPassage.selectionReason}&quot;
                         </Text>
                     </MotiView>
                 )}

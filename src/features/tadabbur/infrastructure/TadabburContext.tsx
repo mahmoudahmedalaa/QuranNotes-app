@@ -51,7 +51,6 @@ import {
     selectVersesForIntent,
     generateReflectionPrompts,
     suggestIntents,
-    isAiAvailable,
 } from '../domain/TadabburAIService';
 
 // Audio state

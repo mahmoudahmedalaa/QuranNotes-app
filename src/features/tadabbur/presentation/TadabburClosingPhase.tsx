@@ -202,7 +202,7 @@ export const TadabburClosingPhase: React.FC = () => {
                         </Text>
                         {passage.translationText && (
                             <Text style={[styles.verseTranslation, { color: body }]} numberOfLines={3}>
-                                "{passage.translationText}"
+                                &quot;{passage.translationText}&quot;
                             </Text>
                         )}
                         {verseRef ? (
@@ -250,7 +250,7 @@ export const TadabburClosingPhase: React.FC = () => {
                     style={styles.quoteBlock}
                 >
                     <Text style={[styles.quoteArabic, { color: accent }]}>{quote.arabic}</Text>
-                    <Text style={[styles.quoteEnglish, { color: body }]}>"{quote.english}"</Text>
+                    <Text style={[styles.quoteEnglish, { color: body }]}>&quot;{quote.english}&quot;</Text>
                 </MotiView>
 
 
@@ -358,7 +358,7 @@ export const TadabburClosingPhase: React.FC = () => {
 
                             {passage?.translationText ? (
                                 <Text style={styles.scTranslation} numberOfLines={3}>
-                                    "{passage.translationText}"
+                                    &quot;{passage.translationText}&quot;
                                 </Text>
                             ) : null}
 
