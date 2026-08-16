@@ -100,7 +100,7 @@ function boundedEvidence(evidence: readonly RetrievedEvidence[], maximumCharacte
     let characters = 0;
     for (const item of evidence) {
         const next = item.chunk.originalText.length;
-        if (characters + next > maximumCharacters) break;
+        if (characters + next > maximumCharacters) continue;
         selected.push(item);
         characters += next;
     }

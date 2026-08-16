@@ -64,6 +64,18 @@ describe('Noor grounded generation', () => {
         assert.match(built.prompt, /&lt;\/history&gt;/);
     });
 
+    it('skips an oversized first chunk and keeps later evidence that fits the budget', () => {
+        const built = buildGroundedPrompt(
+            REQUEST,
+            [evidence('S1', 'too-large'), evidence('S2', 'ok')],
+            2,
+        );
+
+        assert.deepEqual(built.evidence.map(item => item.promptSourceId), ['S2']);
+        assert.match(built.prompt, /<promptSourceId>S2<\/promptSourceId>/);
+        assert.doesNotMatch(built.prompt, /<promptSourceId>S1<\/promptSourceId>/);
+    });
+
     it('sends the exact locked structured request through the global Vertex adapter', async () => {
         let options: Readonly<Record<string, unknown>> | undefined;
         let sent: VertexGenerationRequest | undefined;
