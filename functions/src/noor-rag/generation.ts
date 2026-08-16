@@ -112,7 +112,10 @@ function requestData(request: NoorRequest): string {
         const history = request.history.map(turn => (
             `<turn><role>${turn.role}</role><content>${escapeXml(turn.content)}</content></turn>`
         )).join('');
-        return `<request><mode>chat</mode><requestId>${request.requestId}</requestId><history>${history}</history><question>${escapeXml(request.question)}</question></request>`;
+        const verseContext = request.verseContext
+            ? `<verseContext><surah>${request.verseContext.surah}</surah><verse>${request.verseContext.verse}</verse></verseContext>`
+            : '';
+        return `<request><mode>chat</mode><requestId>${request.requestId}</requestId>${verseContext}<history>${history}</history><question>${escapeXml(request.question)}</question></request>`;
     }
     if (request.mode === 'verse_question') {
         return `<request><mode>verse_question</mode><requestId>${request.requestId}</requestId><source>${request.source}</source><surah>${request.surah}</surah><verse>${request.verse}</verse><history></history><question>${escapeXml(request.question)}</question></request>`;

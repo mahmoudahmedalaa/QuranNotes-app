@@ -1,6 +1,6 @@
 # QuranNotes overnight status and evidence
 
-Evidence snapshot: 2026-08-11 UTC.
+Evidence snapshot: 2026-08-16 UTC.
 
 ## Completed
 
@@ -11,6 +11,8 @@ Evidence snapshot: 2026-08-11 UTC.
 - Exact verse retrieval and semantic chat retrieval implemented.
 - Gemini 3.5 Flash Lite grounded generation with structured citation validation.
 - Firebase Auth/App Check boundary, RevenueCat `pro_access`, usage limits, idempotency, safe errors, and pseudonymous telemetry implemented.
+- Exact verse context is carried through the generated client/backend contract for Noor chat; exact Tafsir summaries continue to use source + surah + verse retrieval.
+- The bounded `noor:live-smoke` CLI covers authenticated chat, three-turn conversation, verse A/B parity, and quota probes without printing prompts, answers, tokens, or provider details.
 - Runtime switched to `enabled=true`, `publicEnabled=true`, `activeCorpusVersion=2026-08-10-v1`.
 - The deployment was made through an explicit operator-accepted-risk flag. The provenance record remains unchanged and still documents unresolved source-rights/coverage uncertainty.
 - A clarification draft was saved in Gmail to `cloud@tafsir.net`.
@@ -23,7 +25,16 @@ Evidence snapshot: 2026-08-11 UTC.
 - [Cloud Function](https://console.cloud.google.com/functions/details/us-central1/askNoorRagV1?project=qurannotes-9f7a1)
 - [Callable endpoint](https://us-central1-qurannotes-9f7a1.cloudfunctions.net/askNoorRagV1)
 
-The unauthenticated endpoint smoke test returned HTTP 401 `Unauthenticated`, confirming the deployed callable rejects requests safely before model work.
+The current unauthenticated endpoint smoke test returned HTTP 401 `Unauthenticated`, confirming the deployed callable rejects requests safely before model work. The deployed function list contains only `askNoorRagV1` and `onUserDeleted`; retired `askSheikh` and `explainVerse` return HTTP 404. The production index verifier returned `ready` for both canonical tafsir sources.
+
+The authenticated live-smoke command is intentionally credential-gated. No Firebase ID token or App Check token is checked into the repository, so this evidence does not claim a fabricated production answer. Run it with an approved QA session:
+
+```bash
+NOOR_LIVE_SMOKE_ENDPOINT='https://us-central1-qurannotes-9f7a1.cloudfunctions.net/askNoorRagV1' \
+NOOR_LIVE_SMOKE_FIREBASE_ID_TOKEN='<firebase-id-token>' \
+NOOR_LIVE_SMOKE_APP_CHECK_TOKEN='<app-check-token>' \
+npm run noor:live-smoke -- --mode=conversation
+```
 
 ## Remaining release work
 

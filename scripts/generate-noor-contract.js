@@ -86,6 +86,7 @@ function generateContract(schema) {
         'QuranSurah',
         'QuranVerse',
         'NoorHistoryTurn',
+        'NoorVerseContext',
         'NoorChatRequest',
         'NoorVerseSummaryRequest',
         'NoorVerseQuestionRequest',

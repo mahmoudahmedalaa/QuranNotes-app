@@ -18,11 +18,17 @@ export interface NoorHistoryTurn {
     content: string;
 }
 
+export interface NoorVerseContext {
+    surah: QuranSurah;
+    verse: QuranVerse;
+}
+
 export interface NoorChatRequest {
     mode: "chat";
     requestId: RequestId;
     question: Question;
     history: Array<NoorHistoryTurn>;
+    verseContext?: NoorVerseContext;
 }
 
 export interface NoorVerseSummaryRequest {

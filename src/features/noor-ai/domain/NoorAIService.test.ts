@@ -39,4 +39,30 @@ describe('NoorAIService', () => {
             ],
         });
     });
+
+    it('sends the selected verse reference when Noor is opened from a verse', async () => {
+        const answer: NoorAnswer = {
+            requestId: '550e8400-e29b-41d4-a716-446655440000',
+            answer: 'Grounded answer',
+            status: 'answered',
+            citations: [],
+        };
+        const remote = { ask: jest.fn(async () => answer) };
+        const service = createNoorAIService(remote, () => answer.requestId);
+
+        await service.askNoor(
+            'What does this teach me?',
+            [],
+            {
+                surahNumber: 2,
+                surahName: 'Al-Baqarah',
+                verseNumber: 255,
+            },
+        );
+
+        expect(remote.ask).toHaveBeenCalledWith(expect.objectContaining({
+            mode: 'chat',
+            verseContext: { surah: 2, verse: 255 },
+        }));
+    });
 });

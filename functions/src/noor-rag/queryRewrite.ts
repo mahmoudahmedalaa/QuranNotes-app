@@ -197,22 +197,30 @@ export function buildChatQueryPlan(input: Readonly<{
     const state = input.validatedConversationState
         ? parseValidatedConversationState(input.validatedConversationState)
         : null;
+    const verseReference = input.request.verseContext
+        ? ` Regarding Quran ${input.request.verseContext.surah}:${input.request.verseContext.verse}.`
+        : '';
     const structuralFollowUp = isStructuralFollowUp(input.request.question);
     const contextSelected = state !== null
         && structuralFollowUp
         && hasPriorSubjectMatch(input.request, state);
     if (!contextSelected || state === null) {
         return {
-            variants: structuralFollowUp ? [] : [original],
+            variants: structuralFollowUp
+                ? (input.request.verseContext ? [{ kind: 'original', query: `${original.query}${verseReference}` }] : [])
+                : [{ kind: 'original', query: `${original.query}${verseReference}` }],
             contextSelected: false,
             conversationState: 'none',
-            requiresClarification: structuralFollowUp,
+            requiresClarification: structuralFollowUp && !input.request.verseContext,
         };
     }
     return {
         variants: [
-            original,
-            { kind: 'context_enriched', query: `${input.request.question} Regarding ${state.subjectTokens.join(' ')}.` },
+            { kind: 'original', query: `${original.query}${verseReference}` },
+            {
+                kind: 'context_enriched',
+                query: `${input.request.question} Regarding ${state.subjectTokens.join(' ')}.${verseReference}`,
+            },
         ],
         contextSelected: true,
         conversationState: 'validated_subject_and_evidence',

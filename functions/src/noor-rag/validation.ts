@@ -3,6 +3,7 @@ import type {
     NoorCitation,
     NoorHistoryTurn,
     NoorRequest,
+    NoorVerseContext,
     NoorSource,
     NoorStatus,
 } from './generatedContract';
@@ -171,6 +172,18 @@ function parseHistory(value: unknown): NoorHistoryTurn[] {
     return history;
 }
 
+function parseVerseContext(value: unknown): NoorVerseContext | undefined {
+    if (value === undefined) return undefined;
+    if (!isRecord(value)
+        || !hasExactOwnKeys(value, ['surah', 'verse'])
+        || !isValidQuranReference(value.surah, value.verse)
+        || typeof value.surah !== 'number'
+        || typeof value.verse !== 'number') {
+        return invalidRequest();
+    }
+    return { surah: value.surah, verse: value.verse };
+}
+
 function parseVerseFields(input: Record<string, unknown>): {
     requestId: string;
     source: NoorSource;
@@ -201,11 +214,13 @@ export function parseNoorRequest(value: unknown): NoorRequest {
             || !isBoundedNonblankString(value.question, MAX_QUESTION_CHARACTERS)) {
             return invalidRequest();
         }
+        const verseContext = parseVerseContext(value.verseContext);
         return {
             mode: 'chat',
             requestId: value.requestId,
             question: value.question,
             history: parseHistory(value.history),
+            ...(verseContext ? { verseContext } : {}),
         };
     }
 

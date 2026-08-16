@@ -11,8 +11,12 @@ import type { NoorAnswer, NoorChatRequest, RetrievedEvidence, TafsirChunk } from
 
 const REQUEST_ID = '11111111-1111-4111-8111-111111111111';
 
-function request(question: string, history: NoorChatRequest['history'] = []): NoorChatRequest {
-    return { mode: 'chat', requestId: REQUEST_ID, question, history };
+function request(
+    question: string,
+    history: NoorChatRequest['history'] = [],
+    verseContext?: NoorChatRequest['verseContext'],
+): NoorChatRequest {
+    return { mode: 'chat', requestId: REQUEST_ID, question, history, ...(verseContext ? { verseContext } : {}) };
 }
 
 function citedEvidence(retrievalText = 'Zoramel crossed the quivon passage.'): RetrievedEvidence {
@@ -84,6 +88,16 @@ describe('Noor generic query rewriting', () => {
 
         assert.equal(plan.requiresClarification, false);
         assert.deepEqual(plan.variants, [{ kind: 'original', query: 'What is caldorin?' }]);
+    });
+
+    it('anchors chat retrieval to the selected verse when verse context is supplied', () => {
+        const plan = buildChatQueryPlan({
+            request: request('What does this teach me?', [], { surah: 2, verse: 255 }),
+        });
+
+        assert.equal(plan.requiresClarification, false);
+        assert.equal(plan.variants.length, 1);
+        assert.match(plan.variants[0]!.query, /Quran 2:255/);
     });
 
     it('preserves direct how and why questions without context state', () => {

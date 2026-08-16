@@ -1,5 +1,5 @@
 import { noorRemoteService, NoorRemoteClient } from '../infrastructure/NoorRemoteService';
-import { NoorAnswer, NoorHistoryTurn } from './generatedContract';
+import { NoorAnswer, NoorHistoryTurn, NoorVerseContext } from './generatedContract';
 import { NoorMessage, VerseContext } from './types';
 
 const MAX_HISTORY_TURNS = 6;
@@ -19,13 +19,24 @@ function toHistory(messages: NoorMessage[]): NoorHistoryTurn[] {
 
 export function createNoorAIService(remote: NoorRemoteClient, requestIdFactory = createRequestId) {
     return {
-        async askNoor(question: string, conversationHistory: NoorMessage[] = []): Promise<NoorAnswer> {
-            return remote.ask({
+        async askNoor(
+            question: string,
+            conversationHistory: NoorMessage[] = [],
+            verseContext?: VerseContext,
+        ): Promise<NoorAnswer> {
+            const request: Extract<import('./generatedContract').NoorRequest, { mode: 'chat' }> = {
                 mode: 'chat',
                 requestId: requestIdFactory(),
                 question,
                 history: toHistory(conversationHistory),
-            });
+                ...(verseContext ? {
+                    verseContext: {
+                        surah: verseContext.surahNumber,
+                        verse: verseContext.verseNumber,
+                    } satisfies NoorVerseContext,
+                } : {}),
+            };
+            return remote.ask(request);
         },
     };
 }
@@ -38,7 +49,7 @@ export async function askNoor(
     _tafsirContext?: string,
     _verseContext?: VerseContext,
 ): Promise<NoorAnswer> {
-    return service.askNoor(question, conversationHistory);
+    return service.askNoor(question, conversationHistory, _verseContext);
 }
 
 export function getSuggestedQuestions(verseContext?: VerseContext): string[] {

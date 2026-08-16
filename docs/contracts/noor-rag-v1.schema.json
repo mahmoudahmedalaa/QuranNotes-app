@@ -54,6 +54,22 @@
                 }
             }
         },
+        "NoorVerseContext": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "surah",
+                "verse"
+            ],
+            "properties": {
+                "surah": {
+                    "$ref": "#/$defs/QuranSurah"
+                },
+                "verse": {
+                    "$ref": "#/$defs/QuranVerse"
+                }
+            }
+        },
         "NoorChatRequest": {
             "type": "object",
             "additionalProperties": false,
@@ -80,6 +96,9 @@
                         "$ref": "#/$defs/NoorHistoryTurn"
                     },
                     "x-maxTotalContentLength": 6000
+                },
+                "verseContext": {
+                    "$ref": "#/$defs/NoorVerseContext"
                 }
             }
         },

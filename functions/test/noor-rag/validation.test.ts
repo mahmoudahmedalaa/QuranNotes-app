@@ -112,6 +112,31 @@ describe('parseNoorRequest', () => {
         });
     });
 
+    it('accepts and validates an optional exact verse context for chat', () => {
+        const parsed = parseNoorRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: 'What does this teach me?',
+            history: [],
+            verseContext: { surah: 2, verse: 255 },
+        });
+
+        assert.deepEqual(parsed, {
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: 'What does this teach me?',
+            history: [],
+            verseContext: { surah: 2, verse: 255 },
+        });
+        expectInvalidRequest({
+            mode: 'chat',
+            requestId: VALID_REQUEST_ID,
+            question: 'Question',
+            history: [],
+            verseContext: { surah: 2, verse: 255, source: 'old' },
+        });
+    });
+
     it('counts astral question text as Unicode code points', () => {
         const astralCharacter = '😀';
         const questionAtLimit = astralCharacter.repeat(500);

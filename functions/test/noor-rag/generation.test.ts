@@ -76,6 +76,15 @@ describe('Noor grounded generation', () => {
         assert.doesNotMatch(built.prompt, /<promptSourceId>S1<\/promptSourceId>/);
     });
 
+    it('includes the selected verse reference in the grounded chat prompt', () => {
+        const built = buildGroundedPrompt({
+            ...REQUEST,
+            verseContext: { surah: 2, verse: 255 },
+        }, EVIDENCE, EVIDENCE[0].chunk.originalText.length);
+
+        assert.match(built.prompt, /<verseContext><surah>2<\/surah><verse>255<\/verse><\/verseContext>/);
+    });
+
     it('sends the exact locked structured request through the global Vertex adapter', async () => {
         let options: Readonly<Record<string, unknown>> | undefined;
         let sent: VertexGenerationRequest | undefined;
