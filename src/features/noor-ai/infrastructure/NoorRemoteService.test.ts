@@ -13,11 +13,22 @@ const request: NoorRequest = {
     history: [],
 };
 
+const citation = {
+    chunkId: 'chunk-1',
+    canonicalUnitId: 'unit-1',
+    source: 'al_sadi_ar' as const,
+    sourceTitle: "Tafsir Al-Sa'di",
+    surah: 2,
+    verseStart: 153,
+    verseEnd: 153,
+    corpusVersion: 'corpus-v1',
+};
+
 const answer = {
     requestId: request.requestId,
     answer: 'A grounded answer.',
     status: 'answered' as const,
-    citations: [],
+    citations: [citation],
 };
 
 describe('NoorRemoteService', () => {
@@ -62,6 +73,7 @@ describe('NoorRemoteService', () => {
         { result: answer, extra: true },
         { result: { ...answer, status: 'made_up' } },
         { result: { ...answer, requestId: '550e8400-e29b-41d4-a716-446655440001' } },
+        { result: { ...answer, citations: [] } },
         { result: { ...answer, answer: '' } },
         { result: { ...answer, answer: 'a'.repeat(10_001) } },
         { result: { ...answer, citations: [{ chunkId: '', canonicalUnitId: 'u1', source: 'al_sadi_ar', sourceTitle: 'Al-Sadi', surah: 1, verseStart: 1, verseEnd: 1, corpusVersion: 'v1' }] } },

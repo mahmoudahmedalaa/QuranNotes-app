@@ -114,6 +114,7 @@ function isNoorAnswer(value: unknown): value is NoorAnswer {
         || !STATUSES.has(value.status as NoorStatus)
         || !Array.isArray(value.citations)
         || !value.citations.every(isCitation)) return false;
+    if (value.status === 'answered' && value.citations.length === 0) return false;
 
     if (value.status === 'quota_exceeded') {
         return hasExactKeys(value, ['requestId', 'answer', 'status', 'citations', 'nextResetAt'])
