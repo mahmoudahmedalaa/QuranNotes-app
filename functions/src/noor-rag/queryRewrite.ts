@@ -25,7 +25,7 @@ export interface ValidatedConversationState {
     evidenceIds: readonly string[];
     evidenceCount: number;
     expiresAt: string;
-    sourceQuestionFingerprint?: string;
+    sourceQuestionFingerprint: string;
 }
 
 export interface QueryVariant {
@@ -115,9 +115,8 @@ export function parseValidatedConversationState(value: unknown, nowMs = Date.now
         || evidenceCount > MAX_STORED_EVIDENCE_IDS
         || expiresAtMs === null
         || expiresAtMs <= nowMs
-        || (sourceQuestionFingerprint !== undefined
-            && (typeof sourceQuestionFingerprint !== 'string'
-                || !SAFE_QUESTION_FINGERPRINT.test(sourceQuestionFingerprint)))) {
+        || typeof sourceQuestionFingerprint !== 'string'
+        || !SAFE_QUESTION_FINGERPRINT.test(sourceQuestionFingerprint)) {
         return null;
     }
     const subjectTokens = boundedTokens(value.subjectTokens.filter((item): item is string => typeof item === 'string'));
@@ -130,7 +129,7 @@ export function parseValidatedConversationState(value: unknown, nowMs = Date.now
         evidenceIds,
         evidenceCount: evidenceIds.length,
         expiresAt: new Date(expiresAtMs).toISOString(),
-        ...(sourceQuestionFingerprint === undefined ? {} : { sourceQuestionFingerprint }),
+        sourceQuestionFingerprint,
     };
 }
 
@@ -142,12 +141,14 @@ export function createValidatedConversationState(
         return null;
     }
     const evidenceByChunkId = new Map(input.evidence.map(item => [item.chunk.chunkId, item]));
-    const citedEvidence = input.response.citations
-        .map(citation => evidenceByChunkId.get(citation.chunkId))
-        .filter((item): item is RetrievedEvidence => item !== undefined)
-        .slice(0, MAX_STORED_EVIDENCE_IDS);
+    const citedEvidence: RetrievedEvidence[] = [];
+    for (const citation of input.response.citations) {
+        const item = evidenceByChunkId.get(citation.chunkId);
+        if (!item) return null;
+        if (citedEvidence.length < MAX_STORED_EVIDENCE_IDS) citedEvidence.push(item);
+    }
     const questionTokens = extractSubjectTokens(input.request.question);
-    const subjectTokens = questionTokens.length > 0
+    const subjectTokens = !isStructuralFollowUp(input.request.question) && questionTokens.length > 0
         ? questionTokens
         : extractCitedEvidenceTokens(citedEvidence);
     if (citedEvidence.length === 0 || subjectTokens.length === 0) return null;
@@ -161,13 +162,23 @@ export function createValidatedConversationState(
 }
 
 function isStructuralFollowUp(question: string): boolean {
+    const subjectTokens = extractSubjectTokens(question);
+    const hasOnlyFollowUpTokens = subjectTokens.length === 0
+        || subjectTokens.every(token => FOLLOW_UP_TOKENS.has(token));
     if (/^\s*(?:why|how|and\s+then|then\s+what|what\s+next|go\s+on|more)\s*[?!.]?\s*$/i.test(question)) {
         return true;
     }
-    if (/\b(?:he|she|him|her|it|they|them|this|that|these|those)\b/i.test(question)) return true;
+    if (/^\s*what\s+happened(?:\s+next|\s+to\s+(?:him|her|them|it))?\s*[?!.]?\s*$/i.test(question)) return true;
+    if (/^\s*(?:he|she|it|they)\b[^?!.]*[?!.]?\s*$/i.test(question)) return true;
+    if (/^\s*(?:(?:why|how|when|where|what|who)\s+)?(?:did|does|do|is|are|was|were|can|could|would|should|will|has|have|had)\s+(?:he|she|it|they)\b[^?!.]*[?!.]?\s*$/i.test(question)) {
+        return true;
+    }
+    if (/^\s*(?:(?:why|how|when|where|what|who)\s+)?(?:did|does|do|is|are|was|were|can|could|would|should|will|has|have|had)\s+(?:this|that|these|those)\b[^?!.]*[?!.]?\s*$/i.test(question)
+        && hasOnlyFollowUpTokens) {
+        return true;
+    }
     if (!/\b(?:alternative|alternatives|what about|what happened next|tell me more)\b/i.test(question)) return false;
-    const subjectTokens = extractSubjectTokens(question);
-    return subjectTokens.length === 0 || subjectTokens.every(token => FOLLOW_UP_TOKENS.has(token));
+    return hasOnlyFollowUpTokens;
 }
 
 function hasPriorSubjectMatch(request: NoorChatRequest, state: ValidatedConversationState): boolean {
@@ -175,11 +186,7 @@ function hasPriorSubjectMatch(request: NoorChatRequest, state: ValidatedConversa
         .reverse()
         .find(turn => turn.role === 'user' && turn.content !== request.question);
     if (!priorUserTurn) return false;
-    if (state.sourceQuestionFingerprint !== undefined) {
-        return fingerprintQuestion(priorUserTurn.content) === state.sourceQuestionFingerprint;
-    }
-    const priorTokens = new Set(extractSubjectTokens(priorUserTurn.content));
-    return state.subjectTokens.some(token => priorTokens.has(token));
+    return fingerprintQuestion(priorUserTurn.content) === state.sourceQuestionFingerprint;
 }
 
 export function buildChatQueryPlan(input: Readonly<{
