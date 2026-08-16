@@ -37,6 +37,17 @@ describe('Noor generated citation validation', () => {
         assert.equal(multi.citations.length, 2);
     });
 
+    it('accepts structured citation ids when the client renders citation metadata separately', () => {
+        const result = validateGeneratedAnswer({
+            answer: 'Al-Sa\'di explains this meaning in an English paraphrase.',
+            citationIds: ['S1'],
+        }, EVIDENCE);
+
+        assert.equal(result.answer, 'Al-Sa\'di explains this meaning in an English paraphrase.');
+        assert.deepEqual(result.citationIds, ['S1']);
+        assert.equal(result.citations[0]?.chunkId, 'chunk-S1');
+    });
+
     it('rejects malformed JSON and extra top-level keys', () => {
         assert.throws(() => parseAndValidateGeneratedAnswer('{bad', EVIDENCE), /invalid generated answer/i);
         assert.throws(() => validateGeneratedAnswer({ answer: 'Claim. [S1]', citationIds: ['S1'], details: 'provider body' }, EVIDENCE), /invalid generated answer/i);

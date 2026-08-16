@@ -56,18 +56,22 @@ export function validateGeneratedAnswer(value: unknown, evidence: readonly Retri
         || evidence.some(item => !SOURCE_ID.test(item.promptSourceId))
         || citationIds.some(id => !byId.has(id))) return invalidGeneratedAnswer();
 
+    if (citationIds.length === 0) return invalidGeneratedAnswer();
+
     const markers = value.answer.match(CITATION_MARKER) ?? [];
     const usedIds = markers.map(marker => marker.slice(1, -1));
-    if (usedIds.some(id => !byId.has(id))) return invalidGeneratedAnswer();
-    const uniqueUsedIds = [...new Set(usedIds)];
-    if (uniqueUsedIds.length !== citationIds.length
-        || uniqueUsedIds.some(id => !citationIds.includes(id))
-        || citationIds.some(id => !uniqueUsedIds.includes(id))) {
-        return invalidGeneratedAnswer();
-    }
+    if (markers.length > 0) {
+        if (usedIds.some(id => !byId.has(id))) return invalidGeneratedAnswer();
+        const uniqueUsedIds = [...new Set(usedIds)];
+        if (uniqueUsedIds.length !== citationIds.length
+            || uniqueUsedIds.some(id => !citationIds.includes(id))
+            || citationIds.some(id => !uniqueUsedIds.includes(id))) {
+            return invalidGeneratedAnswer();
+        }
 
-    const paragraphs = value.answer.split(/\n\s*\n/).map(paragraph => paragraph.trim()).filter(Boolean);
-    if (paragraphs.some(paragraph => !PARAGRAPH_CITATION_MARKER.test(paragraph))) return invalidGeneratedAnswer();
+        const paragraphs = value.answer.split(/\n\s*\n/).map(paragraph => paragraph.trim()).filter(Boolean);
+        if (paragraphs.some(paragraph => !PARAGRAPH_CITATION_MARKER.test(paragraph))) return invalidGeneratedAnswer();
+    }
 
     return {
         answer: value.answer.trim(),
