@@ -267,7 +267,12 @@ function mergeEvidence(
         for (const source of ['ibn_kathir_en_abridged', 'al_sadi_ar'] as const) {
             const group = bySource.get(source);
             const candidate = group?.shift();
-            if (!candidate || characters + candidate.item.chunk.originalText.length > config.maxEvidenceCharacters) continue;
+            if (!candidate) continue;
+            if (characters + candidate.item.chunk.originalText.length > config.maxEvidenceCharacters) {
+                // Discard only this oversized candidate; keep scanning the source for a fitting chunk.
+                added = true;
+                continue;
+            }
             merged.push(candidate.item);
             characters += candidate.item.chunk.originalText.length;
             added = true;

@@ -158,6 +158,46 @@ describe('handleNoorRequest', () => {
         }
     });
 
+    it('keeps a later fitting candidate when an earlier source candidate exceeds the merge budget', async () => {
+        const oversized = {
+            ...EVIDENCE[0]!,
+            promptSourceId: 'S1',
+            chunk: {
+                ...chunk('a-oversized'),
+                canonicalUnitId: 'oversized-unit',
+                originalText: '123456',
+                retrievalText: '123456',
+            },
+        } satisfies RetrievedEvidence;
+        const fitting = {
+            ...EVIDENCE[0]!,
+            promptSourceId: 'S2',
+            chunk: {
+                ...chunk('z-fitting'),
+                canonicalUnitId: 'fitting-unit',
+                originalText: '12',
+                retrievalText: '12',
+            },
+        } satisfies RetrievedEvidence;
+        let generatedEvidence: readonly RetrievedEvidence[] = [];
+        const value = harness({
+            loadRuntimeConfig: async () => ({ ...CONFIG, maxEvidenceCharacters: 5 }),
+            retrieveSemantic: async () => ({
+                evidence: [oversized, fitting],
+                vectorHitCount: 2,
+                lexicalHitCount: 0,
+                lexicalSearchStatus: 'not_configured' as const,
+            }),
+            generateGroundedAnswer: async input => {
+                generatedEvidence = input.evidence;
+                return ANSWERED;
+            },
+        });
+
+        assert.equal((await run(value)).status, 'answered');
+        assert.deepEqual(generatedEvidence.map(item => item.chunk.chunkId), ['z-fitting']);
+    });
+
     it('clarifies structural follow-ups without validated prior evidence and skips retrieval and generation', async () => {
         const value = harness({
             retrieveSemantic: async () => { value.events.push('unexpected-semantic'); return EVIDENCE; },
