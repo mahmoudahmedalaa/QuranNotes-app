@@ -36,3 +36,24 @@ jobs:
       - run: npm ci
         working-directory: functions
       - run: npm run noor:verify
+
+  live-proof:
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: noor-rag-live
+    env:
+      NOOR_LIVE_SMOKE_ENDPOINT: ${{ secrets.NOOR_LIVE_SMOKE_ENDPOINT }}
+      NOOR_LIVE_SMOKE_FIREBASE_ID_TOKEN: ${{ secrets.NOOR_LIVE_SMOKE_FIREBASE_ID_TOKEN }}
+      NOOR_LIVE_SMOKE_APP_CHECK_TOKEN: ${{ secrets.NOOR_LIVE_SMOKE_APP_CHECK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm ci
+        working-directory: functions
+      - run: npm run noor:verify
+      - run: npm run noor:verify:live

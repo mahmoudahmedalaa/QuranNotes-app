@@ -38,3 +38,5 @@ STATUS = UNVERIFIED
 The RAG change must not be described as complete. No prose can override a failed verification command. `noor:verify` is deterministic and credential-free; `noor:verify:live` is the authenticated Firebase Auth + App Check runtime proof.
 
 The existing `noor:eval` trace aggregator and injected-repository/model tests remain useful unit, contract, or telemetry checks. They are not retrieval proof. Local semantic cases are reported as `deferred_to_live`; only the live gate can claim that production semantic retrieval was observed.
+
+The normal CI job runs the clean, credential-free gate. The same workflow exposes a protected manual `live-proof` job for the credentialed command; that job must pass before a real RAG change is considered complete.

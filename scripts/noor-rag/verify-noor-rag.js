@@ -48,10 +48,10 @@ function verifyCarrier() {
     const lockedSource = readFileSync(resolve(functionsRoot, 'scripts/noor-rag/verify-index.ts'), 'utf8');
     const expectedVersionPresent = lockedSource.includes(`LOCKED_CORPUS_VERSION = '${corpusVersion}'`);
     const detachedCiCheckout = process.env.CI === 'true' && branch === '';
-    if ((branch !== expectedBranch && !detachedCiCheckout) || !ragExists || !scriptsExist || !expectedVersionPresent) {
+    if (status !== '' || (branch !== expectedBranch && !detachedCiCheckout) || !ragExists || !scriptsExist || !expectedVersionPresent) {
         throw new Error(`carrier mismatch branch=${branch} head=${head} dirty=${status !== ''} rag=${ragExists} scripts=${scriptsExist} corpus=${expectedVersionPresent}`);
     }
-    process.stdout.write(`CARRIER branch=${branch || '(detached-ci)'} head=${head} status=${status === '' ? 'clean' : 'dirty-implementation'} rag=present corpus=${corpusVersion}\n`);
+    process.stdout.write(`CARRIER branch=${branch || '(detached-ci)'} head=${head} status=clean rag=present corpus=${corpusVersion}\n`);
 }
 
 function main() {
