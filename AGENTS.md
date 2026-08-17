@@ -147,7 +147,7 @@ When `ios/` directory exists:
 
 ## Workflow
 
-For any change affecting Noor RAG behavior, follow the concise execution contract in [`docs/noor-rag/EXECUTION_CONTRACT.md`](docs/noor-rag/EXECUTION_CONTRACT.md) and run `npm run noor:verify` plus `npm run noor:verify:live` before claiming completion.
+For any change affecting Noor/RAG corpus, ingestion, retrieval, query rewriting, ranking, generation, citations, grounding, or runtime behavior, the agent MUST first read and follow [`docs/noor-rag/EXECUTION_CONTRACT.md`](docs/noor-rag/EXECUTION_CONTRACT.md). Such a change must not be reported complete unless that contract's verification gates have passed. If live verification cannot run, the status remains `UNVERIFIED`; passing unit or local tests alone is not proof that live RAG works.
 
 ### Plan → Execute → Verify (The Ralph Mandate)
 
