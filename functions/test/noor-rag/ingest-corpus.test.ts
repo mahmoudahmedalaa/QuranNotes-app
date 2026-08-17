@@ -50,6 +50,27 @@ function artifacts(tokenizerMode = 'vertex-validated-deterministic'): IngestArti
     };
 }
 
+function existingManifest(
+    status: 'in_progress' | 'complete' | 'incomplete' = 'incomplete',
+    overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+    const value = artifacts().manifest;
+    return {
+        ...value,
+        status,
+        complete: status === 'complete',
+        embeddingModel: 'gemini-embedding-2',
+        embeddingDimension: 768,
+        expected: {
+            units: value.unitCount,
+            chunks: value.chunkCount,
+            lookups: value.lookupCount,
+            aggregateSha256: value.aggregateSha256,
+        },
+        ...overrides,
+    };
+}
+
 class FakeRepository implements IngestRepository {
     readonly calls: string[] = [];
     readonly batches: RepositoryWrite[][] = [];
@@ -178,7 +199,7 @@ describe('Noor corpus ingestion', () => {
         const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
         const chunkPath = `corpora/${LOCKED_CORPUS_VERSION}/chunks/c_0`;
         const repository = new FakeRepository({
-            [manifestPath]: { status: 'incomplete' },
+            [manifestPath]: existingManifest(),
             [chunkPath]: {
                 contentHash: 'hash-0', embeddingModel: 'gemini-embedding-2', embeddingDimension: 768,
                 embeddingComplete: true,
@@ -220,6 +241,74 @@ describe('Noor corpus ingestion', () => {
         assert.deepEqual(repository.calls.filter(call => call.startsWith('read')), [
             `read-manifest:corpusManifests/${LOCKED_CORPUS_VERSION}`,
         ]);
+    });
+
+    it('rejects a different immutable artifact under an existing corpus version before mutation', async () => {
+        const incoming = artifacts();
+        const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
+        const repository = new FakeRepository({
+            [manifestPath]: {
+                ...incoming.manifest,
+                aggregateSha256: 'different-production-artifact',
+                embeddingModel: 'gemini-embedding-2',
+                embeddingDimension: 768,
+            },
+        });
+        let embedCalls = 0;
+
+        await assert.rejects(ingestCorpus({
+            options: parseIngestArguments([
+                `--project=${LOCKED_PROJECT}`,
+                `--version=${LOCKED_CORPUS_VERSION}`,
+                '--execute-production-write',
+            ]),
+            artifacts: incoming,
+            repository,
+            embedder: {
+                embed: async () => {
+                    embedCalls += 1;
+                    return embedder.embed('unused');
+                },
+            },
+            report: () => undefined,
+        }), /different artifact.*new corpus version/i);
+
+        assert.equal(embedCalls, 0);
+        assert.deepEqual(repository.calls, [`read-manifest:${manifestPath}`]);
+        assert.equal(repository.batches.length, 0);
+    });
+
+    it('recognizes the same immutable artifact independent of Firestore map field order', async () => {
+        const incoming = artifacts();
+        const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
+        const repository = new FakeRepository({
+            [manifestPath]: existingManifest('incomplete', {
+                artifactSha256: {
+                    lookups: incoming.manifest.artifactSha256.lookups,
+                    chunks: incoming.manifest.artifactSha256.chunks,
+                    units: incoming.manifest.artifactSha256.units,
+                },
+                tokenValidation: {
+                    validatedChunkCount: incoming.manifest.tokenValidation?.validatedChunkCount,
+                    location: incoming.manifest.tokenValidation?.location,
+                    method: incoming.manifest.tokenValidation?.method,
+                },
+            }),
+        });
+
+        const result = await ingestCorpus({
+            options: parseIngestArguments([
+                `--project=${LOCKED_PROJECT}`,
+                `--version=${LOCKED_CORPUS_VERSION}`,
+                '--execute-production-write',
+            ]),
+            artifacts: incoming,
+            repository,
+            embedder,
+            report: () => undefined,
+        });
+
+        assert.equal(result.complete, true);
     });
 
     it('writes and checkpoints each chunk group before embedding the next group', async () => {
@@ -298,7 +387,7 @@ describe('Noor corpus ingestion', () => {
     it('stops after a sanitized chunk write failure and clears stale failures on retry', async () => {
         const manifestPath = `corpusManifests/${LOCKED_CORPUS_VERSION}`;
         const repository = new FakeRepository({
-            [manifestPath]: { status: 'incomplete', failedWrites: ['stale/provider/path'] },
+            [manifestPath]: existingManifest('incomplete', { failedWrites: ['stale/provider/path'] }),
         });
         repository.failBatchAt = 1;
 

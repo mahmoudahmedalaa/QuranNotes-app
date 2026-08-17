@@ -158,6 +158,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function sameArtifactHashes(value: unknown, incoming: CorpusManifest['artifactSha256']): boolean {
+    return isRecord(value)
+        && value.units === incoming.units
+        && value.chunks === incoming.chunks
+        && value.lookups === incoming.lookups;
+}
+
+function sameTokenValidation(value: unknown, incoming: CorpusManifest['tokenValidation']): boolean {
+    if (incoming === undefined) return value === undefined;
+    return isRecord(value)
+        && value.method === incoming.method
+        && value.location === incoming.location
+        && value.validatedChunkCount === incoming.validatedChunkCount;
+}
+
+function assertExistingArtifactIdentity(
+    existing: Record<string, unknown> | null,
+    incoming: CorpusManifest,
+): void {
+    if (existing === null) return;
+    const expected = isRecord(existing.expected) ? existing.expected : null;
+    const sameIdentity = existing.schemaVersion === incoming.schemaVersion
+        && existing.corpusVersion === incoming.corpusVersion
+        && existing.normalizationVersion === incoming.normalizationVersion
+        && existing.chunkingVersion === incoming.chunkingVersion
+        && existing.tokenizerMode === incoming.tokenizerMode
+        && existing.tokenizerModel === incoming.tokenizerModel
+        && sameTokenValidation(existing.tokenValidation, incoming.tokenValidation)
+        && existing.targetTokens === incoming.targetTokens
+        && existing.hardMaxTokens === incoming.hardMaxTokens
+        && existing.overlapTokens === incoming.overlapTokens
+        && existing.unitCount === incoming.unitCount
+        && existing.chunkCount === incoming.chunkCount
+        && existing.lookupCount === incoming.lookupCount
+        && sameArtifactHashes(existing.artifactSha256, incoming.artifactSha256)
+        && existing.aggregateSha256 === incoming.aggregateSha256
+        && existing.embeddingModel === EMBEDDING_MODEL
+        && existing.embeddingDimension === EMBEDDING_DIMENSION
+        && expected?.units === incoming.unitCount
+        && expected.chunks === incoming.chunkCount
+        && expected.lookups === incoming.lookupCount
+        && expected.aggregateSha256 === incoming.aggregateSha256;
+    if (!sameIdentity) {
+        throw new Error('Existing corpus version identifies a different artifact; generate a new corpus version');
+    }
+}
+
 export function cachedChunkMetadataReader(
     load: () => Promise<ReadonlyMap<string, Record<string, unknown>>>,
 ): (path: string) => Promise<Record<string, unknown> | null> {
@@ -378,6 +425,7 @@ export async function ingestCorpus(input: IngestInput): Promise<IngestResult> {
 
     const manifestPath = `corpusManifests/${input.options.version}`;
     const existingManifest = await input.repository.readManifest(manifestPath);
+    assertExistingArtifactIdentity(existingManifest, input.artifacts.manifest);
     const skippedIds = new Set<string>();
     const pending: CorpusChunk[] = [];
     for (const chunk of input.artifacts.chunks) {
