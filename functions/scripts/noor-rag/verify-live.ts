@@ -62,7 +62,7 @@ const LIVE_CASE_IDS = [
     'unsupported-unrelated-01',
     'policy-personal-ruling-01',
 ] as const;
-const MAX_HISTORY_ANSWER_CHARACTERS = 1_800;
+const MAX_HISTORY_ANSWER_CHARACTERS = 1_000;
 const DEFAULT_REQUEST_INTERVAL_MS = 15_000;
 
 export interface LiveRequestPacerOptions {
@@ -108,6 +108,26 @@ function safeErrorClass(status: number): string {
     if (status === 429) return 'rate_limited';
     if (status >= 500) return 'temporarily_unavailable';
     return status >= 400 ? 'http_error' : 'malformed_response';
+}
+
+const SAFE_TRANSPORT_ERROR_CLASSES = new Set([
+    'auth_required',
+    'app_check_required',
+    'rate_limited',
+    'temporarily_unavailable',
+    'http_error',
+    'malformed_response',
+    'request_id_mismatch',
+]);
+
+export function classifyLiveTransportError(error: unknown): string {
+    return error instanceof Error && SAFE_TRANSPORT_ERROR_CLASSES.has(error.message)
+        ? error.message
+        : 'network_error';
+}
+
+export function boundedLiveHistoryAnswer(answer: string): string {
+    return [...answer].slice(0, MAX_HISTORY_ANSWER_CHARACTERS).join('');
 }
 
 function answerFromResponse(status: number, body: unknown, expectedRequestId: string): NoorAnswer {
@@ -230,10 +250,10 @@ async function runCase(
                 answer = (await callNoor(request, credentials, paceRequest)).answer;
                 requestCount += 1;
                 history.push({ role: 'user', content: question });
-                history.push({ role: 'assistant', content: answer.answer.slice(0, MAX_HISTORY_ANSWER_CHARACTERS) });
+                history.push({ role: 'assistant', content: boundedLiveHistoryAnswer(answer.answer) });
             }
         }
-    } catch {
+    } catch (error: unknown) {
         return {
             id: goldenCase.id,
             requestCount,
@@ -247,7 +267,7 @@ async function runCase(
             rankingPositions: {},
             citations: [],
             latencyMs: Math.max(0, Date.now() - startedAt),
-            errorClass: 'network_error',
+            errorClass: classifyLiveTransportError(error),
         };
     }
     const finalAnswer = answer!;
