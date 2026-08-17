@@ -57,6 +57,7 @@ const LIVE_CASE_IDS = [
     'riba-direct-01',
     'riba-followup-01',
     'patience-direct-01',
+    'noah-story-01',
     'exact-verse-2-153',
     'unsupported-unrelated-01',
     'policy-personal-ruling-01',
