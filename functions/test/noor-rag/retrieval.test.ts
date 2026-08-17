@@ -304,7 +304,7 @@ describe('Noor semantic retrieval', () => {
         assert.deepEqual(calls, SOURCE_ORDER);
         pending.forEach(resolve => resolve());
         assert.deepEqual(await resultPromise, []);
-        assert.deepEqual(embedded, ['task: question answering | query: What is patience?']);
+        assert.deepEqual(embedded, ['task: question answering | domain: Quran tafsir | query: What is patience?']);
         const requests = (repository as RetrievalRepository & { searches?: SemanticSearchRequest[] }).searches;
         assert.equal(requests, undefined);
     });
@@ -384,6 +384,52 @@ describe('Noor semantic retrieval', () => {
         assert.equal(result.vectorHitCount, 1);
         assert.equal(result.lexicalHitCount, 2);
         assert.deepEqual(result.evidence.map(value => value.chunk.chunkId), ['i1', 'i2']);
+    });
+
+    it('does not let conversational framing create false lexical agreement over stronger semantic evidence', async () => {
+        const relevant = chunk('ibn_kathir_en_abridged', 'noah-story', 'noah-unit', 'The story of Nuh and his people');
+        const framingMatch = chunk('ibn_kathir_en_abridged', 'generic-tell-me', 'generic-unit', 'Tell me if Allah took away your hearing');
+        const repository = new FakeRepository({}, {
+            ibn_kathir_en_abridged: [
+                { chunk: relevant, distance: 0.2 },
+                { chunk: framingMatch, distance: 0.25 },
+            ],
+        });
+        const lexicalRequests: LexicalSearchRequest[] = [];
+        repository.searchLexical = async (request: LexicalSearchRequest) => {
+            lexicalRequests.push(request);
+            if (request.source !== 'ibn_kathir_en_abridged') return [];
+            return request.tokens.some(token => ['tell', 'me', 'about'].includes(token))
+                ? [{ chunk: framingMatch, score: 2 }]
+                : [];
+        };
+
+        const result = await retrieveSemanticWithStats({
+            content: 'Tell me about Noah', config: config(), repository,
+            embedder: { embed: async () => vector },
+        });
+
+        assert.deepEqual(lexicalRequests.map(request => request.tokens), [['noah'], ['noah']]);
+        assert.deepEqual(result.evidence.map(value => value.chunk.chunkId), ['noah-story', 'generic-tell-me']);
+    });
+
+    it('keeps unsupported-topic terms without emitting auxiliary verbs as lexical evidence', async () => {
+        const repository = new FakeRepository();
+        const lexicalRequests: LexicalSearchRequest[] = [];
+        repository.searchLexical = async (request: LexicalSearchRequest) => {
+            lexicalRequests.push(request);
+            return [];
+        };
+
+        await retrieveSemanticWithStats({
+            content: 'What was the latest football score?', config: config(), repository,
+            embedder: { embed: async () => vector },
+        });
+
+        assert.deepEqual(lexicalRequests.map(request => request.tokens), [
+            ['latest', 'football', 'score'],
+            ['latest', 'football', 'score'],
+        ]);
     });
 
     it('sorts stably, dedupes chunks and canonical units, caps each source, and merges round-robin', async () => {

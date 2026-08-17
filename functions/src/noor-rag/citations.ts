@@ -2,8 +2,8 @@ import type { NoorCitation } from './generatedContract';
 import type { RetrievedEvidence } from './types';
 
 const MAX_ANSWER_CHARACTERS = 8000;
-const CITATION_MARKER = /\[S\d+\]/g;
-const PARAGRAPH_CITATION_MARKER = /\[S\d+\]/;
+const CITATION_MARKER = /\[S\d+(?:\s*,\s*S\d+)*\]/g;
+const PARAGRAPH_CITATION_MARKER = /\[S\d+(?:\s*,\s*S\d+)*\]/;
 const SOURCE_ID = /^S[1-9]\d*$/;
 
 export interface ValidatedGeneratedAnswer {
@@ -59,7 +59,10 @@ export function validateGeneratedAnswer(value: unknown, evidence: readonly Retri
     if (citationIds.length === 0) return invalidGeneratedAnswer();
 
     const markers = value.answer.match(CITATION_MARKER) ?? [];
-    const usedIds = markers.map(marker => marker.slice(1, -1));
+    const usedIds = markers.flatMap(marker => marker
+        .slice(1, -1)
+        .split(',')
+        .map(id => id.trim()));
     if (markers.length > 0) {
         if (usedIds.some(id => !byId.has(id))) return invalidGeneratedAnswer();
         const uniqueUsedIds = [...new Set(usedIds)];

@@ -48,6 +48,16 @@ describe('Noor generated citation validation', () => {
         assert.equal(result.citations[0]?.chunkId, 'chunk-S1');
     });
 
+    it('accepts grouped inline source markers when every marker maps to declared evidence', () => {
+        const result = validateGeneratedAnswer({
+            answer: 'Both sources support the first claim. [S1, S2]\n\nThe second source adds context. [S2]',
+            citationIds: ['S1', 'S2'],
+        }, EVIDENCE);
+
+        assert.deepEqual(result.citationIds, ['S1', 'S2']);
+        assert.deepEqual(result.citations.map(citation => citation.chunkId), ['chunk-S1', 'chunk-S2']);
+    });
+
     it('rejects malformed JSON and extra top-level keys', () => {
         assert.throws(() => parseAndValidateGeneratedAnswer('{bad', EVIDENCE), /invalid generated answer/i);
         assert.throws(() => validateGeneratedAnswer({ answer: 'Claim. [S1]', citationIds: ['S1'], details: 'provider body' }, EVIDENCE), /invalid generated answer/i);

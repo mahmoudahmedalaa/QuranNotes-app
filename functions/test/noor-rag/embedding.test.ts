@@ -25,7 +25,7 @@ describe('Noor corpus embeddings', () => {
         );
         assert.equal(
             formatEmbeddingQuery('What does this verse teach?'),
-            'task: question answering | query: What does this verse teach?',
+            'task: question answering | domain: Quran tafsir | query: What does this verse teach?',
         );
     });
 

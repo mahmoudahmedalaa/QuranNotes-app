@@ -120,6 +120,17 @@
       "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
     },
     {
+      "id": "noah-story-01",
+      "category": "natural-language-story",
+      "turns": ["Tell me about Noah."],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_0ad0b17c1dc61edfe7924318e1cb73dfeaf1c32415783dde9fe71b99bba1f8e4", "chunkIds": ["c_0ad0b17c1dc61edfe7924318e1cb73dfeaf1c32415783dde9fe71b99bba1f8e4_000_e29e57df16f7"]}
+      ],
+      "forbiddenChunkIds": ["c_33c394baf7a1435ac2e8746a2c8a5a435fcd528c0659f198d2ea8e7928a21767_000_ed7b183201c9"],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
       "id": "citation-integrity-riba-01",
       "category": "citation-integrity",
       "turns": ["Give a concise, source-cited explanation of the Quranic warning about riba."],

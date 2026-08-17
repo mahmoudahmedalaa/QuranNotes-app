@@ -30,7 +30,7 @@ export function formatEmbeddingDocument(sourceTitle: string, retrievalText: stri
 }
 
 export function formatEmbeddingQuery(content: string): string {
-    return `task: question answering | query: ${content}`;
+    return `task: question answering | domain: Quran tafsir | query: ${content}`;
 }
 
 export function createVertexEmbedder(client: VertexEmbeddingClient): Embedder {
