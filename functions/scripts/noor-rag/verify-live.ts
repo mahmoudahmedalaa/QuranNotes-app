@@ -63,6 +63,34 @@ const LIVE_CASE_IDS = [
     'policy-personal-ruling-01',
 ] as const;
 const MAX_HISTORY_ANSWER_CHARACTERS = 1_800;
+const DEFAULT_REQUEST_INTERVAL_MS = 12_000;
+
+export interface LiveRequestPacerOptions {
+    intervalMs?: number;
+    nowMs?: () => number;
+    sleep?: (milliseconds: number) => Promise<void>;
+}
+
+export function createLiveRequestPacer(
+    options: LiveRequestPacerOptions = {},
+): () => Promise<void> {
+    const intervalMs = options.intervalMs ?? DEFAULT_REQUEST_INTERVAL_MS;
+    const nowMs = options.nowMs ?? Date.now;
+    const sleep = options.sleep ?? (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 0) {
+        throw new Error('Invalid live verification request interval');
+    }
+    let previousRequestAt: number | null = null;
+    return async (): Promise<void> => {
+        const now = nowMs();
+        if (!Number.isFinite(now)) throw new Error('Invalid live verification clock');
+        if (previousRequestAt !== null) {
+            const remaining = intervalMs - (now - previousRequestAt);
+            if (remaining > 0) await sleep(remaining);
+        }
+        previousRequestAt = nowMs();
+    };
+}
 
 function readJson(path: string): unknown {
     return JSON.parse(readFileSync(path, 'utf8')) as unknown;
@@ -106,7 +134,9 @@ function citationSnapshot(answer: NoorAnswer): LiveCitation[] {
 async function callNoor(
     request: NoorRequest,
     credentials: LiveSmokeCredentials,
+    paceRequest: () => Promise<void>,
 ): Promise<{ answer: NoorAnswer; latencyMs: number }> {
+    await paceRequest();
     const built = buildCallableRequest(request, credentials);
     const startedAt = Date.now();
     const response = await fetch(built.url, built.init);
@@ -167,6 +197,7 @@ async function runCase(
     credentials: LiveSmokeCredentials,
     corpusVersion: string,
     artifacts: ReturnType<typeof readCorpusArtifacts>,
+    paceRequest: () => Promise<void>,
 ): Promise<LiveCaseResult> {
     const startedAt = Date.now();
     let answer: NoorAnswer;
@@ -180,13 +211,13 @@ async function runCase(
                 surah: goldenCase.exact.surah,
                 verse: goldenCase.exact.verse,
             };
-            answer = (await callNoor(request, credentials)).answer;
+            answer = (await callNoor(request, credentials, paceRequest)).answer;
             requestCount = 1;
         } else {
             const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
             for (const question of goldenCase.turns) {
                 const request = { mode: 'chat' as const, requestId: randomUUID(), question, history };
-                answer = (await callNoor(request, credentials)).answer;
+                answer = (await callNoor(request, credentials, paceRequest)).answer;
                 requestCount += 1;
                 history.push({ role: 'user', content: question });
                 history.push({ role: 'assistant', content: answer.answer.slice(0, MAX_HISTORY_ANSWER_CHARACTERS) });
@@ -253,7 +284,10 @@ async function main(): Promise<void> {
     }
     const artifacts = readCorpusArtifacts(artifactsPath);
     const results: LiveCaseResult[] = [];
-    for (const id of LIVE_CASE_IDS) results.push(await runCase(caseById(manifest, id), credentials, version, artifacts));
+    const paceRequest = createLiveRequestPacer();
+    for (const id of LIVE_CASE_IDS) {
+        results.push(await runCase(caseById(manifest, id), credentials, version, artifacts, paceRequest));
+    }
     const failedCaseIds = results.filter(result => !result.passed).map(result => result.id);
     const report: LiveVerificationReport = {
         status: failedCaseIds.length === 0 ? 'PASSED' : 'FAILED',
