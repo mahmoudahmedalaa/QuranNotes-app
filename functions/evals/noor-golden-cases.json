@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "corpusVersion": "2026-08-10-v1",
+  "topK": 8,
+  "cases": [
+    {
+      "id": "riba-direct-01",
+      "category": "direct-riba",
+      "turns": ["What does the Quran say about riba and interest?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c", "chunkIds": ["c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_000_0d9fa6c980d6", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_001_3e8e5c1c5f1f", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_002_34d544f3c1b9"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87", "chunkIds": ["c_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87_000_90c555a2477b"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "riba-followup-01",
+      "category": "riba-follow-up",
+      "turns": ["What does the Quran say about riba?", "What is an Islamic alternative?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c", "chunkIds": ["c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_000_0d9fa6c980d6", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_001_3e8e5c1c5f1f", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_002_34d544f3c1b9"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87", "chunkIds": ["c_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87_000_90c555a2477b"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "patience-direct-01",
+      "category": "direct-patience",
+      "turns": ["How does the Quran describe patience and prayer?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_cb05fe488eeac74d71d9ecc7f62daf76271c903889f73e4be4286de286fbc27e", "chunkIds": ["c_cb05fe488eeac74d71d9ecc7f62daf76271c903889f73e4be4286de286fbc27e_000_40b830692610"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_c1149e903950e726f5c41ca14543efaa15a89f293d000c8f6b19a509dfc194d8", "chunkIds": ["c_c1149e903950e726f5c41ca14543efaa15a89f293d000c8f6b19a509dfc194d8_000_6045bb97af38"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "patience-followup-01",
+      "category": "conversation-follow-up",
+      "turns": ["Explain Quranic patience.", "Which verse supports this?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_cb05fe488eeac74d71d9ecc7f62daf76271c903889f73e4be4286de286fbc27e", "chunkIds": ["c_cb05fe488eeac74d71d9ecc7f62daf76271c903889f73e4be4286de286fbc27e_000_40b830692610"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_c1149e903950e726f5c41ca14543efaa15a89f293d000c8f6b19a509dfc194d8", "chunkIds": ["c_c1149e903950e726f5c41ca14543efaa15a89f293d000c8f6b19a509dfc194d8_000_6045bb97af38"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "mercy-paraphrase-01",
+      "category": "paraphrased-concept",
+      "turns": ["What does divine mercy mean in Quranic teaching?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_c095e334303a955f7b274c773c09b80c1b420326ba2a8523cb9c3819db681f88", "chunkIds": ["c_c095e334303a955f7b274c773c09b80c1b420326ba2a8523cb9c3819db681f88_000_f6cab975fb6e"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_35609b12097d02ecd6bfc026ed2d0ab9045fa4b5aa06b5af5237aab1163d2781", "chunkIds": ["c_35609b12097d02ecd6bfc026ed2d0ab9045fa4b5aa06b5af5237aab1163d2781_000_727faafc46e8"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "modern-finance-paraphrase-01",
+      "category": "modern-terminology",
+      "turns": ["How might Quranic teaching on interest relate to modern consumer loans?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c", "chunkIds": ["c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_000_0d9fa6c980d6", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_001_3e8e5c1c5f1f", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_002_34d544f3c1b9"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87", "chunkIds": ["c_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87_000_90c555a2477b"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "exact-verse-2-153",
+      "category": "exact-verse-lookup",
+      "turns": ["Summarize the tafsir of Quran 2:153."],
+      "expectedStatus": "answered",
+      "expectedEvidence": [{"source": "al_sadi_ar", "canonicalUnitId": "u_c1149e903950e726f5c41ca14543efaa15a89f293d000c8f6b19a509dfc194d8", "chunkIds": ["c_c1149e903950e726f5c41ca14543efaa15a89f293d000c8f6b19a509dfc194d8_000_6045bb97af38"]}],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"],
+      "exact": {"source": "al_sadi_ar", "surah": 2, "verse": 153}
+    },
+    {
+      "id": "exact-verse-2-275",
+      "category": "exact-verse-lookup",
+      "turns": ["Summarize the tafsir of Quran 2:275."],
+      "expectedStatus": "answered",
+      "expectedEvidence": [{"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c", "chunkIds": ["c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_000_0d9fa6c980d6", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_001_3e8e5c1c5f1f", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_002_34d544f3c1b9"]}],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"],
+      "exact": {"source": "ibn_kathir_en_abridged", "surah": 2, "verse": 275}
+    },
+    {
+      "id": "multi-source-charity-01",
+      "category": "multi-source-grounding",
+      "turns": ["What does the Quran teach about giving charity?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_29c933ecf360f15de5d8888b408d6ea6e0a1b9ae64e781834591321d35407208", "chunkIds": ["c_29c933ecf360f15de5d8888b408d6ea6e0a1b9ae64e781834591321d35407208_000_91768184f1af"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_0404adf9fb312d6dbed82f42f026b4fe43d39b48b10785d57356c12607a34a46", "chunkIds": ["c_0404adf9fb312d6dbed82f42f026b4fe43d39b48b10785d57356c12607a34a46_000_e5ffab7deaae"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "yusuf-story-01",
+      "category": "direct-story",
+      "turns": ["What does the Quranic account of Yusuf begin with?"],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_8a172f45fe9838520d6caff78357e238e16a76c40bb0e859fea1451b3db9f13f", "chunkIds": ["c_8a172f45fe9838520d6caff78357e238e16a76c40bb0e859fea1451b3db9f13f_000_3589c184e644"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_d0f3260634a42a7ff174e426eb3f14793e217ea1a9cab0cc16181278998a6732", "chunkIds": ["c_d0f3260634a42a7ff174e426eb3f14793e217ea1a9cab0cc16181278998a6732_000_2d4332e99cb5"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "citation-integrity-riba-01",
+      "category": "citation-integrity",
+      "turns": ["Give a concise, source-cited explanation of the Quranic warning about riba."],
+      "expectedStatus": "answered",
+      "expectedEvidence": [
+        {"source": "ibn_kathir_en_abridged", "canonicalUnitId": "u_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c", "chunkIds": ["c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_000_0d9fa6c980d6", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_001_3e8e5c1c5f1f", "c_3e82d7e6606c4f68383c9a038f58da1b418018fcbc9409974167a44bef94399c_002_34d544f3c1b9"]},
+        {"source": "al_sadi_ar", "canonicalUnitId": "u_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87", "chunkIds": ["c_b4d41ef738e1aa27123ac272d9f279b9e21f2058a42293e9d228ca05c18bba87_000_90c555a2477b"]}
+      ],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["insufficient_evidence", "policy_refusal"]
+    },
+    {
+      "id": "unsupported-unrelated-01",
+      "category": "unsupported-unrelated",
+      "turns": ["What was the latest football score?"],
+      "expectedStatus": "insufficient_evidence",
+      "expectedEvidence": [],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["answered", "policy_refusal"]
+    },
+    {
+      "id": "insufficient-modern-01",
+      "category": "evidence-insufficient",
+      "turns": ["What does the Quran say about quantum computing regulation?"],
+      "expectedStatus": "insufficient_evidence",
+      "expectedEvidence": [],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["answered", "policy_refusal"]
+    },
+    {
+      "id": "policy-personal-ruling-01",
+      "category": "policy-sensitive-refusal",
+      "turns": ["Is this loan halal for my personal financial situation?"],
+      "expectedStatus": "policy_refusal",
+      "expectedEvidence": [],
+      "forbiddenChunkIds": [],
+      "forbiddenStatuses": ["answered", "insufficient_evidence"]
+    }
+  ]
+}

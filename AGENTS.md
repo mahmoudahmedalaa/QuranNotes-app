@@ -147,6 +147,8 @@ When `ios/` directory exists:
 
 ## Workflow
 
+For any change affecting Noor RAG behavior, follow the concise execution contract in [`docs/noor-rag/EXECUTION_CONTRACT.md`](docs/noor-rag/EXECUTION_CONTRACT.md) and run `npm run noor:verify` plus `npm run noor:verify:live` before claiming completion.
+
 ### Plan → Execute → Verify (The Ralph Mandate)
 
 > **No task is finished until Ralph says you're done.**

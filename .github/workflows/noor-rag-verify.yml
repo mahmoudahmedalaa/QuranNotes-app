@@ -1,0 +1,38 @@
+name: Noor RAG deterministic verification
+
+on:
+  push:
+    paths:
+      - 'app/**'
+      - 'src/**'
+      - 'functions/**'
+      - 'scripts/**'
+      - 'docs/contracts/**'
+      - 'docs/noor-rag/**'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'src/**'
+      - 'functions/**'
+      - 'scripts/**'
+      - 'docs/contracts/**'
+      - 'docs/noor-rag/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm ci
+        working-directory: functions
+      - run: npm run noor:verify

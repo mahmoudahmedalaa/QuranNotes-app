@@ -13,6 +13,8 @@
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "typecheck:functions": "npm --prefix functions exec tsc -- --noEmit -p tsconfig.json",
+    "noor:verify": "node scripts/noor-rag/verify-noor-rag.js",
+    "noor:verify:live": "npm --prefix functions run noor:verify:live",
     "report:firebase-usage": "node scripts/report-firebase-usage.js",
     "report:paywall-funnel": "node scripts/report-paywall-funnel.js",
     "paywall:rollout": "node scripts/manage-paywall-rollout.js",
