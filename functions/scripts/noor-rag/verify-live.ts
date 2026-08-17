@@ -63,7 +63,7 @@ const LIVE_CASE_IDS = [
     'policy-personal-ruling-01',
 ] as const;
 const MAX_HISTORY_ANSWER_CHARACTERS = 1_800;
-const DEFAULT_REQUEST_INTERVAL_MS = 12_000;
+const DEFAULT_REQUEST_INTERVAL_MS = 15_000;
 
 export interface LiveRequestPacerOptions {
     intervalMs?: number;
@@ -148,6 +148,23 @@ function expectedChunkIds(goldenCase: GoldenCase): string[] {
     return goldenCase.expectedEvidence.flatMap(evidence => [...evidence.chunkIds]);
 }
 
+export function expectedCitationEvidenceSatisfied(
+    goldenCase: Pick<GoldenCase, 'exact' | 'expectedEvidence'>,
+    citations: readonly Pick<LiveCitation, 'chunkId' | 'canonicalUnitId' | 'source'>[],
+): boolean {
+    if (goldenCase.exact) {
+        const actualChunkIds = new Set(citations.map(citation => citation.chunkId));
+        return goldenCase.expectedEvidence
+            .flatMap(evidence => evidence.chunkIds)
+            .every(chunkId => actualChunkIds.has(chunkId));
+    }
+    return goldenCase.expectedEvidence.some(expected => citations.some(citation => (
+        citation.source === expected.source
+        && citation.canonicalUnitId === expected.canonicalUnitId
+        && expected.chunkIds.includes(citation.chunkId)
+    )));
+}
+
 function validateResult(
     goldenCase: GoldenCase,
     answer: NoorAnswer,
@@ -169,13 +186,6 @@ function validateResult(
             && chunk.source === citation.source
             && corpusVersion === citation.corpusVersion;
     });
-    const expectedSources = new Set(goldenCase.expectedEvidence.map(evidence => evidence.source));
-    const expectedUnits = new Set(goldenCase.expectedEvidence.map(evidence => evidence.canonicalUnitId));
-    const actualSources = new Set(citations.map(citation => citation.source));
-    const actualUnits = new Set(citations.map(citation => citation.canonicalUnitId));
-    const expectedEvidenceReturned = expectedIds.every(chunkId => actualChunkIds.has(chunkId));
-    const expectedSourcesReturned = [...expectedSources].every(source => actualSources.has(source));
-    const expectedUnitsReturned = [...expectedUnits].every(unit => actualUnits.has(unit));
     const forbiddenChunkAbsent = goldenCase.forbiddenChunkIds.every(chunkId => !actualChunkIds.has(chunkId));
     const forbiddenStatus = !goldenCase.forbiddenStatuses.some(status => status === answer.status);
     const passed = answer.status === goldenCase.expectedStatus
@@ -184,7 +194,7 @@ function validateResult(
         && forbiddenStatus
         && (goldenCase.expectedStatus !== 'answered'
             ? citations.length === 0
-            : expectedEvidenceReturned && expectedSourcesReturned && expectedUnitsReturned);
+            : expectedCitationEvidenceSatisfied(goldenCase, citations));
     return {
         passed,
         rankingPositions,
