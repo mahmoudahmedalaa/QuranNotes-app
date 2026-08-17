@@ -12,6 +12,8 @@ import { MatchingService } from '../../features/voice/infrastructure/MatchingSer
 import { Alert, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../features/auth/infrastructure/AuthContext';
+import { UserScopedStorage } from '../storage/UserScopedStorage';
 
 const FREE_SESSIONS_PER_DAY = 3;
 
@@ -46,15 +48,34 @@ export function useVoiceFollowAlong(
 
     const sessionStartTime = useRef<Date | null>(null);
     const durationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-    const repository = useRef(new LocalFollowAlongRepository());
 
     const { isPro } = usePro();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
+    const repository = useRef(new LocalFollowAlongRepository(userId));
     const router = useRouter();
+
+    useEffect(() => {
+        repository.current = new LocalFollowAlongRepository(userId);
+    }, [userId]);
+
+    const loadSessionsUsed = useCallback(async () => {
+        try {
+            const today = new Date().toDateString();
+            const key = `voice_sessions_${today}`;
+            const stored = await UserScopedStorage.getItem(key, userId);
+            if (stored) {
+                setSessionsUsedToday(parseInt(stored, 10));
+            }
+        } catch (error) {
+            if (__DEV__) console.warn('[VoiceFollowAlong] Failed to load sessions:', (error as Error)?.message || error);
+        }
+    }, [userId]);
 
     // Load sessions used today from AsyncStorage
     useEffect(() => {
         loadSessionsUsed();
-    }, []);
+    }, [loadSessionsUsed]);
 
     // Duration timer
     useEffect(() => {
@@ -77,27 +98,12 @@ export function useVoiceFollowAlong(
         };
     }, [isActive]);
 
-    const loadSessionsUsed = async () => {
-        try {
-            const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-            const today = new Date().toDateString();
-            const key = `voice_sessions_${today}`;
-            const stored = await AsyncStorage.getItem(key);
-            if (stored) {
-                setSessionsUsedToday(parseInt(stored, 10));
-            }
-        } catch (error) {
-            if (__DEV__) console.warn('[VoiceFollowAlong] Failed to load sessions:', (error as Error)?.message || error);
-        }
-    };
-
     const incrementSessionCount = async () => {
         try {
-            const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
             const today = new Date().toDateString();
             const key = `voice_sessions_${today}`;
             const newCount = sessionsUsedToday + 1;
-            await AsyncStorage.setItem(key, newCount.toString());
+            await UserScopedStorage.setItem(key, userId, newCount.toString());
             setSessionsUsedToday(newCount);
         } catch (error) {
             if (__DEV__) console.warn('[VoiceFollowAlong] Failed to increment sessions:', (error as Error)?.message || error);

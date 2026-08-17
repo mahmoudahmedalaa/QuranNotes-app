@@ -3,16 +3,25 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    FirebaseClientConfig,
+    resolveFirebaseClientConfig,
+} from './FirebaseConfigResolver';
 
-// Firebase configuration from environment
-const firebaseConfig = {
-    apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-};
+function loadNativeFirebaseOptions(): FirebaseClientConfig {
+    // Keep the native import out of Jest and non-native environments. In a
+    // bundled iOS Release, RNFirebase reads these values from GoogleService-Info.plist.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nativeFirebase = require('@react-native-firebase/app') as {
+        getApp?: () => { options?: FirebaseClientConfig };
+    };
+    return nativeFirebase.getApp?.().options ?? {};
+}
+
+const firebaseConfig = resolveFirebaseClientConfig(
+    process.env,
+    process.env.NODE_ENV === 'test' ? undefined : loadNativeFirebaseOptions,
+);
 
 // Initialize Firebase (singleton)
 if (!firebase.apps.length) {

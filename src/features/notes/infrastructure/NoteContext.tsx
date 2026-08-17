@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { usePro } from '../../auth/infrastructure/ProContext';
@@ -12,6 +12,7 @@ import {
     GetNoteByIdUseCase,
 } from '../domain/usecases/NoteUseCases';
 import { useStreaks } from '../../auth/infrastructure/StreakContext';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 interface NoteContextType {
     notes: Note[];
@@ -32,26 +33,31 @@ export const useNoteContext = () => {
     return context;
 };
 
-const repo = new LocalNoteRepository();
-const saveUseCase = new SaveNoteUseCase(repo);
-const getUseCase = new GetNoteUseCase(repo);
-const getAllUseCase = new GetAllNotesUseCase(repo);
-const deleteUseCase = new DeleteNoteUseCase(repo);
-const getByIdUseCase = new GetNoteByIdUseCase(repo);
-
 export function NoteProvider({ children }: { children: React.ReactNode }) {
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(true);
     const { recordActivity } = useStreaks();
     const { isPro } = usePro();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const router = useRouter();
+    const useCases = useMemo(() => {
+        const repo = new LocalNoteRepository(userId);
+        return {
+            save: new SaveNoteUseCase(repo),
+            get: new GetNoteUseCase(repo),
+            getAll: new GetAllNotesUseCase(repo),
+            delete: new DeleteNoteUseCase(repo),
+            getById: new GetNoteByIdUseCase(repo),
+        };
+    }, [userId]);
 
     const refreshNotes = useCallback(async () => {
         setLoading(true);
-        const data = await getAllUseCase.execute();
+        const data = await useCases.getAll.execute();
         setNotes(data);
         setLoading(false);
-    }, []);
+    }, [useCases]);
 
     useEffect(() => {
         refreshNotes();
@@ -76,29 +82,29 @@ export function NoteProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        await saveUseCase.execute(note);
+        await useCases.save.execute(note);
         await recordActivity(); // Update streak
         await refreshNotes();
     };
 
     const deleteNote = async (id: string) => {
-        await deleteUseCase.execute(id);
+        await useCases.delete.execute(id);
         await refreshNotes();
     };
 
     const getNoteForVerse = async (surah: number, verse: number) => {
-        return await getUseCase.execute(surah, verse);
+        return await useCases.get.execute(surah, verse);
     };
 
     const getNoteById = async (id: string) => {
-        return await getByIdUseCase.execute(id);
+        return await useCases.getById.execute(id);
     };
 
     const togglePin = async (id: string) => {
         const note = notes.find(n => n.id === id);
         if (!note) return;
         const updated = { ...note, isPinned: !note.isPinned, updatedAt: new Date() };
-        await saveUseCase.execute(updated);
+        await useCases.save.execute(updated);
         await refreshNotes();
     };
 

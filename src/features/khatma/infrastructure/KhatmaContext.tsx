@@ -4,7 +4,6 @@
  * All surah data lives in surahData.ts.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getSurahMeta, SurahMeta } from '../data/surahData';
 import {
@@ -25,6 +24,7 @@ import {
 import { useAuth } from '../../auth/infrastructure/AuthContext';
 import { usePro } from '../../auth/infrastructure/ProContext';
 import { ReadingActivityLog, ReadingLog } from '../../../core/infrastructure/ReadingActivityLog';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
 import { WidgetBridge } from '../../../../modules/widget-bridge/src';
 
 // Re-export types so existing consumers don't break
@@ -65,6 +65,7 @@ export const useKhatma = (): KhatmaContextType => {
 export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const currentYear = new Date().getFullYear();
     const { user } = useAuth();
+    const userId = user?.id ?? null;
     const prevUidRef = useRef<string | null | undefined>(undefined);
 
     const [state, setState] = useState<KhatmaState>(initialState(currentYear));
@@ -74,31 +75,37 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // ─── Load on mount ───────────────────────────────────────────────────
 
     const load = useCallback(async () => {
-        const loaded = await loadProgress(currentYear);
+        if (!userId) {
+            setState(initialState(currentYear));
+            setReadingLog({});
+            setLoading(false);
+            return;
+        }
+        const loaded = await loadProgress(currentYear, userId);
         setState(loaded);
+        setReadingLog(await ReadingActivityLog.load(userId));
         setLoading(false);
-    }, [currentYear]);
+    }, [currentYear, userId]);
 
     useEffect(() => {
         load();
-        ReadingActivityLog.load().then(setReadingLog);
     }, [load]);
 
     // One-time reseed fix
     useEffect(() => {
-        if (loading || state.completedSurahs.length === 0) return;
+        if (!userId || loading || state.completedSurahs.length === 0) return;
         (async () => {
-            const flag = await AsyncStorage.getItem('reading_log_v3_seeded');
+            const flag = await UserScopedStorage.getItem('reading_log_v3_seeded', userId);
             if (flag === 'true') return;
-            const seeded = await ReadingActivityLog.reseed(state.completedSurahs);
-            await AsyncStorage.setItem('reading_log_v3_seeded', 'true');
+            const seeded = await ReadingActivityLog.reseed(state.completedSurahs, userId);
+            await UserScopedStorage.setItem('reading_log_v3_seeded', userId, 'true');
             if (Object.keys(seeded).length > 0) setReadingLog(seeded);
         })();
-    }, [loading, state.completedSurahs]);
+    }, [loading, state.completedSurahs, userId]);
 
     // Reset on auth change
     useEffect(() => {
-        const currentUid = user?.id ?? null;
+        const currentUid = userId;
         if (prevUidRef.current === undefined) {
             prevUidRef.current = currentUid;
             return;
@@ -107,15 +114,16 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             prevUidRef.current = currentUid;
             load();
         }
-    }, [user?.id, load]);
+    }, [userId, load]);
 
     // ─── Actions ─────────────────────────────────────────────────────────
 
     const markSurahComplete = useCallback(async (surahNumber: number) => {
         if (surahNumber < 1 || surahNumber > 114) return;
 
-        await ReadingActivityLog.logSurahCompletion(surahNumber);
-        const updatedLog = await ReadingActivityLog.load();
+        if (!userId) return;
+        await ReadingActivityLog.logSurahCompletion(surahNumber, userId);
+        const updatedLog = await ReadingActivityLog.load(userId);
         setReadingLog(updatedLog);
 
         setState(prev => {
@@ -128,10 +136,10 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 lastProgressDate: todayDateString(),
                 streakCount: newStreak,
             };
-            saveProgress(newState);
+            saveProgress(newState, userId);
             return newState;
         });
-    }, []);
+    }, [userId]);
 
     const unmarkSurah = useCallback(async (surahNumber: number) => {
         if (surahNumber < 1 || surahNumber > 114) return;
@@ -139,16 +147,18 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (!prev.completedSurahs.includes(surahNumber)) return prev;
             const updated = prev.completedSurahs.filter(n => n !== surahNumber);
             const newState: KhatmaState = { ...prev, completedSurahs: updated };
-            saveProgress(newState);
+            saveProgress(newState, userId);
             return newState;
         });
-    }, []);
+    }, [userId]);
 
     const resetKhatma = useCallback(async () => {
         const newState = initialState(currentYear);
         setState(newState);
-        await saveProgress(newState);
-    }, [currentYear]);
+        await saveProgress(newState, userId);
+        setReadingLog({});
+        await ReadingActivityLog.clearAll(userId);
+    }, [currentYear, userId]);
 
     const startNextRound = useCallback(async () => {
         setState(prev => {
@@ -160,10 +170,10 @@ export const KhatmaProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 streakCount: prev.streakCount,
                 lastProgressDate: prev.lastProgressDate,
             };
-            saveProgress(newState);
+            saveProgress(newState, userId);
             return newState;
         });
-    }, [currentYear]);
+    }, [currentYear, userId]);
 
     // ─── Derived values ──────────────────────────────────────────────────
 

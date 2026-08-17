@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReviewService } from '../../../core/services/ReviewService';
 import { CloudSyncEvents } from '../../../core/application/services/CloudSyncEvents';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 const STORAGE_KEY = '@quran_highlights';
 
@@ -44,21 +45,17 @@ export const useHighlights = () => {
 const makeKey = (surahId: number, verseId: number) => `${surahId}:${verseId}`;
 
 export function HighlightProvider({ children }: { children: React.ReactNode }) {
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const [highlights, setHighlights] = useState<HighlightMap>({});
 
-    // Load highlights on mount
-    useEffect(() => {
-        loadHighlights();
-    }, []);
-
-    // Re-read when cloud sync pulls remote data
-    useEffect(() => {
-        return CloudSyncEvents.onPull(() => { loadHighlights(); });
-    }, []);
-
-    const loadHighlights = async () => {
+    const loadHighlights = useCallback(async () => {
         try {
-            const data = await AsyncStorage.getItem(STORAGE_KEY);
+            if (!userId) {
+                setHighlights({});
+                return;
+            }
+            const data = await UserScopedStorage.getItem(STORAGE_KEY, userId);
             if (data) {
                 const parsed = JSON.parse(data) as HighlightMap;
                 // Sanitise — strip entries with missing required fields
@@ -75,20 +72,34 @@ export function HighlightProvider({ children }: { children: React.ReactNode }) {
                     }
                 }
                 setHighlights(clean);
+            } else {
+                setHighlights({});
             }
         } catch (e) {
             if (__DEV__) console.warn('Failed to load highlights:', e);
         }
-    };
+    }, [userId]);
+
+    // Load highlights when the signed-in account changes.
+    useEffect(() => {
+        setHighlights({});
+        loadHighlights();
+    }, [loadHighlights]);
+
+    // Re-read when cloud sync pulls remote data
+    useEffect(() => {
+        return CloudSyncEvents.onPull(() => { loadHighlights(); });
+    }, [loadHighlights]);
 
     // Persist highlights
     const persist = useCallback(async (map: HighlightMap) => {
         try {
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+            if (!userId) return;
+            await UserScopedStorage.setItem(STORAGE_KEY, userId, JSON.stringify(map));
         } catch (e) {
             if (__DEV__) console.warn('Failed to save highlights:', e);
         }
-    }, []);
+    }, [userId]);
 
     const highlightVerse = useCallback(async (surahId: number, verseId: number, color: string, noteId?: string) => {
         const key = makeKey(surahId, verseId);

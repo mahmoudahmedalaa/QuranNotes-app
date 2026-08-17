@@ -19,6 +19,9 @@ ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNati
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
+# @generated begin @react-native-firebase/app-disableSPM - expo prebuild (DO NOT MODIFY) sync-09f7df9a837716fd4f96713144d8f77224017d89
+$RNFirebaseDisableSPM = true
+# @generated end @react-native-firebase/app-disableSPM
 
 target 'QuranNotes' do
   use_expo_modules!

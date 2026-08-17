@@ -15,6 +15,7 @@ import { MotiView } from 'moti';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ReadingPositionService, ReadingPosition } from '../../quran-reading/infrastructure/ReadingPositionService';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 import { SurahMeta, getSurahMeta } from '../data/surahData';
 import { getSurahsInJuz } from '../data/khatmaData';
 import { Spacing, BorderRadius, Shadows, Typography, BrandTokens } from '../../../core/theme/DesignSystem';
@@ -270,6 +271,8 @@ export const JuzSurahList: React.FC<JuzSurahListProps> = ({
 }) => {
     const theme = useTheme();
     const router = useRouter();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const isDark = theme.dark;
 
     // Which Juz to show — user-selected overrides current
@@ -290,11 +293,11 @@ export const JuzSurahList: React.FC<JuzSurahListProps> = ({
     const loadPositions = useCallback(async () => {
         const result: Record<number, ReadingPosition | null> = {};
         for (const num of surahNumbers) {
-            const pos = await ReadingPositionService.get(num);
+            const pos = await ReadingPositionService.get(num, userId);
             result[num] = pos;
         }
         setPositions(result);
-    }, [surahNumbers]);
+    }, [surahNumbers, userId]);
 
     useFocusEffect(useCallback(() => { loadPositions(); }, [loadPositions]));
     useEffect(() => { loadPositions(); }, [loadPositions]);

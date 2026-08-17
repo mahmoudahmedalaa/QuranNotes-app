@@ -4,6 +4,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { JUZ_DATA } from '../data/khatmaData';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -110,10 +111,12 @@ export function initialState(year: number): KhatmaState {
     };
 }
 
-export async function loadProgress(year: number): Promise<KhatmaState> {
+export async function loadProgress(year: number, userId?: string | null): Promise<KhatmaState> {
     try {
         const key = getStorageKey(year);
-        const raw = await AsyncStorage.getItem(key);
+        const raw = userId
+            ? await UserScopedStorage.getItem(key, userId)
+            : await AsyncStorage.getItem(key);
         if (!raw) return initialState(year);
 
         const parsed = JSON.parse(raw);
@@ -137,7 +140,7 @@ export async function loadProgress(year: number): Promise<KhatmaState> {
                 completedRounds: parsed.completedRounds || [],
                 streakCount: parsed.streakCount || 0,
             };
-            await saveProgress(migratedState);
+            await saveProgress(migratedState, userId);
             return migratedState;
         }
 
@@ -162,9 +165,14 @@ export async function loadProgress(year: number): Promise<KhatmaState> {
     }
 }
 
-export async function saveProgress(state: KhatmaState): Promise<void> {
+export async function saveProgress(state: KhatmaState, userId?: string | null): Promise<void> {
     try {
-        await AsyncStorage.setItem(getStorageKey(state.year), JSON.stringify(state));
+        const key = getStorageKey(state.year);
+        if (userId) {
+            await UserScopedStorage.setItem(key, userId, JSON.stringify(state));
+        } else {
+            await AsyncStorage.setItem(key, JSON.stringify(state));
+        }
     } catch (e) {
         if (__DEV__) console.error('[KhatmaService] Save failed:', e);
     }

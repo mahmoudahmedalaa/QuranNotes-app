@@ -15,14 +15,17 @@ import { MotiView } from 'moti';
 import { FollowAlongSession } from '../../../src/core/domain/entities/FollowAlongSession';
 import { LocalFollowAlongRepository } from '../../../src/core/data/local/LocalFollowAlongRepository';
 import { Spacing, BorderRadius } from '../../../src/core/theme/DesignSystem';
+import { useAuth } from '../../../src/features/auth/infrastructure/AuthContext';
 
 export default function FollowAlongsTab() {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const [sessions, setSessions] = useState<FollowAlongSession[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const repository = new LocalFollowAlongRepository();
+    const repository = new LocalFollowAlongRepository(userId);
 
     const loadSessions = async () => {
         try {
@@ -39,7 +42,7 @@ export default function FollowAlongsTab() {
     useEffect(() => {
         loadSessions();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [userId]);
 
     const handleRefresh = useCallback(() => {
         setRefreshing(true);

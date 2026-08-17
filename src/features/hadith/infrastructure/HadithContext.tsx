@@ -4,11 +4,12 @@
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CuratedHadith } from '../domain/HadithTypes';
 import { getAllCuratedHadiths } from '../domain/CuratedHadiths';
 import { HadithBookmarkService } from './HadithBookmarkService';
 import { WidgetBridge } from '../../../../modules/widget-bridge/src';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 const STORAGE_KEY = 'daily_hadith_data';
 const HISTORY_KEY = 'daily_hadith_history';
@@ -16,9 +17,13 @@ const REFRESH_COUNT_KEY = 'daily_hadith_refresh_count';
 const FREE_REFRESH_LIMIT = 3;
 
 /** Clear all hadith data (used on logout/login to prevent leaking between accounts) */
-export async function clearAllHadithData(): Promise<void> {
+export async function clearAllHadithData(userId?: string | null): Promise<void> {
     try {
-        await AsyncStorage.multiRemove([STORAGE_KEY, HISTORY_KEY, REFRESH_COUNT_KEY]);
+        await Promise.all([
+            UserScopedStorage.removeItem(STORAGE_KEY, userId),
+            UserScopedStorage.removeItem(HISTORY_KEY, userId),
+            UserScopedStorage.removeItem(REFRESH_COUNT_KEY, userId),
+        ]);
     } catch (e) {
         if (__DEV__) console.warn('[HadithContext] clearAllHadithData failed:', e);
     }
@@ -70,12 +75,12 @@ function syncHadithToWidget(h: CuratedHadith) {
 }
 
 /** Pick a random hadith avoiding recent history */
-async function pickNextHadith(): Promise<CuratedHadith> {
+async function pickNextHadith(userId?: string | null): Promise<CuratedHadith> {
     const allHadiths = getAllCuratedHadiths();
     let history: string[] = [];
 
     try {
-        const storedHistory = await AsyncStorage.getItem(HISTORY_KEY);
+        const storedHistory = await UserScopedStorage.getItem(HISTORY_KEY, userId);
         if (storedHistory) history = JSON.parse(storedHistory);
     } catch (_e) {
         if (__DEV__) console.warn('[HadithContext] Failed to parse history:', _e);
@@ -92,7 +97,7 @@ async function pickNextHadith(): Promise<CuratedHadith> {
     history.push(picked.id);
 
     try {
-        await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        await UserScopedStorage.setItem(HISTORY_KEY, userId, JSON.stringify(history));
     } catch (_e) {
         if (__DEV__) console.warn('[HadithContext] Failed to save history:', _e);
     }
@@ -106,9 +111,9 @@ function todayKey(): string {
 }
 
 /** Load today's refresh count from AsyncStorage */
-async function loadRefreshCount(): Promise<number> {
+async function loadRefreshCount(userId?: string | null): Promise<number> {
     try {
-        const stored = await AsyncStorage.getItem(REFRESH_COUNT_KEY);
+        const stored = await UserScopedStorage.getItem(REFRESH_COUNT_KEY, userId);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (parsed.date === todayKey()) return parsed.count;
@@ -118,14 +123,16 @@ async function loadRefreshCount(): Promise<number> {
 }
 
 /** Save today's refresh count */
-async function saveRefreshCount(count: number): Promise<void> {
-    await AsyncStorage.setItem(REFRESH_COUNT_KEY, JSON.stringify({
+async function saveRefreshCount(count: number, userId?: string | null): Promise<void> {
+    await UserScopedStorage.setItem(REFRESH_COUNT_KEY, userId, JSON.stringify({
         date: todayKey(),
         count,
     }));
 }
 
 export const HadithProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const [hadith, setHadithState] = useState<CuratedHadith | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshCount, setRefreshCount] = useState(0);
@@ -133,14 +140,15 @@ export const HadithProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const canRefresh = refreshCount < FREE_REFRESH_LIMIT;
 
-    // Load bookmarks on mount
+    // Load bookmarks when the signed-in account changes.
     useEffect(() => {
-        HadithBookmarkService.getBookmarks().then(setBookmarkedIds);
-    }, []);
+        setBookmarkedIds([]);
+        HadithBookmarkService.getBookmarks(userId).then(setBookmarkedIds);
+    }, [userId]);
 
     const loadDailyHadith = useCallback(async () => {
         try {
-            const stored = await AsyncStorage.getItem(STORAGE_KEY);
+            const stored = await UserScopedStorage.getItem(STORAGE_KEY, userId);
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (parsed.date === todayKey()) {
@@ -148,19 +156,19 @@ export const HadithProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                     syncHadithToWidget(parsed.hadith);
                     setLoading(false);
                     // Load today's refresh count
-                    const count = await loadRefreshCount();
+                    const count = await loadRefreshCount(userId);
                     setRefreshCount(count);
                     return;
                 }
             }
 
             // New day — pick a fresh hadith, reset refresh count
-            const nextHadith = await pickNextHadith();
+            const nextHadith = await pickNextHadith(userId);
             setHadithState(nextHadith);
             syncHadithToWidget(nextHadith);
             setRefreshCount(0);
-            await saveRefreshCount(0);
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+            await saveRefreshCount(0, userId);
+            await UserScopedStorage.setItem(STORAGE_KEY, userId, JSON.stringify({
                 date: todayKey(),
                 hadith: nextHadith,
             }));
@@ -172,49 +180,49 @@ export const HadithProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [userId]);
 
     /** Refresh — pick a new hadith (user-triggered). Increments refresh count. */
     const refresh = useCallback(async () => {
         try {
-            const nextHadith = await pickNextHadith();
+            const nextHadith = await pickNextHadith(userId);
             setHadithState(nextHadith);
             syncHadithToWidget(nextHadith);
             const newCount = refreshCount + 1;
             setRefreshCount(newCount);
-            await saveRefreshCount(newCount);
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+            await saveRefreshCount(newCount, userId);
+            await UserScopedStorage.setItem(STORAGE_KEY, userId, JSON.stringify({
                 date: todayKey(),
                 hadith: nextHadith,
             }));
         } catch (err) {
             if (__DEV__) console.warn('[HadithContext] Refresh failed:', err);
         }
-    }, [refreshCount]);
+    }, [refreshCount, userId]);
 
     /** Set a specific hadith from the library */
     const setHadith = useCallback(async (h: CuratedHadith) => {
         setHadithState(h);
         syncHadithToWidget(h);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+        await UserScopedStorage.setItem(STORAGE_KEY, userId, JSON.stringify({
             date: todayKey(),
             hadith: h,
         }));
-    }, []);
+    }, [userId]);
 
     /** Toggle bookmark — returns true if added, false if removed */
     const toggleBookmark = useCallback(async (hadithId: string): Promise<boolean> => {
         const isCurrentlyBookmarked = bookmarkedIds.includes(hadithId);
         if (isCurrentlyBookmarked) {
-            await HadithBookmarkService.removeBookmark(hadithId);
+            await HadithBookmarkService.removeBookmark(hadithId, userId);
             setBookmarkedIds(prev => prev.filter(id => id !== hadithId));
             return false;
         } else {
-            await HadithBookmarkService.addBookmark(hadithId);
+            await HadithBookmarkService.addBookmark(hadithId, userId);
             setBookmarkedIds(prev => [...prev, hadithId]);
             return true;
         }
-    }, [bookmarkedIds]);
+    }, [bookmarkedIds, userId]);
 
     const isBookmarked = useCallback((hadithId: string): boolean => {
         return bookmarkedIds.includes(hadithId);

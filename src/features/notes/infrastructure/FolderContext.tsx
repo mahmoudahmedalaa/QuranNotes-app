@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Folder, DEFAULT_FOLDER } from '../../../core/domain/entities/Folder';
 import { usePro } from '../../auth/infrastructure/ProContext';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 import { LocalFolderRepository } from '../../../core/data/local/LocalFolderRepository';
 
 
@@ -26,19 +27,16 @@ const FolderContext = createContext<FolderContextType>({
 export const useFolders = () => useContext(FolderContext);
 
 
-const repo = new LocalFolderRepository();
-
 export function FolderProvider({ children }: { children: React.ReactNode }) {
     const [folders, setFolders] = useState<Folder[]>([DEFAULT_FOLDER]);
     const [loading, setLoading] = useState(true);
     const { isPro } = usePro();
+    const { user } = useAuth();
+    const repo = useMemo(() => new LocalFolderRepository(user?.id ?? null), [user?.id]);
     const router = useRouter();
 
-    useEffect(() => {
-        loadFolders();
-    }, []);
-
-    const loadFolders = async () => {
+    const loadFolders = useCallback(async () => {
+        setLoading(true);
         try {
             const data = await repo.getAllFolders();
             setFolders(data);
@@ -47,7 +45,11 @@ export function FolderProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [repo]);
+
+    useEffect(() => {
+        loadFolders();
+    }, [loadFolders]);
 
     const addFolder = async (name: string, color?: string) => {
         // GATING LOGIC: Limit Free users to 2 folders (excluding default "None" folder)

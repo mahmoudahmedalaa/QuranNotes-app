@@ -37,11 +37,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     dailyReminderEnabled: false,
     reminderHour: 12,
     reminderMinute: 30,
-    streakReminderEnabled: true,
-    khatmaReminderEnabled: true,
+    streakReminderEnabled: false,
+    khatmaReminderEnabled: false,
     prayerMethod: undefined,  // auto-detect from location
     prayerLocation: '',
-    adhkarReminderEnabled: true,
+    adhkarReminderEnabled: false,
     hadithNotificationsEnabled: false,
     quranFont: 'kfgqpc' as QuranFontId,
 };
@@ -143,14 +143,14 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
                     dailyReminderEnabled: parsed.dailyReminderEnabled ?? DEFAULT_SETTINGS.dailyReminderEnabled,
                     reminderHour: parsed.reminderHour ?? DEFAULT_SETTINGS.reminderHour,
                     reminderMinute: parsed.reminderMinute ?? DEFAULT_SETTINGS.reminderMinute,
-                    streakReminderEnabled: parsed.streakReminderEnabled ?? DEFAULT_SETTINGS.streakReminderEnabled,
-                    khatmaReminderEnabled: parsed.khatmaReminderEnabled ?? DEFAULT_SETTINGS.khatmaReminderEnabled,
+                    streakReminderEnabled: parsed.streakReminderEnabled ?? false,
+                    khatmaReminderEnabled: parsed.khatmaReminderEnabled ?? false,
                     // Migrate: old default was 4 (Umm Al-Qura). Treat as undefined (auto-detect)
                     // unless the user explicitly chose a different method.
                     prayerMethod: parsed.prayerMethod === 4 ? undefined : parsed.prayerMethod,
                     prayerLocation: parsed.prayerLocation ?? DEFAULT_SETTINGS.prayerLocation,
-                    adhkarReminderEnabled: parsed.adhkarReminderEnabled ?? DEFAULT_SETTINGS.adhkarReminderEnabled,
-                    hadithNotificationsEnabled: parsed.hadithNotificationsEnabled ?? DEFAULT_SETTINGS.hadithNotificationsEnabled,
+                    adhkarReminderEnabled: parsed.adhkarReminderEnabled ?? false,
+                    hadithNotificationsEnabled: parsed.hadithNotificationsEnabled ?? false,
                     quranFont: parsed.quranFont ?? DEFAULT_SETTINGS.quranFont,
                 };
 

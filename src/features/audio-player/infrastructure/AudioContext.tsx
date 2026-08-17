@@ -14,13 +14,14 @@
  * lock screen controls, and gapless playback.
  */
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AudioPlayerService, PlaybackStatus } from './AudioPlayerService';
 import { getChapterAudio } from './QuranAudioApi';
 import { Surah, Verse } from '../../../core/domain/entities/Quran';
 import { useSettings } from '../../settings/infrastructure/SettingsContext';
 import { getReciterById, hasFullSurahAudio } from '../domain/Reciter';
 import { ReadingHistoryService } from '../../quran-reading/infrastructure/ReadingHistoryService';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 // Singleton player instance (shared across the app)
 const player = new AudioPlayerService();
@@ -74,6 +75,8 @@ export const useAudio = (): AudioContextType => {
 
 export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { settings } = useSettings();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const [playingVerse, setPlayingVerse] = useState<{ surah: number; verse: number } | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, _setIsLoading] = useState(false);
@@ -152,14 +155,14 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         player.setup().catch(e => console.warn('[AudioContext] Setup failed:', e));
         // Restore persisted session for cold-start resume
-        AsyncStorage.getItem(LAST_SESSION_KEY).then(raw => {
+        UserScopedStorage.getItem(LAST_SESSION_KEY, userId).then(raw => {
             if (raw) {
                 try {
                     setLastSession(JSON.parse(raw));
                 } catch { /* corrupt — ignore */ }
             }
         }).catch(() => { /* silent */ });
-    }, []);
+    }, [userId]);
 
     // Live reciter switch — reload current playback with new reciter
     // FIX: Removed isPlaying gate — now works even when paused.
@@ -360,7 +363,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         completed: true,
                     };
                     setLastSession(session);
-                    AsyncStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session)).catch(() => { });
+                    UserScopedStorage.setItem(LAST_SESSION_KEY, userId, JSON.stringify(session)).catch(() => { });
                     // Record in reading history
                     ReadingHistoryService.addEntry({
                         surah: finishedSurah,
@@ -368,7 +371,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         verse: finishedPlaylist[finishedPlaylist.length - 1].number,
                         timestamp: Date.now(),
                         source: 'audio',
-                    }).catch(() => { });
+                    }, userId).catch(() => { });
                 }
                 setPlayingVerse(null);
                 setPlaylist([]);
@@ -380,7 +383,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
         });
         return unsubscribe;
-    }, []);
+    }, [userId]);
 
     // Play a specific verse (with optional surah context for queue)
     const playVerse = useCallback(
@@ -613,7 +616,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     completed: false,
                 };
                 setLastSession(session);
-                AsyncStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session)).catch(() => { });
+                UserScopedStorage.setItem(LAST_SESSION_KEY, userId, JSON.stringify(session)).catch(() => { });
                 // Record in reading history
                 ReadingHistoryService.addEntry({
                     surah: sNum,
@@ -621,7 +624,7 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     verse: pv.verse,
                     timestamp: Date.now(),
                     source: 'audio',
-                }).catch(() => { });
+                }, userId).catch(() => { });
             }
             setIsPlaying(false);
             setPlayingVerse(null);
@@ -635,12 +638,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } catch (e) {
             if (__DEV__) console.warn('[AudioContext] stop failed:', e);
         }
-    }, [playingVerse]);
+    }, [playingVerse, userId]);
 
     const dismissSession = useCallback(() => {
         setLastSession(null);
-        AsyncStorage.removeItem(LAST_SESSION_KEY).catch(() => { });
-    }, []);
+        UserScopedStorage.removeItem(LAST_SESSION_KEY, userId).catch(() => { });
+    }, [userId]);
 
     // Clear lastSession when new playback starts
     useEffect(() => {

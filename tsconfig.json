@@ -22,6 +22,10 @@
     "expo-env.d.ts"
   ],
   "exclude": [
-    "functions/**/*"
+    "functions/**/*",
+    ".archive/**/*",
+    ".codex-worktrees/**/*",
+    "QuranApp-paywall-audit/**/*",
+    "tmp/**/*"
   ]
 }

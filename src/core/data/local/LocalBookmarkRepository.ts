@@ -1,13 +1,14 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IBookmarkRepository } from '../../domain/repositories/IBookmarkRepository';
 import { Bookmark } from '../../domain/entities/Bookmark';
+import { UserScopedStorage } from '../../storage/UserScopedStorage';
 
 export class LocalBookmarkRepository implements IBookmarkRepository {
     private readonly KEY = 'user_bookmarks';
+    constructor(private userId?: string | null) { }
 
     private async getMap(): Promise<Record<string, Bookmark>> {
         try {
-            const data = await AsyncStorage.getItem(this.KEY);
+            const data = await UserScopedStorage.getItem(this.KEY, this.userId);
             return data ? JSON.parse(data) : {};
         } catch {
             return {};
@@ -29,7 +30,7 @@ export class LocalBookmarkRepository implements IBookmarkRepository {
             map[key] = { surahNumber: surah, verseNumber: verse, timestamp: Date.now() };
         }
 
-        await AsyncStorage.setItem(this.KEY, JSON.stringify(map));
+        await UserScopedStorage.setItem(this.KEY, this.userId, JSON.stringify(map));
         return !exists;
     }
 

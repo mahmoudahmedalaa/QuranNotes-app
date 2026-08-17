@@ -17,6 +17,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CloudSyncEvents } from './CloudSyncEvents';
+import { UserScopedStorage, getUserScopedKey } from '../../storage/UserScopedStorage';
 
 // ── Firestore paths ─────────────────────────────────────────────────
 const SYNC_COLLECTION = 'users';
@@ -58,8 +59,8 @@ export class CloudSyncService {
         try {
             const results = await Promise.all([
                 this.syncDomain('settings', SETTINGS_KEY),
-                this.syncDomain('highlights', HIGHLIGHTS_KEY),
-                this.syncDomain('streaks', STREAKS_KEY),
+                this.syncDomain('highlights', HIGHLIGHTS_KEY, true),
+                this.syncDomain('streaks', STREAKS_KEY, true),
                 this.syncHadithBookmarks(),
                 this.syncMoodData(),
                 this.syncAdhkarData(),
@@ -82,10 +83,12 @@ export class CloudSyncService {
      * Generic bidirectional sync for a single AsyncStorage key ↔ Firestore doc.
      * Only works with data that is stored as a JSON object (not arrays).
      */
-    private async syncDomain(firestoreDocId: string, asyncStorageKey: string): Promise<boolean> {
+    private async syncDomain(firestoreDocId: string, asyncStorageKey: string, userScoped = false): Promise<boolean> {
         try {
             const [localRaw, remoteSnap] = await Promise.all([
-                AsyncStorage.getItem(asyncStorageKey),
+                userScoped
+                    ? UserScopedStorage.getItem(asyncStorageKey, this.userId)
+                    : AsyncStorage.getItem(asyncStorageKey),
                 getDoc(syncDocRef(this.userId, firestoreDocId)),
             ]);
 
@@ -111,7 +114,11 @@ export class CloudSyncService {
                     ? { ...localData, _syncedAt: now }
                     : localData;
                 if (isObject) {
-                    await AsyncStorage.setItem(asyncStorageKey, JSON.stringify(dataWithTimestamp));
+                    if (userScoped) {
+                        await UserScopedStorage.setItem(asyncStorageKey, this.userId, JSON.stringify(dataWithTimestamp));
+                    } else {
+                        await AsyncStorage.setItem(asyncStorageKey, JSON.stringify(dataWithTimestamp));
+                    }
                 }
                 await setDoc(syncDocRef(this.userId, firestoreDocId), {
                     data: dataWithTimestamp,
@@ -119,7 +126,11 @@ export class CloudSyncService {
                 } as SyncDocument);
             } else if (remoteDoc && remoteTime > localTime) {
                 // Remote is newer → pull from cloud
-                await AsyncStorage.setItem(asyncStorageKey, JSON.stringify(remoteDoc.data));
+                if (userScoped) {
+                    await UserScopedStorage.setItem(asyncStorageKey, this.userId, JSON.stringify(remoteDoc.data));
+                } else {
+                    await AsyncStorage.setItem(asyncStorageKey, JSON.stringify(remoteDoc.data));
+                }
                 return true;
             }
             // If neither exists, nothing to sync
@@ -137,7 +148,7 @@ export class CloudSyncService {
     private async syncHadithBookmarks(): Promise<boolean> {
         try {
             const [localRaw, remoteSnap] = await Promise.all([
-                AsyncStorage.getItem(HADITH_BOOKMARKS_KEY),
+                UserScopedStorage.getItem(HADITH_BOOKMARKS_KEY, this.userId),
                 getDoc(syncDocRef(this.userId, 'hadith_bookmarks')),
             ]);
 
@@ -160,7 +171,7 @@ export class CloudSyncService {
                 } as SyncDocument);
             } else if (remoteBundle?.bookmarks && remoteTime > 0) {
                 // Pull from cloud — restore the array
-                await AsyncStorage.setItem(HADITH_BOOKMARKS_KEY, JSON.stringify(remoteBundle.bookmarks));
+                await UserScopedStorage.setItem(HADITH_BOOKMARKS_KEY, this.userId, JSON.stringify(remoteBundle.bookmarks));
                 return true;
             }
             return false;
@@ -243,7 +254,7 @@ export class CloudSyncService {
         try {
             const [progressRaw, streakRaw] = await Promise.all([
                 this.getAllAdhkarProgressKeys(),
-                AsyncStorage.getItem(ADHKAR_STREAK_KEY),
+                UserScopedStorage.getItem(ADHKAR_STREAK_KEY, this.userId),
             ]);
 
             const localBundle = {
@@ -272,11 +283,15 @@ export class CloudSyncService {
                 // Restore adhkar progress keys
                 if (remoteBundle.progress) {
                     for (const [key, value] of Object.entries(remoteBundle.progress)) {
-                        await AsyncStorage.setItem(key, JSON.stringify(value));
+                        if (key.startsWith('@qurannotes/user/')) {
+                            await AsyncStorage.setItem(key, JSON.stringify(value));
+                        } else {
+                            await UserScopedStorage.setItem(key, this.userId, JSON.stringify(value));
+                        }
                     }
                 }
                 if (remoteBundle.streak) {
-                    await AsyncStorage.setItem(ADHKAR_STREAK_KEY, JSON.stringify(remoteBundle.streak));
+                    await UserScopedStorage.setItem(ADHKAR_STREAK_KEY, this.userId, JSON.stringify(remoteBundle.streak));
                 }
                 return true;
             }
@@ -294,8 +309,10 @@ export class CloudSyncService {
     private async syncReadingPositions(): Promise<boolean> {
         try {
             const allKeys = await AsyncStorage.getAllKeys();
+            const scopedPositionPrefix = getUserScopedKey(READING_POSITION_PREFIX, this.userId);
+            const scopedGlobalKey = getUserScopedKey(READING_POSITION_GLOBAL, this.userId);
             const positionKeys = allKeys.filter(
-                k => k.startsWith(READING_POSITION_PREFIX) || k === READING_POSITION_GLOBAL
+                k => k.startsWith(scopedPositionPrefix) || k === scopedGlobalKey
             );
 
             const entries: Record<string, unknown> = {};
@@ -327,7 +344,10 @@ export class CloudSyncService {
                 } as SyncDocument);
             } else if (remoteBundle?.positions && remoteTime > localTime) {
                 for (const [key, value] of Object.entries(remoteBundle.positions)) {
-                    await AsyncStorage.setItem(key, JSON.stringify(value));
+                    const scopedKey = key.startsWith('@qurannotes/user/')
+                        ? key
+                        : getUserScopedKey(key, this.userId);
+                    await AsyncStorage.setItem(scopedKey, JSON.stringify(value));
                 }
                 return true;
             }
@@ -345,7 +365,8 @@ export class CloudSyncService {
      */
     private async getAllAdhkarProgressKeys(): Promise<Record<string, unknown>> {
         const allKeys = await AsyncStorage.getAllKeys();
-        const adhkarKeys = allKeys.filter(k => k.startsWith(ADHKAR_PROGRESS_PREFIX));
+        const scopedPrefix = getUserScopedKey(ADHKAR_PROGRESS_PREFIX, this.userId);
+        const adhkarKeys = allKeys.filter(k => k.startsWith(scopedPrefix));
         const result: Record<string, unknown> = {};
         for (const key of adhkarKeys) {
             const raw = await AsyncStorage.getItem(key);

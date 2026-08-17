@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FollowAlongSession } from '../../domain/entities/FollowAlongSession';
 import { IFollowAlongRepository } from '../../domain/repositories/IFollowAlongRepository';
+import { UserScopedStorage } from '../../storage/UserScopedStorage';
 
 const STORAGE_KEY = '@quran_notes:follow_along_sessions';
 
@@ -9,9 +9,11 @@ const STORAGE_KEY = '@quran_notes:follow_along_sessions';
  * Persists Follow Along sessions to AsyncStorage
  */
 export class LocalFollowAlongRepository implements IFollowAlongRepository {
+    constructor(private userId?: string | null) { }
+
     async getAllSessions(): Promise<FollowAlongSession[]> {
         try {
-            const data = await AsyncStorage.getItem(STORAGE_KEY);
+            const data = await UserScopedStorage.getItem(STORAGE_KEY, this.userId);
             if (!data) return [];
 
             const sessions = JSON.parse(data);
@@ -45,7 +47,7 @@ export class LocalFollowAlongRepository implements IFollowAlongRepository {
 
             // Keep only last 100 sessions to avoid storage bloat
             const trimmedSessions = sessions.slice(0, 100);
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedSessions));
+            await UserScopedStorage.setItem(STORAGE_KEY, this.userId, JSON.stringify(trimmedSessions));
         } catch (error) {
             if (__DEV__) console.error('Failed to save follow along session:', error);
             throw error;
@@ -56,7 +58,7 @@ export class LocalFollowAlongRepository implements IFollowAlongRepository {
         try {
             const sessions = await this.getAllSessions();
             const filteredSessions = sessions.filter(s => s.id !== id);
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filteredSessions));
+            await UserScopedStorage.setItem(STORAGE_KEY, this.userId, JSON.stringify(filteredSessions));
         } catch (error) {
             if (__DEV__) console.error('Failed to delete follow along session:', error);
             throw error;
@@ -70,7 +72,7 @@ export class LocalFollowAlongRepository implements IFollowAlongRepository {
 
     async clearAllSessions(): Promise<void> {
         try {
-            await AsyncStorage.removeItem(STORAGE_KEY);
+            await UserScopedStorage.removeItem(STORAGE_KEY, this.userId);
         } catch (error) {
             if (__DEV__) console.error('Failed to clear follow along sessions:', error);
         }

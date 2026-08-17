@@ -7,8 +7,8 @@
  *
  * Used by useInsightsData to provide proper timeframe-based filtering.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { JUZ_DATA } from '../../features/khatma/data/khatmaData';
+import { UserScopedStorage } from '../storage/UserScopedStorage';
 
 const STORAGE_KEY = 'reading_activity_log';
 
@@ -38,18 +38,20 @@ function estimateSurahPages(surahNumber: number): number {
 }
 
 export const ReadingActivityLog = {
-    async load(): Promise<ReadingLog> {
+    async load(userId: string | null | undefined): Promise<ReadingLog> {
         try {
-            const raw = await AsyncStorage.getItem(STORAGE_KEY);
+            if (!userId) return {};
+            const raw = await UserScopedStorage.getItem(STORAGE_KEY, userId);
             return raw ? JSON.parse(raw) : {};
         } catch {
             return {};
         }
     },
 
-    async logSurahCompletion(surahNumber: number): Promise<void> {
+    async logSurahCompletion(surahNumber: number, userId: string | null | undefined): Promise<void> {
         try {
-            const log = await this.load();
+            if (!userId) return;
+            const log = await this.load(userId);
             const today = todayStr();
             const existing = log[today] || { surahs: [], pages: 0 };
 
@@ -59,7 +61,7 @@ export const ReadingActivityLog = {
             }
 
             log[today] = existing;
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+            await UserScopedStorage.setItem(STORAGE_KEY, userId, JSON.stringify(log));
         } catch (e) {
             if (__DEV__) console.warn('[ReadingActivityLog] logSurahCompletion failed', e);
         }
@@ -100,12 +102,13 @@ export const ReadingActivityLog = {
      * the last 30 days to avoid stale dev/test data. Reads activityHistory
      * directly from AsyncStorage to avoid circular dependency.
      */
-    async backfillFromHistory(completedSurahs: number[]): Promise<ReadingLog> {
+    async backfillFromHistory(completedSurahs: number[], userId: string | null | undefined): Promise<ReadingLog> {
         if (completedSurahs.length === 0) return {};
+        if (!userId) return {};
 
         try {
             // Read activity history from streak storage (no import needed)
-            const streakRaw = await AsyncStorage.getItem('reflection_streaks');
+            const streakRaw = await UserScopedStorage.getItem('reflection_streaks', userId);
             const activityHistory: Record<string, number> = streakRaw
                 ? (JSON.parse(streakRaw).activityHistory || {})
                 : {};
@@ -145,7 +148,7 @@ export const ReadingActivityLog = {
                 }
             }
 
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+            await UserScopedStorage.setItem(STORAGE_KEY, userId, JSON.stringify(log));
             return log;
         } catch (e) {
             if (__DEV__) console.warn('[ReadingActivityLog] backfill failed', e);
@@ -154,13 +157,15 @@ export const ReadingActivityLog = {
     },
 
     /** Force re-seed: clear existing log and backfill again */
-    async reseed(completedSurahs: number[]): Promise<ReadingLog> {
-        await AsyncStorage.removeItem(STORAGE_KEY);
-        return this.backfillFromHistory(completedSurahs);
+    async reseed(completedSurahs: number[], userId: string | null | undefined): Promise<ReadingLog> {
+        if (!userId) return {};
+        await UserScopedStorage.removeItem(STORAGE_KEY, userId);
+        return this.backfillFromHistory(completedSurahs, userId);
     },
 
     /** Clear all data (for logout) */
-    async clearAll(): Promise<void> {
-        await AsyncStorage.removeItem(STORAGE_KEY);
+    async clearAll(userId: string | null | undefined): Promise<void> {
+        if (!userId) return;
+        await UserScopedStorage.removeItem(STORAGE_KEY, userId);
     },
 };

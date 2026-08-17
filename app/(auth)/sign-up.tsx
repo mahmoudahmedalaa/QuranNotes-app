@@ -3,8 +3,12 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 're
 import { Text, TextInput, Button, useTheme, HelperText } from 'react-native-paper';
 import { useRouter, Link, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Spacing, BorderRadius } from '../../src/core/theme/DesignSystem';
+import { Spacing, BorderRadius, Colors } from '../../src/core/theme/DesignSystem';
 import { useAuth } from '../../src/features/auth/infrastructure/AuthContext';
+import {
+    getAuthErrorMessage,
+    getSignUpPasswordError,
+} from '../../src/features/auth/presentation/authErrorMessage';
 import { MotiView } from 'moti';
 import Toast from 'react-native-toast-message';
 
@@ -12,7 +16,7 @@ export default function SignUpScreen() {
     const theme = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { user, registerWithEmail } = useAuth();
+    const { user, registerWithEmail, loginWithGoogle, loginWithApple } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -40,8 +44,9 @@ export default function SignUpScreen() {
             return;
         }
 
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters');
+        const passwordError = getSignUpPasswordError(password);
+        if (passwordError) {
+            setError(passwordError);
             return;
         }
 
@@ -60,8 +65,34 @@ export default function SignUpScreen() {
             });
             // Redirect to index router to handle the next screen (onboarding, welcome, or home)
             router.replace('/');
-        } catch (e: any) {
-            setError(e.message || 'Registration failed');
+        } catch (e: unknown) {
+            setError(getAuthErrorMessage(e, "We couldn't create your account. Please try again."));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoogleSignUp = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            await loginWithGoogle();
+            router.replace('/');
+        } catch (e: unknown) {
+            setError(getAuthErrorMessage(e, "We couldn't sign you in with Google. Please try again."));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAppleSignUp = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            await loginWithApple();
+            router.replace('/');
+        } catch (e: unknown) {
+            setError(getAuthErrorMessage(e, "We couldn't sign you in with Apple. Please try again."));
         } finally {
             setLoading(false);
         }
@@ -98,7 +129,10 @@ export default function SignUpScreen() {
                         mode="outlined"
                         label="Email"
                         value={email}
-                        onChangeText={setEmail}
+                        onChangeText={(value) => {
+                            setEmail(value);
+                            setError('');
+                        }}
                         autoCapitalize="none"
                         keyboardType="email-address"
                         style={styles.input}
@@ -109,7 +143,10 @@ export default function SignUpScreen() {
                         mode="outlined"
                         label="Password"
                         value={password}
-                        onChangeText={setPassword}
+                        onChangeText={(value) => {
+                            setPassword(value);
+                            setError('');
+                        }}
                         secureTextEntry={secureTextEntry}
                         style={styles.input}
                         right={
@@ -125,7 +162,10 @@ export default function SignUpScreen() {
                         mode="outlined"
                         label="Confirm Password"
                         value={confirmPassword}
-                        onChangeText={setConfirmPassword}
+                        onChangeText={(value) => {
+                            setConfirmPassword(value);
+                            setError('');
+                        }}
                         secureTextEntry={secureTextEntry}
                         style={styles.input}
                         error={!!error}
@@ -144,6 +184,36 @@ export default function SignUpScreen() {
                         contentStyle={{ height: 50 }}
                     >
                         Sign Up
+                    </Button>
+
+                    <View style={styles.dividerContainer}>
+                        <View style={styles.divider} />
+                        <Text style={{ marginHorizontal: Spacing.md, color: theme.colors.outline }}>OR</Text>
+                        <View style={styles.divider} />
+                    </View>
+
+                    <Button
+                        mode="outlined"
+                        onPress={handleGoogleSignUp}
+                        disabled={loading}
+                        style={styles.socialButton}
+                        icon="google"
+                        textColor={theme.colors.onSurface}
+                        contentStyle={{ height: 50 }}
+                    >
+                        Continue with Google
+                    </Button>
+
+                    <Button
+                        mode="outlined"
+                        onPress={handleAppleSignUp}
+                        disabled={loading}
+                        style={styles.socialButton}
+                        icon="apple"
+                        textColor={theme.colors.onSurface}
+                        contentStyle={{ height: 50 }}
+                    >
+                        Continue with Apple
                     </Button>
                 </MotiView>
 
@@ -182,6 +252,21 @@ const styles = StyleSheet.create({
     button: {
         marginTop: Spacing.md,
         borderRadius: BorderRadius.lg,
+    },
+    socialButton: {
+        borderColor: Colors.outline,
+        borderRadius: BorderRadius.lg,
+    },
+    dividerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: Spacing.xl,
+    },
+    divider: {
+        flex: 1,
+        height: 1,
+        backgroundColor: Colors.outline,
+        opacity: 0.3,
     },
     footer: {
         flexDirection: 'row',

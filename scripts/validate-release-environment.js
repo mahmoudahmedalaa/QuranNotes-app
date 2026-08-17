@@ -1,6 +1,5 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const nodeUtil = require('node:util');
 
 const FIREBASE_PUBLIC_CLIENT_VARIABLES = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
@@ -18,10 +17,6 @@ const REVENUECAT_VARIABLE_BY_PLATFORM = {
 };
 
 function parseEnvironmentFile(contents) {
-  if (typeof nodeUtil.parseEnv === 'function') {
-    return nodeUtil.parseEnv(contents);
-  }
-
   const parsed = {};
   for (const rawLine of contents.split(/\r?\n/)) {
     const line = rawLine.trim();

@@ -39,15 +39,15 @@ export class SyncService {
         if (!this.userId) return;
 
         const noteSync = new EntitySyncManager(
-            new LocalNoteRepository(),
+            new LocalNoteRepository(this.userId),
             new RemoteNoteRepository(this.userId),
         );
         const recordingSync = new EntitySyncManager(
-            new LocalRecordingRepository(),
+            new LocalRecordingRepository(this.userId),
             new RemoteRecordingRepository(this.userId),
         );
         const folderSync = new EntitySyncManager(
-            new LocalFolderRepository(),
+            new LocalFolderRepository(this.userId),
             new RemoteFolderRepository(this.userId),
         );
 

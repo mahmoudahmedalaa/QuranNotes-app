@@ -23,9 +23,12 @@ import { Spacing, BorderRadius, Shadows } from '../../../src/core/theme/DesignSy
 import { ModernDropdown } from '../../../src/core/components/common/ModernDropdown';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useAuth } from '../../../src/features/auth/infrastructure/AuthContext';
 
 export default function RecordingsScreen() {
     const theme = useTheme();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const { recordings, saveRecording, deleteRecording, refreshRecordings } = useRecordingStorage();
     const { folders } = useFolders();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder();
@@ -53,11 +56,11 @@ export default function RecordingsScreen() {
         refreshRecordings();
         loadFollowAlongSessions();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [userId]);
 
     const loadFollowAlongSessions = async () => {
         try {
-            const repository = new LocalFollowAlongRepository();
+            const repository = new LocalFollowAlongRepository(userId);
             const sessions = await repository.getAllSessions();
             setFollowAlongSessions(sessions);
         } catch (error) {
@@ -341,7 +344,7 @@ export default function RecordingsScreen() {
                 style: 'destructive',
                 onPress: async () => {
                     try {
-                        const repository = new LocalFollowAlongRepository();
+                        const repository = new LocalFollowAlongRepository(userId);
                         await repository.deleteSession(sessionId);
                         setFollowAlongSessions(prev => prev.filter(s => s.id !== sessionId));
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

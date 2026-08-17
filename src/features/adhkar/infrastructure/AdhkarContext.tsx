@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import adhkarData from '../data/adhkar.json';
 import { ReviewService } from '../../../core/services/ReviewService';
 import { CloudSyncEvents } from '../../../core/application/services/CloudSyncEvents';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 // ── Types ────────────────────────────────────────────────────────────
 export interface Dhikr {
@@ -73,6 +74,8 @@ function getStorageKey(date: string, period: AdhkarPeriod): string {
 
 // ── Provider ─────────────────────────────────────────────────────────
 export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const [todayProgress, setTodayProgress] = useState<DayProgress>({ morning: null, evening: null, night: null });
     const [streak, setStreak] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -80,26 +83,18 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
     const adhkar = adhkarData as { morning: Dhikr[]; evening: Dhikr[]; night: Dhikr[] };
 
     // Load today's progress
-    useEffect(() => {
-        loadProgress();
-        loadStreak();
-    }, []);
-
-    // Re-read when cloud sync pulls remote data
-    useEffect(() => {
-        return CloudSyncEvents.onPull(() => {
-            loadProgress();
-            loadStreak();
-        });
-    }, []);
-
-    const loadProgress = async () => {
+    const loadProgress = useCallback(async () => {
+        setIsLoading(true);
         try {
+            if (!userId) {
+                setTodayProgress({ morning: null, evening: null, night: null });
+                return;
+            }
             const today = getToday();
             const [morningData, eveningData, nightData] = await Promise.all([
-                AsyncStorage.getItem(getStorageKey(today, 'morning')),
-                AsyncStorage.getItem(getStorageKey(today, 'evening')),
-                AsyncStorage.getItem(getStorageKey(today, 'night')),
+                UserScopedStorage.getItem(getStorageKey(today, 'morning'), userId),
+                UserScopedStorage.getItem(getStorageKey(today, 'evening'), userId),
+                UserScopedStorage.getItem(getStorageKey(today, 'night'), userId),
             ]);
 
             setTodayProgress({
@@ -112,11 +107,15 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [userId]);
 
-    const loadStreak = async () => {
+    const loadStreak = useCallback(async () => {
         try {
-            const data = await AsyncStorage.getItem(STREAK_KEY);
+            if (!userId) {
+                setStreak(0);
+                return;
+            }
+            const data = await UserScopedStorage.getItem(STREAK_KEY, userId);
             if (data) {
                 const { count, lastDate } = JSON.parse(data);
                 const today = getToday();
@@ -128,27 +127,44 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
                     setStreak(count);
                 } else {
                     setStreak(0);
-                    await AsyncStorage.setItem(STREAK_KEY, JSON.stringify({ count: 0, lastDate: today }));
+                    await UserScopedStorage.setItem(STREAK_KEY, userId, JSON.stringify({ count: 0, lastDate: today }));
                 }
+            } else {
+                setStreak(0);
             }
         } catch (e) {
             if (__DEV__) console.error('Failed to load adhkar streak:', e);
         }
-    };
+    }, [userId]);
 
-    const saveProgress = async (period: AdhkarPeriod, progress: AdhkarProgress) => {
+    useEffect(() => {
+        loadProgress();
+        loadStreak();
+    }, [loadProgress, loadStreak]);
+
+    // Re-read when cloud sync pulls remote data
+    useEffect(() => {
+        return CloudSyncEvents.onPull(() => {
+            loadProgress();
+            loadStreak();
+        });
+    }, [loadProgress, loadStreak]);
+
+    const saveProgress = useCallback(async (period: AdhkarPeriod, progress: AdhkarProgress) => {
         try {
+            if (!userId) return;
             const today = getToday();
-            await AsyncStorage.setItem(getStorageKey(today, period), JSON.stringify(progress));
+            await UserScopedStorage.setItem(getStorageKey(today, period), userId, JSON.stringify(progress));
         } catch (e) {
             if (__DEV__) console.error('Failed to save adhkar progress:', e);
         }
-    };
+    }, [userId]);
 
-    const updateStreak = async () => {
+    const updateStreak = useCallback(async () => {
         try {
+            if (!userId) return;
             const today = getToday();
-            const data = await AsyncStorage.getItem(STREAK_KEY);
+            const data = await UserScopedStorage.getItem(STREAK_KEY, userId);
             let count = 0;
             let lastDate = '';
 
@@ -160,7 +176,7 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
 
             if (lastDate !== today) {
                 count += 1;
-                await AsyncStorage.setItem(STREAK_KEY, JSON.stringify({ count, lastDate: today }));
+                await UserScopedStorage.setItem(STREAK_KEY, userId, JSON.stringify({ count, lastDate: today }));
                 setStreak(count);
 
                 // Trigger smart review prompt at streak milestones (3, 7, 14, 30)
@@ -169,7 +185,7 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
         } catch (e) {
             if (__DEV__) console.error('Failed to update adhkar streak:', e);
         }
-    };
+    }, [userId]);
 
     const incrementCount = useCallback(
         async (period: AdhkarPeriod, dhikrId: string) => {
@@ -207,7 +223,7 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
                 await updateStreak();
             }
         },
-        [todayProgress, adhkar],
+        [todayProgress, adhkar, saveProgress, updateStreak],
     );
 
     const resetDhikr = useCallback(
@@ -228,7 +244,7 @@ export const AdhkarProvider = ({ children }: { children: React.ReactNode }) => {
             setTodayProgress((prev) => ({ ...prev, [period]: updated }));
             await saveProgress(period, updated);
         },
-        [todayProgress],
+        [todayProgress, saveProgress],
     );
 
     const getCompletionPercentage = useCallback(

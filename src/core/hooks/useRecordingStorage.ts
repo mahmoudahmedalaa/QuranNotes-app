@@ -1,26 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Recording } from '../domain/entities/Recording';
 import { useStreaks } from '../../features/auth/infrastructure/StreakContext';
 import { usePro } from '../../features/auth/infrastructure/ProContext';
+import { useAuth } from '../../features/auth/infrastructure/AuthContext';
 
 import { LocalRecordingRepository } from '../data/local/LocalRecordingRepository';
-
-const repo = new LocalRecordingRepository();
 
 export const useRecordingStorage = () => {
     const [recordings, setRecordings] = useState<Recording[]>([]);
     const [loading, setLoading] = useState(true);
     const { recordActivity } = useStreaks();
     const { isPro } = usePro();
+    const { user } = useAuth();
+    const repo = useMemo(() => new LocalRecordingRepository(user?.id ?? null), [user?.id]);
     const router = useRouter();
 
-    useEffect(() => {
-        loadRecordings();
-    }, []);
-
-    const loadRecordings = async () => {
+    const loadRecordings = useCallback(async () => {
+        setLoading(true);
         try {
             const data = await repo.getAllRecordings();
             setRecordings(data);
@@ -29,7 +27,11 @@ export const useRecordingStorage = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [repo]);
+
+    useEffect(() => {
+        loadRecordings();
+    }, [loadRecordings]);
 
     const saveRecording = async (recording: Recording) => {
         // GATING LOGIC: Limit Free users to 5 recordings

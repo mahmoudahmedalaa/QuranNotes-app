@@ -18,10 +18,10 @@ const mockNote: Note = {
 
 describe('LocalNoteRepository', () => {
     let repository: LocalNoteRepository;
-    const STORAGE_KEY = 'user_notes';
+    const STORAGE_KEY = '@qurannotes/user/user_1/user_notes';
 
     beforeEach(() => {
-        repository = new LocalNoteRepository();
+        repository = new LocalNoteRepository('user_1');
         jest.clearAllMocks();
     });
 

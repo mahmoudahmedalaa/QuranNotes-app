@@ -2,15 +2,15 @@
  * HadithBookmarkService — Persistence layer for bookmarked hadiths.
  * Uses AsyncStorage for local persistence.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
 
 const BOOKMARKS_KEY = 'hadith_bookmarks';
 
 export class HadithBookmarkService {
     /** Get all bookmarked hadith IDs */
-    static async getBookmarks(): Promise<string[]> {
+    static async getBookmarks(userId?: string | null): Promise<string[]> {
         try {
-            const stored = await AsyncStorage.getItem(BOOKMARKS_KEY);
+            const stored = await UserScopedStorage.getItem(BOOKMARKS_KEY, userId);
             return stored ? JSON.parse(stored) : [];
         } catch {
             return [];
@@ -18,37 +18,37 @@ export class HadithBookmarkService {
     }
 
     /** Add a hadith to bookmarks */
-    static async addBookmark(hadithId: string): Promise<void> {
-        const bookmarks = await this.getBookmarks();
+    static async addBookmark(hadithId: string, userId?: string | null): Promise<void> {
+        const bookmarks = await this.getBookmarks(userId);
         if (!bookmarks.includes(hadithId)) {
             bookmarks.push(hadithId);
-            await AsyncStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+            await UserScopedStorage.setItem(BOOKMARKS_KEY, userId, JSON.stringify(bookmarks));
         }
     }
 
     /** Remove a hadith from bookmarks */
-    static async removeBookmark(hadithId: string): Promise<void> {
-        const bookmarks = await this.getBookmarks();
+    static async removeBookmark(hadithId: string, userId?: string | null): Promise<void> {
+        const bookmarks = await this.getBookmarks(userId);
         const filtered = bookmarks.filter(id => id !== hadithId);
-        await AsyncStorage.setItem(BOOKMARKS_KEY, JSON.stringify(filtered));
+        await UserScopedStorage.setItem(BOOKMARKS_KEY, userId, JSON.stringify(filtered));
     }
 
     /** Check if a hadith is bookmarked */
-    static async isBookmarked(hadithId: string): Promise<boolean> {
-        const bookmarks = await this.getBookmarks();
+    static async isBookmarked(hadithId: string, userId?: string | null): Promise<boolean> {
+        const bookmarks = await this.getBookmarks(userId);
         return bookmarks.includes(hadithId);
     }
 
     /** Get bookmark count */
-    static async getBookmarkCount(): Promise<number> {
-        const bookmarks = await this.getBookmarks();
+    static async getBookmarkCount(userId?: string | null): Promise<number> {
+        const bookmarks = await this.getBookmarks(userId);
         return bookmarks.length;
     }
 
     /** Clear all bookmarks (used on logout/login to prevent leaking between accounts) */
-    static async clearAll(): Promise<void> {
+    static async clearAll(userId?: string | null): Promise<void> {
         try {
-            await AsyncStorage.removeItem(BOOKMARKS_KEY);
+            await UserScopedStorage.removeItem(BOOKMARKS_KEY, userId);
         } catch (e) {
             if (__DEV__) console.warn('[HadithBookmarkService] clearAll failed:', e);
         }

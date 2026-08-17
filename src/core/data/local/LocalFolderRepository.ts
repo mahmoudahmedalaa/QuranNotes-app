@@ -1,12 +1,13 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Folder, DEFAULT_FOLDER } from '../../domain/entities/Folder';
+import { UserScopedStorage } from '../../storage/UserScopedStorage';
 
 export class LocalFolderRepository {
     private readonly STORAGE_KEY = 'folders';
+    constructor(private readonly userId: string | null = null) { }
 
     async getAllFolders(): Promise<Folder[]> {
         try {
-            const data = await AsyncStorage.getItem(this.STORAGE_KEY);
+            const data = await UserScopedStorage.getItem(this.STORAGE_KEY, this.userId);
             let folders: Folder[] = [];
             if (data) {
                 const parsed: (Omit<Folder, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt?: string })[] = JSON.parse(data);
@@ -48,16 +49,16 @@ export class LocalFolderRepository {
             updated = [...folders, folder];
         }
 
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+        await this.saveAllFolders(updated);
     }
 
     async saveAllFolders(folders: Folder[]): Promise<void> {
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(folders));
+        await UserScopedStorage.setItem(this.STORAGE_KEY, this.userId, JSON.stringify(folders));
     }
 
     async deleteFolder(id: string): Promise<void> {
         const folders = await this.getAllFolders();
         const filtered = folders.filter(f => f.id !== id);
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered));
+        await this.saveAllFolders(filtered);
     }
 }

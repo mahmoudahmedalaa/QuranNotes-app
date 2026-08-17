@@ -2,7 +2,7 @@
   "expo": {
     "name": "QuranNotes",
     "slug": "QuranNotes-app",
-    "version": "2.2.2",
+    "version": "2.2.5",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mahmoudahmedalaa.qurannotes",
       "appleTeamId": "2S42RLH67Y",
-      "buildNumber": "50",
+      "buildNumber": "85",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow QuranNotes to use the microphone for voice follow-along recitation",

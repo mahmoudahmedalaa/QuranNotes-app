@@ -9,10 +9,13 @@ import React, { useEffect, useRef } from 'react';
 import { useAudio } from '../../audio-player/infrastructure/AudioContext';
 import { useKhatma } from '../infrastructure/KhatmaContext';
 import { ReadingPositionService } from '../../quran-reading/infrastructure/ReadingPositionService';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 export const AudioKhatmaBridge: React.FC = () => {
     const { playingVerse, currentSurahNum, currentSurahName, lastCompletedPlayback } = useAudio();
     const { markSurahComplete } = useKhatma();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const highestVerseRef = useRef<{ surah: number; verse: number } | null>(null);
     const lastHandledTimestamp = useRef<number>(0);
 
@@ -34,9 +37,9 @@ export const AudioKhatmaBridge: React.FC = () => {
             highestVerseRef.current = { surah: playingVerse.surah, verse: playingVerse.verse };
 
             // Update GLOBAL reading position (for home screen + Khatma continue reading)
-            ReadingPositionService.save(playingVerse.surah, playingVerse.verse, currentSurahName || undefined);
+            ReadingPositionService.save(playingVerse.surah, playingVerse.verse, currentSurahName || undefined, userId);
         }
-    }, [playingVerse, currentSurahNum, currentSurahName]);
+    }, [playingVerse, currentSurahNum, currentSurahName, userId]);
 
     // Auto-complete surah when audio finishes the entire playlist
     useEffect(() => {

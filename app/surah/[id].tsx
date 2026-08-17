@@ -29,6 +29,7 @@ import { ReadingPositionService, ReadingPosition } from '../../src/features/qura
 import { PremiumShareSheet } from '../../src/features/sharing/presentation/PremiumShareSheet';
 import { ShareCardData } from '../../src/features/sharing/domain/ShareTemplateTypes';
 import { TafsirBottomSheet, TafsirSheetData } from '../../src/features/tafsir';
+import { useAuth } from '../../src/features/auth/infrastructure/AuthContext';
 
 
 
@@ -51,6 +52,8 @@ export default function SurahDetail() {
     const { surah, loading, error, loadSurah } = useQuran();
     const { settings } = useSettings();
     const { playingVerse, isPlaying, playFromVerse, pause, resume, stop } = useAudio();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const { isRecording, isPaused, startRecording, stopRecording, forceCleanup } = useAudioRecorder();
     const navigation = useNavigation();
     const { notes } = useNotes();
@@ -132,7 +135,7 @@ export default function SurahDetail() {
         if (!id) return;
         if (verseParam || pageParam) return; // Don't load saved position when explicit nav params exist
         const surahId = Number(id);
-        ReadingPositionService.get(surahId).then(pos => {
+        ReadingPositionService.get(surahId, userId).then(pos => {
             if (pos) {
                 setSavedPosition(pos);
                 lastVisibleVerseRef.current = pos.verse;
@@ -144,7 +147,7 @@ export default function SurahDetail() {
             }
         }).catch(() => { /* silent — position loading is non-critical */ });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [id, verseParam, pageParam]);
+    }, [id, verseParam, pageParam, userId]);
 
 
 
@@ -159,11 +162,12 @@ export default function SurahDetail() {
                 ReadingPositionService.save(
                     surahRefLocal.number,
                     verseToSave,
-                    surahRefLocal.englishName
+                    surahRefLocal.englishName,
+                    userId
                 );
             }
         };
-    }, [surah]);
+    }, [surah, userId]);
 
     // ── Also save position when app goes to background ──
     useEffect(() => {
@@ -175,13 +179,14 @@ export default function SurahDetail() {
                     ReadingPositionService.save(
                         surah.number,
                         verseToSave,
-                        surah.englishName
+                        surah.englishName,
+                        userId
                     );
                 }
             }
         });
         return () => subscription.remove();
-    }, [surah]);
+    }, [surah, userId]);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // SINGLE SCROLL CONTROLLER — all scroll requests go through this function.

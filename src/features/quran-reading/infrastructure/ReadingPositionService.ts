@@ -5,6 +5,7 @@
  * Independent from Khatma/Juz tracking so it works for any surah, any time.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserScopedStorage, getUserScopedKey } from '../../../core/storage/UserScopedStorage';
 
 const PREFIX = 'reading_position_surah_';
 const GLOBAL_KEY = 'reading_position_global';
@@ -18,10 +19,17 @@ export interface ReadingPosition {
 
 export const ReadingPositionService = {
     /** Clear all reading positions (used on logout/signup to prevent leaking between accounts) */
-    async clearAll(): Promise<void> {
+    async clearAll(userId?: string | null): Promise<void> {
         try {
             const keys = await AsyncStorage.getAllKeys();
-            const readingKeys = keys.filter(k => k.startsWith(PREFIX) || k === GLOBAL_KEY);
+            const scopedPrefix = userId ? getUserScopedKey(PREFIX, userId) : null;
+            const scopedGlobal = userId ? getUserScopedKey(GLOBAL_KEY, userId) : null;
+            const readingKeys = keys.filter(k => (
+                k.startsWith(PREFIX) ||
+                k === GLOBAL_KEY ||
+                (scopedPrefix ? k.startsWith(scopedPrefix) : false) ||
+                (scopedGlobal ? k === scopedGlobal : false)
+            ));
             if (readingKeys.length > 0) {
                 await AsyncStorage.multiRemove(readingKeys);
             }
@@ -31,7 +39,7 @@ export const ReadingPositionService = {
     },
 
     /** Save (or overwrite) reading position for a surah + update global */
-    async save(surahId: number, verseNumber: number, surahName?: string): Promise<void> {
+    async save(surahId: number, verseNumber: number, surahName?: string, userId?: string | null): Promise<void> {
         try {
             const pos: ReadingPosition = {
                 surah: surahId,
@@ -39,18 +47,18 @@ export const ReadingPositionService = {
                 timestamp: Date.now(),
                 surahName,
             };
-            await AsyncStorage.setItem(`${PREFIX}${surahId}`, JSON.stringify(pos));
+            await UserScopedStorage.setItem(`${PREFIX}${surahId}`, userId, JSON.stringify(pos));
             // Also update global "most recent" position
-            await AsyncStorage.setItem(GLOBAL_KEY, JSON.stringify(pos));
+            await UserScopedStorage.setItem(GLOBAL_KEY, userId, JSON.stringify(pos));
         } catch (e) {
             if (__DEV__) console.warn('[ReadingPositionService] save failed', e);
         }
     },
 
     /** Get saved reading position for a surah (null if none) */
-    async get(surahId: number): Promise<ReadingPosition | null> {
+    async get(surahId: number, userId?: string | null): Promise<ReadingPosition | null> {
         try {
-            const raw = await AsyncStorage.getItem(`${PREFIX}${surahId}`);
+            const raw = await UserScopedStorage.getItem(`${PREFIX}${surahId}`, userId);
             return raw ? JSON.parse(raw) : null;
         } catch {
             return null;
@@ -58,9 +66,9 @@ export const ReadingPositionService = {
     },
 
     /** Get the most recently read position across all surahs */
-    async getGlobal(): Promise<ReadingPosition | null> {
+    async getGlobal(userId?: string | null): Promise<ReadingPosition | null> {
         try {
-            const raw = await AsyncStorage.getItem(GLOBAL_KEY);
+            const raw = await UserScopedStorage.getItem(GLOBAL_KEY, userId);
             return raw ? JSON.parse(raw) : null;
         } catch {
             return null;
@@ -68,9 +76,9 @@ export const ReadingPositionService = {
     },
 
     /** Clear reading position for a surah */
-    async clear(surahId: number): Promise<void> {
+    async clear(surahId: number, userId?: string | null): Promise<void> {
         try {
-            await AsyncStorage.removeItem(`${PREFIX}${surahId}`);
+            await UserScopedStorage.removeItem(`${PREFIX}${surahId}`, userId);
         } catch (e) {
             if (__DEV__) console.warn('[ReadingPositionService] clear failed', e);
         }
@@ -81,11 +89,11 @@ export const ReadingPositionService = {
      * Used by Khatma to detect if the user has read ANY surah in a Juz —
      * regardless of where they read it (homepage, Quran tab, or Khatma).
      */
-    async getMostRecentInRange(startSurah: number, endSurah: number): Promise<ReadingPosition | null> {
+    async getMostRecentInRange(startSurah: number, endSurah: number, userId?: string | null): Promise<ReadingPosition | null> {
         let mostRecent: ReadingPosition | null = null;
         for (let s = startSurah; s <= endSurah; s++) {
             try {
-                const raw = await AsyncStorage.getItem(`${PREFIX}${s}`);
+                const raw = await UserScopedStorage.getItem(`${PREFIX}${s}`, userId);
                 if (raw) {
                     const pos: ReadingPosition = JSON.parse(raw);
                     if (!mostRecent || pos.timestamp > mostRecent.timestamp) {
@@ -99,4 +107,3 @@ export const ReadingPositionService = {
         return mostRecent;
     },
 };
-

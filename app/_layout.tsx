@@ -40,8 +40,8 @@ SplashScreen.preventAutoHideAsync();
  * This replaces the deeply nested "Provider Pyramid of Doom".
  */
 const AppProviders = composeProviders([
-    RepositoryProvider,
     AuthProvider,
+    RepositoryProvider,
     ProProvider,
     PaywallProvider,
     OnboardingProvider,

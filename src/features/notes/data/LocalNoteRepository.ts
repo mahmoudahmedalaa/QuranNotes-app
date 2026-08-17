@@ -1,16 +1,17 @@
 import { INoteRepository } from '../domain/repositories/INoteRepository';
 import { Note } from '../domain/Note';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
 
 /**
  * LocalNoteRepository — Stores user notes locally via AsyncStorage.
  */
 export class LocalNoteRepository implements INoteRepository {
     private readonly STORAGE_KEY = 'user_notes';
+    constructor(private readonly userId: string | null = null) { }
 
     private async getNotesMap(): Promise<Record<string, Note>> {
         try {
-            const data = await AsyncStorage.getItem(this.STORAGE_KEY);
+            const data = await UserScopedStorage.getItem(this.STORAGE_KEY, this.userId);
             return data ? JSON.parse(data) : {};
         } catch {
             return {};
@@ -18,7 +19,7 @@ export class LocalNoteRepository implements INoteRepository {
     }
 
     private async saveNotesMap(map: Record<string, Note>): Promise<void> {
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(map));
+        await UserScopedStorage.setItem(this.STORAGE_KEY, this.userId, JSON.stringify(map));
     }
 
     // Key format: "s{surah}_v{verse}" - implies one note per verse for MVP simplicity

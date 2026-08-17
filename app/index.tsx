@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator } from 'react-native';
 import { useOnboarding } from '../src/features/onboarding/infrastructure/OnboardingContext';
 import { useAuth } from '../src/features/auth/infrastructure/AuthContext';
 import { useSubscriptionAccess } from '../src/features/payments/infrastructure/useSubscriptionAccess';
+import { UserScopedStorage } from '../src/core/storage/UserScopedStorage';
+
+const WELCOME_KEY = 'hasSeenWelcome';
 
 export default function Index() {
     const [hasSeenWelcome, setHasSeenWelcome] = useState<boolean | null>(null);
@@ -12,19 +14,24 @@ export default function Index() {
     const { user, loading: authLoading } = useAuth();
     const { isLoading: accessLoading, requiresSubscription } = useSubscriptionAccess();
 
-    useEffect(() => {
-        checkWelcomeStatus();
-    }, []);
-
-    const checkWelcomeStatus = async () => {
+    const checkWelcomeStatus = useCallback(async () => {
         try {
-            const value = await AsyncStorage.getItem('hasSeenWelcome');
+            if (!user?.id) {
+                setHasSeenWelcome(false);
+                return;
+            }
+            const value = await UserScopedStorage.getItem(WELCOME_KEY, user.id);
             setHasSeenWelcome(value === 'true');
         } catch {
             // If error, show welcome screen
             setHasSeenWelcome(false);
         }
-    };
+    }, [user?.id]);
+
+    useEffect(() => {
+        setHasSeenWelcome(null);
+        checkWelcomeStatus();
+    }, [checkWelcomeStatus]);
 
     // Loading state — wait for all data to be ready
     if (hasSeenWelcome === null || onboardingLoading || authLoading || accessLoading) {

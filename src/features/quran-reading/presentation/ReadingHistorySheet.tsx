@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { MotiView } from 'moti';
 import { ReadingHistoryService, ReadingHistoryEntry } from '../infrastructure/ReadingHistoryService';
 import { Spacing, BorderRadius } from '../../../core/theme/DesignSystem';
+import { useAuth } from '../../auth/infrastructure/AuthContext';
 
 interface Props {
     onClose: () => void;
@@ -37,14 +38,16 @@ export const ReadingHistorySheet: React.FC<Props> = ({ onClose }) => {
     const theme = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const userId = user?.id ?? null;
     const [history, setHistory] = useState<ReadingHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        ReadingHistoryService.getHistory()
+        ReadingHistoryService.getHistory(userId)
             .then(setHistory)
             .finally(() => setLoading(false));
-    }, []);
+    }, [userId]);
 
     const handleEntryPress = (entry: ReadingHistoryEntry) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

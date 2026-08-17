@@ -8,7 +8,8 @@ import { Spacing, BorderRadius, Gradients } from '../src/core/theme/DesignSystem
 
 import { NoorMascot } from '../src/core/components/mascot/NoorMascot';
 import React, { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserScopedStorage } from '../src/core/storage/UserScopedStorage';
+import { useAuth } from '../src/features/auth/infrastructure/AuthContext';
 
 
 
@@ -24,6 +25,7 @@ const HADITHS = [
 export default function WelcomeScreen() {
     const router = useRouter();
     const theme = useTheme();
+    const { user } = useAuth();
 
     const [hadithIndex, setHadithIndex] = useState(0);
 
@@ -39,7 +41,9 @@ export default function WelcomeScreen() {
 
     const handleBegin = async () => {
         // Mark that user has seen welcome screen
-        await AsyncStorage.setItem('hasSeenWelcome', 'true');
+        if (user?.id) {
+            await UserScopedStorage.setItem('hasSeenWelcome', user.id, 'true');
+        }
 
         // Let index.tsx handle the routing logic
         router.replace('/');

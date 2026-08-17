@@ -1,14 +1,15 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Recording } from '../../domain/entities/Recording';
+import { UserScopedStorage } from '../../storage/UserScopedStorage';
 
 export class LocalRecordingRepository {
     private readonly STORAGE_KEY = 'recordings';
+    constructor(private readonly userId: string | null = null) { }
 
     async getAllRecordings(): Promise<Recording[]> {
         try {
-            const data = await AsyncStorage.getItem(this.STORAGE_KEY);
+            const data = await UserScopedStorage.getItem(this.STORAGE_KEY, this.userId);
             if (data) {
-                const parsed: Record<string, any>[] = JSON.parse(data);
+                const parsed: (Omit<Recording, 'createdAt'> & { createdAt: string })[] = JSON.parse(data);
                 return parsed.map(r => ({
                     ...r,
                     createdAt: new Date(r.createdAt),
@@ -33,16 +34,16 @@ export class LocalRecordingRepository {
             updated = [...recordings, recording];
         }
 
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+        await this.saveAllRecordings(updated);
     }
 
     async saveAllRecordings(recordings: Recording[]): Promise<void> {
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(recordings));
+        await UserScopedStorage.setItem(this.STORAGE_KEY, this.userId, JSON.stringify(recordings));
     }
 
     async deleteRecording(id: string): Promise<void> {
         const recordings = await this.getAllRecordings();
         const filtered = recordings.filter(r => r.id !== id);
-        await AsyncStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered));
+        await this.saveAllRecordings(filtered);
     }
 }
