@@ -238,21 +238,29 @@ function meaningfulAnswerabilityTokens(query: string): readonly string[] {
     return tokenizeLexicalQuery(query).filter(token => !ANSWERABILITY_FRAMING_TOKENS.has(token));
 }
 
-function evidenceMatchesQuery(query: string, evidence: RetrievedEvidence): boolean {
+function evidenceMatchesQuery(query: string, evidence: RetrievedEvidence, config: NoorRuntimeConfig): boolean {
     const queryTokens = meaningfulAnswerabilityTokens(query);
     if (queryTokens.length === 0) return false;
     const evidenceTokens = new Set(tokenizeLexicalQuery(evidence.chunk.retrievalText));
-    return queryTokens.some(token => evidenceTokens.has(token));
+    if (queryTokens.some(token => evidenceTokens.has(token))) return true;
+
+    // A strong semantic result can use a corpus term that differs from the
+    // user's wording (for example, Noah versus Nuh). Lexical-only candidates
+    // sit exactly on the configured source threshold, so they still require
+    // lexical support before reaching generation.
+    return evidence.kind === 'semantic'
+        && evidence.similarity > (config.sourceThresholds[evidence.chunk.source] ?? 1);
 }
 
 function filterAnswerableEvidence(
     variants: readonly { query: string }[],
     results: readonly NoorSemanticRetrievalResult[],
+    config: NoorRuntimeConfig,
 ): readonly (readonly RetrievedEvidence[])[] {
     return results.map((result, index) => {
         const query = variants[index]?.query;
         if (!query) return [];
-        return result.evidence.filter(item => evidenceMatchesQuery(query, item));
+        return result.evidence.filter(item => evidenceMatchesQuery(query, item, config));
     });
 }
 
@@ -516,7 +524,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                     : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
                 const answerabilityGateActive = results.length > 0 && results.every(isSemanticRetrievalResult);
                 const answerableGroups = answerabilityGateActive
-                    ? filterAnswerableEvidence(queryPlan.variants, normalized)
+                    ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
                     : normalized.map(value => value.evidence);
                 evidence = mergeEvidence(answerableGroups, config);
                 if (answerabilityGateActive && evidence.length === 0) {
@@ -533,7 +541,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                     lexicalHitCount += recovery.lexicalHitCount;
                     if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
                     else if (recovery.lexicalSearchStatus === 'available' && lexicalSearchStatus === 'not_configured') lexicalSearchStatus = 'available';
-                    const recoveryEvidence = recovery.evidence.filter(item => evidenceMatchesQuery(recoveryQuery, item));
+                    const recoveryEvidence = recovery.evidence.filter(item => evidenceMatchesQuery(recoveryQuery, item, config));
                     evidence = mergeEvidence([recoveryEvidence], config);
                 }
             } else {

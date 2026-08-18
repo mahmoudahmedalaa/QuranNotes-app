@@ -241,7 +241,9 @@ describe('handleNoorRequest', () => {
     it('performs one bounded recovery retrieval and generates only from relevant evidence', async () => {
         const unrelated = {
             ...EVIDENCE[0]!,
+            kind: 'semantic',
             chunk: chunk('unrelated', 'Al-Qasas contains an unrelated story.'),
+            similarity: CONFIG.sourceThresholds.ibn_kathir_en_abridged,
         } satisfies RetrievedEvidence;
         const relevant = {
             ...EVIDENCE[0]!,
@@ -287,10 +289,50 @@ describe('handleNoorRequest', () => {
         assert.deepEqual(generatedEvidence.map(item => item.chunk.chunkId), ['baqarah-2-1']);
     });
 
+    it('keeps a strong semantic Noah/Nuh result when the user uses the English name', async () => {
+        const noah = {
+            ...EVIDENCE[0]!,
+            kind: 'semantic',
+            chunk: chunk(
+                'c_0ad0b17c1dc61edfe7924318e1cb73dfeaf1c32415783dde9fe71b99bba1f8e4_000_e29e57df16f7',
+                'Nuh and His PeopleWhen Allah tells us about the story of Nuh and the rejection of his people.',
+            ),
+            similarity: 0.7774966340151523,
+        } satisfies RetrievedEvidence;
+        let retrievalCount = 0;
+        let modelCalled = false;
+        const value = harness({
+            loadRuntimeConfig: async () => ({
+                ...CONFIG,
+                sourceThresholds: { ibn_kathir_en_abridged: 0.72, al_sadi_ar: 0.76 },
+            }),
+            retrieveSemantic: async () => {
+                retrievalCount += 1;
+                return { evidence: [noah], vectorHitCount: 1, lexicalHitCount: 0, lexicalSearchStatus: 'available' };
+            },
+            generateGroundedAnswer: async () => {
+                modelCalled = true;
+                return ANSWERED;
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'Tell me about Noah.',
+            history: [],
+        });
+
+        assert.equal(response.status, 'answered');
+        assert.equal(retrievalCount, 1);
+        assert.equal(modelCalled, true);
+    });
+
     it('abstains after one weak-evidence recovery and never surfaces unrelated citations', async () => {
         const unrelated = {
             ...EVIDENCE[0]!,
+            kind: 'semantic',
             chunk: chunk('unrelated', 'Al-Qasas contains an unrelated story.'),
+            similarity: CONFIG.sourceThresholds.ibn_kathir_en_abridged,
         } satisfies RetrievedEvidence;
         const queries: string[] = [];
         let modelCalled = false;
@@ -311,6 +353,35 @@ describe('handleNoorRequest', () => {
         assert.equal(response.status, 'insufficient_evidence');
         assert.equal(queries.length, 2);
         assert.equal(modelCalled, false);
+        assert.deepEqual(response.citations, []);
+    });
+
+    it('keeps a genuine retry provider error distinct from successful unsupported abstention', async () => {
+        const unrelated = {
+            ...EVIDENCE[0]!,
+            chunk: chunk('unrelated-retry-error', 'A story about a prophet and his people.'),
+            kind: 'semantic',
+            similarity: CONFIG.sourceThresholds.ibn_kathir_en_abridged,
+        } satisfies RetrievedEvidence;
+        let retrievalCount = 0;
+        const value = harness({
+            retrieveSemantic: async () => {
+                retrievalCount += 1;
+                if (retrievalCount === 1) {
+                    return { evidence: [unrelated], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' };
+                }
+                throw new Error('embedding provider unavailable');
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'What was the latest football score?',
+            history: [],
+        });
+
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.equal(retrievalCount, 2);
         assert.deepEqual(response.citations, []);
     });
 
