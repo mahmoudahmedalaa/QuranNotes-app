@@ -44,7 +44,7 @@ function evidence(): RetrievedEvidence {
         originalStart: 0,
         originalEnd: 19,
         originalText: 'Private provider source text',
-        retrievalText: 'Private retrieval text',
+        retrievalText: 'Riba tafsir evidence',
         corpusVersion: 'corpus-v1',
         contentHash: 'hash',
         tokenCount: 4,

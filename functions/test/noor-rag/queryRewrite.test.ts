@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
     buildChatQueryPlan,
     createValidatedConversationState,
+    extractSubjectTokens,
     parseValidatedConversationState,
     type ValidatedConversationState,
 } from '../../src/noor-rag/queryRewrite';
@@ -123,6 +124,80 @@ describe('Noor generic query rewriting', () => {
         assert.deepEqual(plan.variants.map(value => value.kind), ['original', 'context_enriched']);
         assert.match(plan.variants[1]!.query, /velunari/i);
         assert.doesNotMatch(plan.variants[1]!.query, /Provider answer|secret-error/i);
+    });
+
+    it('canonicalizes a surah subject and resolves natural possessive and anaphoric follow-ups', () => {
+        const priorQuestion = 'Tell me about Surah Al-Baqarah.';
+        assert.deepEqual(extractSubjectTokens(priorQuestion), ['surah', 'al-baqarah']);
+        const state = validatedState(priorQuestion, 'Virtues of Surat Al-Baqarah are discussed here.');
+
+        for (const question of [
+            'But what is its significance in Islam?',
+            'What are its virtues?',
+            'Why is it important?',
+            'What is special about it?',
+            'What does the tafsir say about it?',
+            'What did the Prophet say about it?',
+        ]) {
+            const plan = buildChatQueryPlan({
+                request: request(question, [{ role: 'user', content: priorQuestion }]),
+                validatedConversationState: state,
+            });
+            assert.equal(plan.contextSelected, true, question);
+            assert.equal(plan.requiresClarification, false, question);
+            assert.match(plan.variants[1]!.query, /surah al-baqarah/i, question);
+            assert.doesNotMatch(plan.variants[1]!.query, /regarding tell\b/i, question);
+        }
+    });
+
+    it('keeps the riba subject when a natural alternative follow-up is phrased as a new sentence', () => {
+        const priorQuestion = 'What does Islam say about interest?';
+        const plan = buildChatQueryPlan({
+            request: request('And what can Muslims use instead?', [{ role: 'user', content: priorQuestion }]),
+            validatedConversationState: validatedState(priorQuestion, 'Interest is discussed in this tafsir passage.'),
+        });
+
+        assert.equal(plan.contextSelected, true);
+        assert.match(plan.variants[1]!.query, /interest/i);
+    });
+
+    it('switches to a new explicit subject instead of keeping the prior surah context', () => {
+        const priorQuestion = 'Tell me about Surah Al-Baqarah.';
+        const plan = buildChatQueryPlan({
+            request: request('Can you pray without wudu?', [{ role: 'user', content: priorQuestion }]),
+            validatedConversationState: validatedState(priorQuestion),
+        });
+
+        assert.equal(plan.contextSelected, false);
+        assert.deepEqual(plan.variants, [{ kind: 'original', query: 'Can you pray without wudu?' }]);
+    });
+
+    it('generalizes referential follow-ups across surah and prophet subjects', () => {
+        const cases = [
+            ['Tell me about Al-Baqarah.', 'Why is this surah important?', 'al-baqarah'],
+            ['Explain Surah Al-Baqarah.', 'Is there anything special about it?', 'al-baqarah'],
+            ['Tell me about Prophet Nuh.', 'What happened to his people?', 'nuh'],
+        ] as const;
+
+        for (const [priorQuestion, question, expectedSubject] of cases) {
+            const plan = buildChatQueryPlan({
+                request: request(question, [{ role: 'user', content: priorQuestion }]),
+                validatedConversationState: validatedState(priorQuestion, `${expectedSubject} tafsir evidence.`),
+            });
+            assert.equal(plan.contextSelected, true, question);
+            assert.match(plan.variants[1]!.query, new RegExp(expectedSubject, 'i'), question);
+        }
+    });
+
+    it('does not let a changed explicit subject inherit Noah context before an riba question', () => {
+        const priorQuestion = 'Tell me about Prophet Nuh.';
+        const plan = buildChatQueryPlan({
+            request: request('What does Islam say about interest?', [{ role: 'user', content: priorQuestion }]),
+            validatedConversationState: validatedState(priorQuestion, 'Nuh tafsir evidence.'),
+        });
+
+        assert.equal(plan.contextSelected, false);
+        assert.deepEqual(plan.variants, [{ kind: 'original', query: 'What does Islam say about interest?' }]);
     });
 
     it('creates bounded state for a grounded structural turn using unfamiliar cited evidence terms', () => {

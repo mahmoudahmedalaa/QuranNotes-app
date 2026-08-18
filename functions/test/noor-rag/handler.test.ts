@@ -29,12 +29,12 @@ const CONFIG: NoorRuntimeConfig = {
     maxChunksPerSource: 4, maxEvidenceCharacters: 5000,
 };
 
-function chunk(id = 'chunk-1'): TafsirChunk {
+function chunk(id = 'chunk-1', text = 'patience is described in this tafsir passage'): TafsirChunk {
     return {
         chunkId: id, canonicalUnitId: 'unit-1', chunkIndex: 0,
         source: 'ibn_kathir_en_abridged', sourceTitle: 'Tafsir Ibn Kathir', language: 'en',
         surah: 2, verseStart: 153, verseEnd: 153, originalStart: 0, originalEnd: 6,
-        originalText: 'source', retrievalText: 'source', corpusVersion: 'corpus-v1',
+        originalText: text, retrievalText: text, corpusVersion: 'corpus-v1',
         contentHash: 'hash', tokenCount: 1, embeddingModel: 'gemini-embedding-2', embeddingDimension: 768,
     };
 }
@@ -165,8 +165,8 @@ describe('handleNoorRequest', () => {
             chunk: {
                 ...chunk('a-oversized'),
                 canonicalUnitId: 'oversized-unit',
-                originalText: '123456',
-                retrievalText: '123456',
+                originalText: '123456789',
+                retrievalText: '123456789',
             },
         } satisfies RetrievedEvidence;
         const fitting = {
@@ -175,13 +175,13 @@ describe('handleNoorRequest', () => {
             chunk: {
                 ...chunk('z-fitting'),
                 canonicalUnitId: 'fitting-unit',
-                originalText: '12',
-                retrievalText: '12',
+                originalText: 'patience',
+                retrievalText: 'patience',
             },
         } satisfies RetrievedEvidence;
         let generatedEvidence: readonly RetrievedEvidence[] = [];
         const value = harness({
-            loadRuntimeConfig: async () => ({ ...CONFIG, maxEvidenceCharacters: 5 }),
+            loadRuntimeConfig: async () => ({ ...CONFIG, maxEvidenceCharacters: 8 }),
             retrieveSemantic: async () => ({
                 evidence: [oversized, fitting],
                 vectorHitCount: 2,
@@ -236,6 +236,82 @@ describe('handleNoorRequest', () => {
         assert.equal((await run(failure)).status, 'temporarily_unavailable');
         assert.ok(!failure.events.includes('model'));
         assert.ok(failure.events.includes('finalize-non-answer'));
+    });
+
+    it('performs one bounded recovery retrieval and generates only from relevant evidence', async () => {
+        const unrelated = {
+            ...EVIDENCE[0]!,
+            chunk: chunk('unrelated', 'Al-Qasas contains an unrelated story.'),
+        } satisfies RetrievedEvidence;
+        const relevant = {
+            ...EVIDENCE[0]!,
+            chunk: chunk('baqarah-2-1', 'Virtues of Surat Al-Baqarah are discussed in Ibn Kathir.'),
+        } satisfies RetrievedEvidence;
+        const queries: string[] = [];
+        let generatedEvidence: readonly RetrievedEvidence[] = [];
+        const value = harness({
+            retrieveSemantic: async input => {
+                queries.push(input.query);
+                return queries.length === 1 ? { evidence: [unrelated], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' } : { evidence: [relevant], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' };
+            },
+            generateGroundedAnswer: async input => {
+                generatedEvidence = input.evidence;
+                const item = input.evidence[0]!;
+                return {
+                    requestId: input.request.requestId,
+                    status: 'answered',
+                    answer: 'Grounded Al-Baqarah answer. [S1]',
+                    citations: [{
+                        chunkId: item.chunk.chunkId,
+                        canonicalUnitId: item.chunk.canonicalUnitId,
+                        source: item.chunk.source,
+                        sourceTitle: item.chunk.sourceTitle,
+                        surah: item.chunk.surah,
+                        verseStart: item.chunk.verseStart,
+                        verseEnd: item.chunk.verseEnd,
+                        corpusVersion: item.chunk.corpusVersion,
+                    }],
+                };
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'What is the significance of Surah Al-Baqarah?',
+            history: [],
+        });
+
+        assert.equal(response.status, 'answered');
+        assert.equal(queries.length, 2);
+        assert.match(queries[1]!, /Quran tafsir/i);
+        assert.deepEqual(generatedEvidence.map(item => item.chunk.chunkId), ['baqarah-2-1']);
+    });
+
+    it('abstains after one weak-evidence recovery and never surfaces unrelated citations', async () => {
+        const unrelated = {
+            ...EVIDENCE[0]!,
+            chunk: chunk('unrelated', 'Al-Qasas contains an unrelated story.'),
+        } satisfies RetrievedEvidence;
+        const queries: string[] = [];
+        let modelCalled = false;
+        const value = harness({
+            retrieveSemantic: async input => {
+                queries.push(input.query);
+                return { evidence: [unrelated], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' };
+            },
+            generateGroundedAnswer: async () => { modelCalled = true; return ANSWERED; },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'What is the significance of Surah Al-Baqarah?',
+            history: [],
+        });
+
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.equal(queries.length, 2);
+        assert.equal(modelCalled, false);
+        assert.deepEqual(response.citations, []);
     });
 
     it('maps provider timeout, hides finalization failures, and rejects mismatched response IDs', async () => {

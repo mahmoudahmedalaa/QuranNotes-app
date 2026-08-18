@@ -12,12 +12,15 @@ const STOP_WORDS = new Set([
     'a', 'about', 'an', 'and', 'are', 'can', 'does', 'do', 'for', 'from', 'how',
     'in', 'is', 'it', 'me', 'my', 'of', 'on', 'or', 'that', 'the', 'this', 'to',
     'was', 'what', 'when', 'where', 'which', 'why', 'with', 'halal', 'haram',
-    'permissible', 'forbidden', 'islam', 'islamic',
+    'permissible', 'forbidden', 'islam', 'islamic', 'tell', 'say', 'explain',
+    'describe', 'discuss', 'mention', 'tafsir', 'prophet', 'muslims', 'use',
+    'instead', 'important', 'special', 'significance', 'virtue', 'virtues',
+    'meaning', 'teach', 'teaches',
 ]);
 const FOLLOW_UP_TOKENS = new Set([
     'alternative', 'alternatives', 'else', 'happened', 'he', 'her', 'hers', 'him',
     'his', 'more', 'next', 'she', 'their', 'theirs', 'them', 'then', 'they',
-    'this', 'those', 'tell',
+    'this', 'those', 'tell', 'instead', 'its',
 ]);
 
 export interface ValidatedConversationState {
@@ -165,6 +168,9 @@ function isStructuralFollowUp(question: string): boolean {
     const subjectTokens = extractSubjectTokens(question);
     const hasOnlyFollowUpTokens = subjectTokens.length === 0
         || subjectTokens.every(token => FOLLOW_UP_TOKENS.has(token));
+    const hasReferentialPronoun = /\b(?:its|it|this|that|these|those|his|her|their|them)\b/i.test(question);
+    const hasExplicitSubject = /\b(?:about|regarding)\s+(?!it\b|this\b|that\b|these\b|those\b|him\b|her\b|them\b)[\p{L}\p{N}][\p{L}\p{N}'-]*/iu.test(question)
+        || /^\s*(?:what|who)\s+is\s+(?:the\s+)?(?!important\b|special\b|significance\b|meaning\b)[\p{L}\p{N}][\p{L}\p{N}'-]*/iu.test(question);
     if (/^\s*(?:why|how|and\s+then|then\s+what|what\s+next|go\s+on|more)\s*[?!.]?\s*$/i.test(question)) {
         return true;
     }
@@ -177,7 +183,8 @@ function isStructuralFollowUp(question: string): boolean {
         && hasOnlyFollowUpTokens) {
         return true;
     }
-    if (!/\b(?:alternative|alternatives|what about|what happened next|tell me more)\b/i.test(question)) return false;
+    if (hasReferentialPronoun && !hasExplicitSubject) return true;
+    if (!/\b(?:alternative|alternatives|what about|what happened next|tell me more|instead)\b/i.test(question)) return false;
     return hasOnlyFollowUpTokens;
 }
 
@@ -226,4 +233,17 @@ export function buildChatQueryPlan(input: Readonly<{
         conversationState: 'validated_subject_and_evidence',
         requiresClarification: false,
     };
+}
+
+export function buildControlledRecoveryQuery(input: Readonly<{
+    request: Extract<NoorRequest, { mode: 'chat' }>;
+    validatedConversationState?: ValidatedConversationState | null;
+}>): string {
+    const state = input.validatedConversationState
+        ? parseValidatedConversationState(input.validatedConversationState)
+        : null;
+    if (state !== null) {
+        return `${input.request.question} Regarding ${state.subjectTokens.join(' ')}. Focus on relevant Quran tafsir evidence.`;
+    }
+    return `${input.request.question} Quran tafsir`;
 }

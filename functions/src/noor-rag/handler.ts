@@ -4,10 +4,12 @@ import { getGenerationDiagnostics, type NoorGenerationErrorClass } from './gener
 import type { NoorPolicyCategory } from './policy';
 import {
     buildChatQueryPlan,
+    buildControlledRecoveryQuery,
     createValidatedConversationState,
     type ChatQueryPlan,
     type ValidatedConversationState,
 } from './queryRewrite';
+import { tokenizeLexicalQuery } from './lexical';
 import type { ClaimResult, FinalizeResult, NoorEntitlementClass } from './usage';
 import type { NoorAnswer, NoorRequest, RetrievedEvidence } from './types';
 import { parseNoorAnswer } from './validation';
@@ -226,6 +228,32 @@ function normalizeSemanticRetrieval(value: NoorSemanticRetrievalOutput): NoorSem
 
 function isSemanticRetrievalResult(value: NoorSemanticRetrievalOutput): value is NoorSemanticRetrievalResult {
     return !Array.isArray(value) && typeof value === 'object' && value !== null && 'evidence' in value;
+}
+
+const ANSWERABILITY_FRAMING_TOKENS = new Set([
+    'islam', 'islamic', 'quran', 'surah', 'tafsir', 'verse', 'passage', 'prophet', 'question',
+]);
+
+function meaningfulAnswerabilityTokens(query: string): readonly string[] {
+    return tokenizeLexicalQuery(query).filter(token => !ANSWERABILITY_FRAMING_TOKENS.has(token));
+}
+
+function evidenceMatchesQuery(query: string, evidence: RetrievedEvidence): boolean {
+    const queryTokens = meaningfulAnswerabilityTokens(query);
+    if (queryTokens.length === 0) return false;
+    const evidenceTokens = new Set(tokenizeLexicalQuery(evidence.chunk.retrievalText));
+    return queryTokens.some(token => evidenceTokens.has(token));
+}
+
+function filterAnswerableEvidence(
+    variants: readonly { query: string }[],
+    results: readonly NoorSemanticRetrievalResult[],
+): readonly (readonly RetrievedEvidence[])[] {
+    return results.map((result, index) => {
+        const query = variants[index]?.query;
+        if (!query) return [];
+        return result.evidence.filter(item => evidenceMatchesQuery(query, item));
+    });
 }
 
 function mergeEvidence(
@@ -486,7 +514,28 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 lexicalSearchStatus = normalized.some(value => value.lexicalSearchStatus === 'unavailable')
                     ? 'unavailable'
                     : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
-                evidence = mergeEvidence(normalized.map(value => value.evidence), config);
+                const answerabilityGateActive = results.length > 0 && results.every(isSemanticRetrievalResult);
+                const answerableGroups = answerabilityGateActive
+                    ? filterAnswerableEvidence(queryPlan.variants, normalized)
+                    : normalized.map(value => value.evidence);
+                evidence = mergeEvidence(answerableGroups, config);
+                if (answerabilityGateActive && evidence.length === 0) {
+                    const recoveryQuery = buildControlledRecoveryQuery({
+                        request,
+                        validatedConversationState,
+                    });
+                    const recovery = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
+                        request,
+                        config,
+                        query: recoveryQuery,
+                    }));
+                    vectorHitCount += recovery.vectorHitCount;
+                    lexicalHitCount += recovery.lexicalHitCount;
+                    if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
+                    else if (recovery.lexicalSearchStatus === 'available' && lexicalSearchStatus === 'not_configured') lexicalSearchStatus = 'available';
+                    const recoveryEvidence = recovery.evidence.filter(item => evidenceMatchesQuery(recoveryQuery, item));
+                    evidence = mergeEvidence([recoveryEvidence], config);
+                }
             } else {
                 evidence = await dependencies.retrieveExact({ request, config });
             }

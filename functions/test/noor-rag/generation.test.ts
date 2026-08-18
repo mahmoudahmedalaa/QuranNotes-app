@@ -85,6 +85,17 @@ describe('Noor grounded generation', () => {
         assert.match(built.prompt, /<verseContext><surah>2<\/surah><verse>255<\/verse><\/verseContext>/);
     });
 
+    it('instructs user-facing wording to distinguish valid wudu from optional renewal', () => {
+        const built = buildGroundedPrompt({
+            ...REQUEST,
+            question: 'Can you pray without wuduu?',
+        }, [evidence('S1', 'The command concerns purification before prayer.')], 1000);
+
+        assert.match(built.prompt, /valid ritual purification/i);
+        assert.match(built.prompt, /renew(?:ing)? an already-valid wudu/i);
+        assert.match(built.prompt, /not optional/i);
+    });
+
     it('sends the exact locked structured request through the global Vertex adapter', async () => {
         let options: Readonly<Record<string, unknown>> | undefined;
         let sent: VertexGenerationRequest | undefined;
