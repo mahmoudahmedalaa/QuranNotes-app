@@ -238,12 +238,16 @@ export function buildChatQueryPlan(input: Readonly<{
 export function buildControlledRecoveryQuery(input: Readonly<{
     request: Extract<NoorRequest, { mode: 'chat' }>;
     validatedConversationState?: ValidatedConversationState | null;
-}>): string {
+}>): string | null {
     const state = input.validatedConversationState
         ? parseValidatedConversationState(input.validatedConversationState)
         : null;
     if (state !== null) {
-        return `${input.request.question} Regarding ${state.subjectTokens.join(' ')}. Focus on relevant Quran tafsir evidence.`;
+        const plan = buildChatQueryPlan({ request: input.request, validatedConversationState: state });
+        if (plan.contextSelected) return state.subjectTokens.join(' ');
     }
-    return `${input.request.question} Quran tafsir`;
+    if (input.request.verseContext) {
+        return `Quran ${input.request.verseContext.surah}:${input.request.verseContext.verse}`;
+    }
+    return null;
 }

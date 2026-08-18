@@ -96,6 +96,15 @@ describe('Noor grounded generation', () => {
         assert.match(built.prompt, /not optional/i);
     });
 
+    it('does not add the purification clarification to an unrelated generation path', () => {
+        const built = buildGroundedPrompt({
+            ...REQUEST,
+            question: 'What does the Quran say about riba?',
+        }, [evidence('S1', 'This passage discusses riba and lawful trade.')], 1000);
+
+        assert.doesNotMatch(built.prompt, /already-valid wudu|required purification is not optional/i);
+    });
+
     it('sends the exact locked structured request through the global Vertex adapter', async () => {
         let options: Readonly<Record<string, unknown>> | undefined;
         let sent: VertexGenerationRequest | undefined;

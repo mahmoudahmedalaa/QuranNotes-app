@@ -44,7 +44,7 @@ function evidence(): RetrievedEvidence {
         originalStart: 0,
         originalEnd: 19,
         originalText: 'Private provider source text',
-        retrievalText: 'Riba tafsir evidence',
+        retrievalText: 'Riba tafsir evidence about lawful trade as the alternative to interest',
         corpusVersion: 'corpus-v1',
         contentHash: 'hash',
         tokenCount: 4,

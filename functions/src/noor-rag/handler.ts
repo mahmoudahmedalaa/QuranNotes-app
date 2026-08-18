@@ -1,6 +1,7 @@
 import type { NoorRuntimeConfig } from './config';
 import type { EntitlementDecision } from './entitlement';
 import { getGenerationDiagnostics, type NoorGenerationErrorClass } from './generation';
+import { selectAnswerableEvidence } from './answerability';
 import type { NoorPolicyCategory } from './policy';
 import {
     buildChatQueryPlan,
@@ -9,7 +10,6 @@ import {
     type ChatQueryPlan,
     type ValidatedConversationState,
 } from './queryRewrite';
-import { tokenizeLexicalQuery } from './lexical';
 import type { ClaimResult, FinalizeResult, NoorEntitlementClass } from './usage';
 import type { NoorAnswer, NoorRequest, RetrievedEvidence } from './types';
 import { parseNoorAnswer } from './validation';
@@ -230,28 +230,6 @@ function isSemanticRetrievalResult(value: NoorSemanticRetrievalOutput): value is
     return !Array.isArray(value) && typeof value === 'object' && value !== null && 'evidence' in value;
 }
 
-const ANSWERABILITY_FRAMING_TOKENS = new Set([
-    'islam', 'islamic', 'quran', 'surah', 'tafsir', 'verse', 'passage', 'prophet', 'question',
-]);
-
-function meaningfulAnswerabilityTokens(query: string): readonly string[] {
-    return tokenizeLexicalQuery(query).filter(token => !ANSWERABILITY_FRAMING_TOKENS.has(token));
-}
-
-function evidenceMatchesQuery(query: string, evidence: RetrievedEvidence, config: NoorRuntimeConfig): boolean {
-    const queryTokens = meaningfulAnswerabilityTokens(query);
-    if (queryTokens.length === 0) return false;
-    const evidenceTokens = new Set(tokenizeLexicalQuery(evidence.chunk.retrievalText));
-    if (queryTokens.some(token => evidenceTokens.has(token))) return true;
-
-    // A strong semantic result can use a corpus term that differs from the
-    // user's wording (for example, Noah versus Nuh). Lexical-only candidates
-    // sit exactly on the configured source threshold, so they still require
-    // lexical support before reaching generation.
-    return evidence.kind === 'semantic'
-        && evidence.similarity > (config.sourceThresholds[evidence.chunk.source] ?? 1);
-}
-
 function filterAnswerableEvidence(
     variants: readonly { query: string }[],
     results: readonly NoorSemanticRetrievalResult[],
@@ -260,7 +238,7 @@ function filterAnswerableEvidence(
     return results.map((result, index) => {
         const query = variants[index]?.query;
         if (!query) return [];
-        return result.evidence.filter(item => evidenceMatchesQuery(query, item, config));
+        return selectAnswerableEvidence(query, result.evidence, config);
     });
 }
 
@@ -532,17 +510,28 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                         request,
                         validatedConversationState,
                     });
-                    const recovery = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
-                        request,
-                        config,
-                        query: recoveryQuery,
-                    }));
-                    vectorHitCount += recovery.vectorHitCount;
-                    lexicalHitCount += recovery.lexicalHitCount;
-                    if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
-                    else if (recovery.lexicalSearchStatus === 'available' && lexicalSearchStatus === 'not_configured') lexicalSearchStatus = 'available';
-                    const recoveryEvidence = recovery.evidence.filter(item => evidenceMatchesQuery(recoveryQuery, item, config));
-                    evidence = mergeEvidence([recoveryEvidence], config);
+                    if (recoveryQuery !== null) {
+                        try {
+                            const recovery = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
+                                request,
+                                config,
+                                query: recoveryQuery,
+                            }));
+                            vectorHitCount += recovery.vectorHitCount;
+                            lexicalHitCount += recovery.lexicalHitCount;
+                            if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
+                            else if (recovery.lexicalSearchStatus === 'available' && lexicalSearchStatus === 'not_configured') lexicalSearchStatus = 'available';
+                            const recoveryAnswerabilityQuery = [...queryPlan.variants]
+                                .reverse()
+                                .find(variant => variant.kind === 'context_enriched')?.query
+                                ?? queryPlan.variants[0]?.query
+                                ?? request.question;
+                            const recoveryEvidence = selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config);
+                            evidence = mergeEvidence([...answerableGroups, recoveryEvidence], config);
+                        } catch {
+                            // Initial retrieval succeeded. Optional recovery failure preserves the safe abstention.
+                        }
+                    }
                 }
             } else {
                 evidence = await dependencies.retrieveExact({ request, config });

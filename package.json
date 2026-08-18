@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:functions": "npm --prefix functions run build -- --noEmit",
     "noor:verify": "node scripts/noor-rag/verify-noor-rag.js",
+    "noor:verify:retrieval": "npm --prefix functions run noor:verify:retrieval",
     "noor:verify:live": "npm --prefix functions run noor:verify:live",
     "report:firebase-usage": "node scripts/report-firebase-usage.js",
     "report:paywall-funnel": "node scripts/report-paywall-funnel.js",

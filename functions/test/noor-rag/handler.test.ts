@@ -11,6 +11,7 @@ import {
 } from '../../src/noor-rag/handler';
 import type { NoorRuntimeConfig } from '../../src/noor-rag/config';
 import type { ClaimResult } from '../../src/noor-rag/usage';
+import { createValidatedConversationState } from '../../src/noor-rag/queryRewrite';
 import type { NoorAnswer, NoorRequest, RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
 
 const UID = 'sensitive-user@example.com';
@@ -249,13 +250,42 @@ describe('handleNoorRequest', () => {
             ...EVIDENCE[0]!,
             chunk: chunk('baqarah-2-1', 'Virtues of Surat Al-Baqarah are discussed in Ibn Kathir.'),
         } satisfies RetrievedEvidence;
+        const firstRequest = {
+            ...REQUEST,
+            requestId: '33333333-3333-4333-8333-333333333333',
+            question: 'Tell me about Surah Al-Baqarah.',
+            history: [],
+        } satisfies Extract<NoorRequest, { mode: 'chat' }>;
+        const state = createValidatedConversationState({
+            request: firstRequest,
+            response: {
+                requestId: firstRequest.requestId,
+                status: 'answered',
+                answer: 'Grounded introduction. [S1]',
+                citations: [{
+                    chunkId: relevant.chunk.chunkId,
+                    canonicalUnitId: relevant.chunk.canonicalUnitId,
+                    source: relevant.chunk.source,
+                    sourceTitle: relevant.chunk.sourceTitle,
+                    surah: relevant.chunk.surah,
+                    verseStart: relevant.chunk.verseStart,
+                    verseEnd: relevant.chunk.verseEnd,
+                    corpusVersion: relevant.chunk.corpusVersion,
+                }],
+            },
+            evidence: [relevant],
+        });
+        assert.ok(state);
         const queries: string[] = [];
         let generatedEvidence: readonly RetrievedEvidence[] = [];
         const value = harness({
             retrieveSemantic: async input => {
                 queries.push(input.query);
-                return queries.length === 1 ? { evidence: [unrelated], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' } : { evidence: [relevant], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' };
+                return queries.length <= 2
+                    ? { evidence: [unrelated], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' }
+                    : { evidence: [relevant], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' };
             },
+            readValidatedConversationState: async () => state,
             generateGroundedAnswer: async input => {
                 generatedEvidence = input.evidence;
                 const item = input.evidence[0]!;
@@ -279,13 +309,17 @@ describe('handleNoorRequest', () => {
 
         const response = await run(value, {
             ...REQUEST,
-            question: 'What is the significance of Surah Al-Baqarah?',
-            history: [],
+            question: 'But what is its significance in Islam?',
+            history: [
+                { role: 'user', content: firstRequest.question },
+                { role: 'assistant', content: 'Grounded introduction.' },
+            ],
         });
 
         assert.equal(response.status, 'answered');
-        assert.equal(queries.length, 2);
-        assert.match(queries[1]!, /Quran tafsir/i);
+        assert.equal(queries.length, 3);
+        assert.equal(queries[2], 'surah al-baqarah');
+        assert.doesNotMatch(queries[2]!, /Quran tafsir/i);
         assert.deepEqual(generatedEvidence.map(item => item.chunk.chunkId), ['baqarah-2-1']);
     });
 
@@ -327,7 +361,7 @@ describe('handleNoorRequest', () => {
         assert.equal(modelCalled, true);
     });
 
-    it('abstains after one weak-evidence recovery and never surfaces unrelated citations', async () => {
+    it('abstains without retry when weak evidence has no useful reformulation signal', async () => {
         const unrelated = {
             ...EVIDENCE[0]!,
             kind: 'semantic',
@@ -351,25 +385,16 @@ describe('handleNoorRequest', () => {
         });
 
         assert.equal(response.status, 'insufficient_evidence');
-        assert.equal(queries.length, 2);
+        assert.equal(queries.length, 1);
         assert.equal(modelCalled, false);
         assert.deepEqual(response.citations, []);
     });
 
-    it('keeps a genuine retry provider error distinct from successful unsupported abstention', async () => {
-        const unrelated = {
-            ...EVIDENCE[0]!,
-            chunk: chunk('unrelated-retry-error', 'A story about a prophet and his people.'),
-            kind: 'semantic',
-            similarity: CONFIG.sourceThresholds.ibn_kathir_en_abridged,
-        } satisfies RetrievedEvidence;
+    it('keeps a genuine initial retrieval provider error distinct from unsupported abstention', async () => {
         let retrievalCount = 0;
         const value = harness({
             retrieveSemantic: async () => {
                 retrievalCount += 1;
-                if (retrievalCount === 1) {
-                    return { evidence: [unrelated], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' };
-                }
                 throw new Error('embedding provider unavailable');
             },
         });
@@ -381,7 +406,7 @@ describe('handleNoorRequest', () => {
         });
 
         assert.equal(response.status, 'temporarily_unavailable');
-        assert.equal(retrievalCount, 2);
+        assert.equal(retrievalCount, 1);
         assert.deepEqual(response.citations, []);
     });
 

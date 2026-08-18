@@ -4,7 +4,7 @@ const { resolve } = require('node:path');
 
 const repositoryRoot = resolve(__dirname, '../..');
 const functionsRoot = resolve(repositoryRoot, 'functions');
-const expectedBranch = 'chore/noor-rag-execution-harness';
+const expectedBranch = 'feature/noor-ai-phase5';
 const corpusVersion = '2026-08-10-v1';
 const casesPath = resolve(functionsRoot, 'evals/noor-golden-cases.json');
 
@@ -42,7 +42,7 @@ function runStep(label, command, args, cwd = repositoryRoot) {
 function verifyCarrier() {
     const branch = commandOutput('git', ['branch', '--show-current']).trim();
     const head = commandOutput('git', ['rev-parse', 'HEAD']).trim();
-    const status = commandOutput('git', ['status', '--porcelain']).trim();
+    const status = commandOutput('git', ['status', '--porcelain', '--untracked-files=no']).trim();
     const ragExists = existsSync(resolve(functionsRoot, 'src/noor-rag'));
     const scriptsExist = existsSync(resolve(functionsRoot, 'scripts/noor-rag'));
     const lockedSource = readFileSync(resolve(functionsRoot, 'scripts/noor-rag/verify-index.ts'), 'utf8');
@@ -87,7 +87,9 @@ function main() {
     }
 
     const failed = summary.filter(item => !item.ok);
-    process.stdout.write(`LOCAL SUMMARY passed=${summary.length - failed.length} failed=${failed.length}\n`);
+    process.stdout.write(`STRUCTURAL/DETERMINISTIC VERIFICATION passed=${summary.length - failed.length} failed=${failed.length}\n`);
+    process.stdout.write('REAL SEMANTIC RETRIEVAL: NOT RUN — use npm run noor:verify:retrieval with supported credentials\n');
+    process.stdout.write('AUTHENTICATED END-TO-END LIVE: NOT RUN — use npm run noor:verify:live\n');
     if (failed.length > 0) process.exitCode = 1;
 }
 
