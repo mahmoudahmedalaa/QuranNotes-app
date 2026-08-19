@@ -6,6 +6,7 @@ import type { NoorSanitizedTrace } from '../../src/noor-rag/handler';
 
 function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace {
     return {
+        requestId: '11111111-1111-4111-8111-111111111111',
         case: 'seed-follow-up',
         policy: 'allowed',
         status: 'answered',
@@ -22,6 +23,17 @@ function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace 
         evidenceCount: 1,
         generationStatus: 'answered',
         citationValidation: 'passed',
+        generationAttemptCount: 1,
+        generationFailurePhase: 'none',
+        structuralValidationResult: 'passed_first_attempt',
+        citationValidationResult: 'passed_first_attempt',
+        citationValidationFailureSubtype: null,
+        qualityJudgeInvoked: true,
+        generationRetryInvoked: false,
+        correctionInvoked: false,
+        finalGenerationErrorClass: null,
+        statePersistence: 'persisted',
+        stateFingerprint: 'a'.repeat(64),
         stageMs: { policy: 1, context: 2, retrieval: 30, generation: 40, citationValidation: 1 },
         finalCopy: 'Answer available with validated tafsir citations.',
         ...overrides,

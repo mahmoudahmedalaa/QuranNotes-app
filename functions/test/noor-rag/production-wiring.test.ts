@@ -48,6 +48,7 @@ describe('Noor telemetry', () => {
         const documents = new Map<string, unknown>();
         const firestore = fakeFirestore(documents);
         const trace: NoorSanitizedTrace = {
+            requestId: '11111111-1111-4111-8111-111111111111',
             case: 'riba-followup',
             policy: 'allowed',
             status: 'answered',
@@ -64,6 +65,17 @@ describe('Noor telemetry', () => {
             evidenceCount: 1,
             generationStatus: 'answered',
             citationValidation: 'passed',
+            generationAttemptCount: 1,
+            generationFailurePhase: 'none',
+            structuralValidationResult: 'passed_first_attempt',
+            citationValidationResult: 'passed_first_attempt',
+            citationValidationFailureSubtype: null,
+            qualityJudgeInvoked: true,
+            generationRetryInvoked: false,
+            correctionInvoked: false,
+            finalGenerationErrorClass: null,
+            statePersistence: 'persisted',
+            stateFingerprint: 'a'.repeat(64),
             stageMs: { policy: 1, context: 2, retrieval: 3, generation: 4, citationValidation: 5 },
             finalCopy: 'Answer available with validated tafsir citations.',
         };
@@ -87,7 +99,6 @@ describe('Noor telemetry', () => {
             'raw question text',
             'provider response body',
             'chunk-riba-secret',
-            '11111111-1111-4111-8111-111111111111',
         ]) {
             assert.equal(serialized.includes(forbidden), false);
         }
@@ -100,10 +111,16 @@ describe('Noor telemetry', () => {
             firestore, uid: 'user-1', secret: 'secret', pseudonymKeyVersion: 'key-v1', traceId: 'trace-class',
         });
         await sink({
+            requestId: '22222222-2222-4222-8222-222222222222',
             case: 'modern-concept-paraphrase', policy: 'allowed', status: 'insufficient_evidence', citationCount: 0,
             conversationState: 'none', contextSelected: false, selectedPriorUserContext: 'none', queryVariantCount: 1,
             queryVariantKinds: ['original'], vectorHitCount: 0, lexicalHitCount: 0, lexicalSearchStatus: 'not_configured', evidenceIds: [], evidenceCount: 0,
             generationStatus: 'not_run', citationValidation: 'not_run',
+            generationAttemptCount: 0, generationFailurePhase: 'not_run',
+            structuralValidationResult: 'not_run', citationValidationResult: 'not_run',
+            citationValidationFailureSubtype: null, qualityJudgeInvoked: false,
+            generationRetryInvoked: false, correctionInvoked: false, finalGenerationErrorClass: null,
+            statePersistence: 'not_persisted', stateFingerprint: null,
             stageMs: { policy: 1, context: 1, retrieval: 1, generation: 0, citationValidation: 0 },
             finalCopy: 'I could not find enough reliable tafsir evidence to answer that safely.',
         });
@@ -121,6 +138,10 @@ describe('Noor telemetry', () => {
                 generationModel: 'gemini-3.5-flash-lite', corpusVersion: VERSION, promptVersion: 'p1',
                 outcome: 'answered', citationCount: 1, retrievedChunkIds: ['c1'], errorClass: null, durationMs: 10,
                 retrievalMs: 3, generationMs: 7,
+                generationAttemptCount: 1, generationFailurePhase: 'none',
+                structuralValidationResult: 'passed_first_attempt', citationValidationResult: 'passed_first_attempt',
+                citationValidationFailureSubtype: null, qualityJudgeInvoked: true,
+                generationRetryInvoked: false, correctionInvoked: false, finalGenerationErrorClass: null,
             } });
         const serialized = JSON.stringify(documents.get('noorTelemetry/trace-1'));
         for (const forbidden of ['user-1', 'raw question text', 'raw answer text', 'person@example.com', 'provider response body']) {

@@ -76,11 +76,46 @@ describe('Noor generation reliability diagnostics', () => {
         const citationFailure = await generateGroundedAnswer(input(citationProvider));
         assert.equal(citationFailure.status, 'temporarily_unavailable');
         assert.equal(getGenerationDiagnostics(citationFailure)?.errorClass, 'citation_validation_failure');
+        assert.deepEqual(getGenerationDiagnostics(citationFailure), {
+            errorClass: 'citation_validation_failure',
+            attempts: 2,
+            generationAttemptCount: 2,
+            generationFailurePhase: 'citation_validation',
+            structuralValidationResult: 'passed_after_retry',
+            citationValidationResult: 'failed',
+            citationValidationFailureSubtype: 'unknown_citation_id',
+            qualityJudgeInvoked: false,
+            generationRetryInvoked: true,
+            correctionInvoked: false,
+            finalGenerationErrorClass: 'citation_validation_failure',
+        });
 
-        const answerProvider = new SequenceProvider(['{"answer":"Uncited answer","citationIds":[]}', '{"answer":"Uncited answer","citationIds":[]}']);
+        const answerProvider = new SequenceProvider(['{"answer":"Incomplete answer"}', '{"answer":"Incomplete answer"}']);
         const answerFailure = await generateGroundedAnswer(input(answerProvider));
         assert.equal(answerFailure.status, 'temporarily_unavailable');
         assert.equal(getGenerationDiagnostics(answerFailure)?.errorClass, 'answer_validation_failure');
+    });
+
+    it('records a recovered structural failure without storing the malformed output', async () => {
+        const provider = new SequenceProvider([
+            'malformed provider body with secret text',
+            '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
+        ]);
+
+        const answer = await generateGroundedAnswer(input(provider));
+
+        assert.equal(answer.status, 'answered');
+        const diagnostics = getGenerationDiagnostics(answer);
+        assert.equal(diagnostics?.generationAttemptCount, 2);
+        assert.equal(diagnostics?.generationFailurePhase, 'structural_validation');
+        assert.equal(diagnostics?.structuralValidationResult, 'passed_after_retry');
+        assert.equal(diagnostics?.citationValidationResult, 'passed_after_retry');
+        assert.equal(diagnostics?.qualityJudgeInvoked, true);
+        assert.equal(diagnostics?.generationRetryInvoked, true);
+        assert.equal(diagnostics?.correctionInvoked, false);
+        assert.equal(diagnostics?.finalGenerationErrorClass, null);
+        assert.doesNotMatch(JSON.stringify(diagnostics), /secret text|provider body/i);
     });
 
     it('classifies provider timeout without retrying or leaking provider details', async () => {

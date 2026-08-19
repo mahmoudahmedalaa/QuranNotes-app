@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import * as verifyLiveModule from '../../scripts/noor-rag/verify-live';
+import type { NoorAnswer, NoorRequest } from '../../src/noor-rag/types';
 
 interface PacerOptions {
     intervalMs?: number;
@@ -30,6 +31,58 @@ type CitationEvidenceValidator = (
 
 type TransportErrorClassifier = (error: unknown) => string;
 type HistoryAnswerBounder = (answer: string) => string;
+
+interface SequentialRunnerInput {
+    questions: readonly string[];
+    expectedFinalStatus: NoorAnswer['status'];
+    credentials: { endpoint: string; firebaseIdToken: string; appCheckToken: string };
+    paceRequest(): Promise<void>;
+    call(request: NoorRequest): Promise<{ answer: NoorAnswer; latencyMs: number }>;
+    readTrace(requestId: string): Promise<unknown>;
+    validateAnsweredCitations(answer: NoorAnswer): boolean;
+}
+
+type SequentialRunner = (input: SequentialRunnerInput) => Promise<{
+    requestCount: number;
+    completed: boolean;
+    turns: Array<{
+        turnNumber: number;
+        requestId: string;
+        responseStatus: NoorAnswer['status'];
+        citationValidation: string;
+        qualityJudgeInvoked: boolean;
+        stateExpected: boolean;
+        statePersisted: boolean;
+        contextSelected: boolean;
+        contextualQueryProduced: boolean;
+        passed: boolean;
+    }>;
+}>;
+
+const ANSWERED = (requestId: string): NoorAnswer => ({
+    requestId,
+    status: 'answered',
+    answer: 'Grounded answer. [S1]',
+    citations: [{
+        chunkId: 'chunk-1', canonicalUnitId: 'unit-1', source: 'ibn_kathir_en_abridged',
+        sourceTitle: 'Tafsir Ibn Kathir', surah: 2, verseStart: 275, verseEnd: 279,
+        corpusVersion: '2026-08-10-v1',
+    }],
+});
+
+function answeredTrace(requestId: string, followUp: boolean): object {
+    return {
+        requestId,
+        generationFailurePhase: 'none',
+        citationValidation: 'passed',
+        qualityJudgeInvoked: true,
+        statePersistence: 'persisted',
+        stateFingerprint: 'a'.repeat(64),
+        conversationState: followUp ? 'validated_subject_and_evidence' : 'none',
+        contextSelected: followUp,
+        queryVariantKinds: followUp ? ['original', 'context_enriched'] : ['original'],
+    };
+}
 
 describe('Noor authenticated live verifier', () => {
     it('paces requests to respect the production rolling-minute limit', async () => {
@@ -91,5 +144,73 @@ describe('Noor authenticated live verifier', () => {
 
         assert.equal([...result].length, 1_000);
         assert.equal(result, '😀'.repeat(1_000));
+    });
+
+    it('fails a sequential case immediately when turn one is not answered', async () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        assert.equal(typeof module.executeSequentialLiveTurns, 'function');
+        const runTurns = module.executeSequentialLiveTurns as SequentialRunner;
+        let callCount = 0;
+        const result = await runTurns({
+            questions: ['What does the Quran say about riba?', 'What is an Islamic alternative?'],
+            expectedFinalStatus: 'answered',
+            credentials: { endpoint: 'https://example.com', firebaseIdToken: 'token', appCheckToken: 'app-check' },
+            paceRequest: async () => undefined,
+            call: async request => {
+                callCount += 1;
+                return {
+                    answer: callCount === 1
+                        ? { requestId: request.requestId, status: 'temporarily_unavailable', answer: 'safe', citations: [] }
+                        : ANSWERED(request.requestId),
+                    latencyMs: 10,
+                };
+            },
+            readTrace: async requestId => ({
+                ...answeredTrace(requestId, false),
+                generationFailurePhase: 'citation_validation',
+                citationValidation: 'failed',
+                qualityJudgeInvoked: false,
+                statePersistence: 'not_persisted',
+                stateFingerprint: null,
+            }),
+            validateAnsweredCitations: () => true,
+        });
+
+        assert.equal(callCount, 1);
+        assert.equal(result.requestCount, 1);
+        assert.equal(result.completed, false);
+        assert.equal(result.turns.length, 1);
+        assert.equal(result.turns[0]?.passed, false);
+        assert.equal(result.turns[0]?.responseStatus, 'temporarily_unavailable');
+    });
+
+    it('reports and asserts state before sending turn two, then verifies contextual selection', async () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        assert.equal(typeof module.executeSequentialLiveTurns, 'function');
+        const runTurns = module.executeSequentialLiveTurns as SequentialRunner;
+        const requests: NoorRequest[] = [];
+        const traces = new Map<string, object>();
+        const result = await runTurns({
+            questions: ['What does the Quran say about riba?', 'What is an Islamic alternative?'],
+            expectedFinalStatus: 'answered',
+            credentials: { endpoint: 'https://example.com', firebaseIdToken: 'token', appCheckToken: 'app-check' },
+            paceRequest: async () => undefined,
+            call: async request => {
+                requests.push(request);
+                traces.set(request.requestId, answeredTrace(request.requestId, requests.length === 2));
+                return { answer: ANSWERED(request.requestId), latencyMs: 12 };
+            },
+            readTrace: async requestId => traces.get(requestId) ?? null,
+            validateAnsweredCitations: () => true,
+        });
+
+        assert.equal(result.completed, true);
+        assert.equal(result.requestCount, 2);
+        assert.equal(result.turns[0]?.statePersisted, true);
+        assert.equal(result.turns[1]?.contextSelected, true);
+        assert.equal(result.turns[1]?.contextualQueryProduced, true);
+        assert.equal(result.turns.every(turn => turn.passed), true);
+        assert.equal(requests[1]?.mode, 'chat');
+        assert.equal(requests[1]?.mode === 'chat' ? requests[1].history.length : 0, 2);
     });
 });

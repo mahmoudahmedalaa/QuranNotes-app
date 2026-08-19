@@ -80,6 +80,11 @@ const TRACE_CONVERSATION_STATES = new Set(['validated_subject_and_evidence', 'no
 const TRACE_LEXICAL_STATUSES = new Set(['available', 'unavailable', 'not_configured']);
 const TRACE_GENERATION_STATUSES = new Set([...TRACE_STATUSES, 'not_run']);
 const TRACE_CITATION_VALIDATION = new Set(['passed', 'failed', 'not_run']);
+const TRACE_GENERATION_FAILURE_PHASES = new Set([
+    'not_run', 'none', 'provider', 'structural_validation', 'citation_validation', 'quality_judgement', 'quality_correction',
+]);
+const TRACE_VALIDATION_RESULTS = new Set(['not_run', 'passed_first_attempt', 'passed_after_retry', 'failed']);
+const TRACE_STATE_PERSISTENCE = new Set(['persisted', 'not_persisted', 'not_expected']);
 const MAX_TRACE_EVIDENCE = 8;
 const MAX_TRACE_VARIANTS = 2;
 const MAX_TRACE_DURATION_MS = 120_000;
@@ -104,6 +109,8 @@ function isStageMs(value: unknown): value is NoorSanitizedTrace['stageMs'] {
 
 function isSanitizedTrace(value: unknown): value is NoorSanitizedTrace {
     if (!isRecord(value)
+        || typeof value.requestId !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.requestId)
         || typeof value.case !== 'string' || !TRACE_CASE_PATTERN.test(value.case)
         || typeof value.policy !== 'string' || !TRACE_POLICIES.has(value.policy as NoorPolicyCategory)
         || typeof value.status !== 'string' || !TRACE_STATUSES.has(value.status as NoorAnswer['status'])
@@ -124,6 +131,17 @@ function isSanitizedTrace(value: unknown): value is NoorSanitizedTrace {
         || value.evidenceIds.length > value.evidenceCount
         || typeof value.generationStatus !== 'string' || !TRACE_GENERATION_STATUSES.has(value.generationStatus)
         || typeof value.citationValidation !== 'string' || !TRACE_CITATION_VALIDATION.has(value.citationValidation)
+        || !isBoundedInteger(value.generationAttemptCount, 2)
+        || typeof value.generationFailurePhase !== 'string' || !TRACE_GENERATION_FAILURE_PHASES.has(value.generationFailurePhase)
+        || typeof value.structuralValidationResult !== 'string' || !TRACE_VALIDATION_RESULTS.has(value.structuralValidationResult)
+        || typeof value.citationValidationResult !== 'string' || !TRACE_VALIDATION_RESULTS.has(value.citationValidationResult)
+        || (value.citationValidationFailureSubtype !== null && typeof value.citationValidationFailureSubtype !== 'string')
+        || typeof value.qualityJudgeInvoked !== 'boolean'
+        || typeof value.generationRetryInvoked !== 'boolean'
+        || typeof value.correctionInvoked !== 'boolean'
+        || (value.finalGenerationErrorClass !== null && typeof value.finalGenerationErrorClass !== 'string')
+        || typeof value.statePersistence !== 'string' || !TRACE_STATE_PERSISTENCE.has(value.statePersistence)
+        || (value.stateFingerprint !== null && (typeof value.stateFingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(value.stateFingerprint)))
         || !isStageMs(value.stageMs)
         || typeof value.finalCopy !== 'string'
         || value.finalCopy.length > MAX_TRACE_COPY_CHARACTERS) {

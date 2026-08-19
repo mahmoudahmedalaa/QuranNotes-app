@@ -1,6 +1,10 @@
 import type { NoorRuntimeConfig } from './config';
 import type { EntitlementDecision } from './entitlement';
-import { getGenerationDiagnostics, type NoorGenerationErrorClass } from './generation';
+import {
+    getGenerationDiagnostics,
+    type GenerationDiagnostics,
+    type NoorGenerationErrorClass,
+} from './generation';
 import { selectAnswerableEvidence } from './answerability';
 import type { NoorPolicyCategory } from './policy';
 import {
@@ -57,9 +61,19 @@ export interface NoorHandlerTelemetryEvent {
     durationMs: number;
     retrievalMs: number;
     generationMs: number;
+    generationAttemptCount: number;
+    generationFailurePhase: GenerationDiagnostics['generationFailurePhase'] | 'not_run';
+    structuralValidationResult: GenerationDiagnostics['structuralValidationResult'];
+    citationValidationResult: GenerationDiagnostics['citationValidationResult'];
+    citationValidationFailureSubtype: GenerationDiagnostics['citationValidationFailureSubtype'];
+    qualityJudgeInvoked: boolean;
+    generationRetryInvoked: boolean;
+    correctionInvoked: boolean;
+    finalGenerationErrorClass: NoorGenerationErrorClass;
 }
 
 export interface NoorSanitizedTrace {
+    requestId: string;
     case: string;
     policy: NoorPolicyCategory;
     status: NoorAnswer['status'];
@@ -76,6 +90,17 @@ export interface NoorSanitizedTrace {
     evidenceCount: number;
     generationStatus: NoorAnswer['status'] | 'not_run';
     citationValidation: 'passed' | 'failed' | 'not_run';
+    generationAttemptCount: number;
+    generationFailurePhase: GenerationDiagnostics['generationFailurePhase'] | 'not_run';
+    structuralValidationResult: GenerationDiagnostics['structuralValidationResult'];
+    citationValidationResult: GenerationDiagnostics['citationValidationResult'];
+    citationValidationFailureSubtype: GenerationDiagnostics['citationValidationFailureSubtype'];
+    qualityJudgeInvoked: boolean;
+    generationRetryInvoked: boolean;
+    correctionInvoked: boolean;
+    finalGenerationErrorClass: NoorGenerationErrorClass;
+    statePersistence: 'persisted' | 'not_persisted' | 'not_expected';
+    stateFingerprint: string | null;
     stageMs: {
         policy: number;
         context: number;
@@ -319,6 +344,9 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let evidence: readonly RetrievedEvidence[] = [];
     let generationStatus: NoorSanitizedTrace['generationStatus'] = 'not_run';
     let citationValidation: NoorSanitizedTrace['citationValidation'] = 'not_run';
+    let generationDiagnostics: GenerationDiagnostics | null = null;
+    let statePersistence: NoorSanitizedTrace['statePersistence'] = request.mode === 'chat' ? 'not_persisted' : 'not_expected';
+    let stateFingerprint: string | null = null;
     let traceStatus: NoorAnswer['status'] = 'temporarily_unavailable';
     let citationCount = 0;
     const stageMs: NoorSanitizedTrace['stageMs'] = {
@@ -345,6 +373,15 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             durationMs: duration(startedAt, safeNow(dependencies)),
             retrievalMs,
             generationMs,
+            generationAttemptCount: generationDiagnostics?.generationAttemptCount ?? 0,
+            generationFailurePhase: generationDiagnostics?.generationFailurePhase ?? 'not_run',
+            structuralValidationResult: generationDiagnostics?.structuralValidationResult ?? 'not_run',
+            citationValidationResult: generationDiagnostics?.citationValidationResult ?? 'not_run',
+            citationValidationFailureSubtype: generationDiagnostics?.citationValidationFailureSubtype ?? null,
+            qualityJudgeInvoked: generationDiagnostics?.qualityJudgeInvoked ?? false,
+            generationRetryInvoked: generationDiagnostics?.generationRetryInvoked ?? false,
+            correctionInvoked: generationDiagnostics?.correctionInvoked ?? false,
+            finalGenerationErrorClass: generationDiagnostics?.finalGenerationErrorClass ?? null,
         };
         try {
             Promise.resolve(dependencies.emitTelemetry(event)).catch(() => undefined);
@@ -354,6 +391,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         if (!traceEmitted && dependencies.emitSanitizedTrace) {
             traceEmitted = true;
             const trace: NoorSanitizedTrace = {
+                requestId: request.requestId,
                 case: input.traceCase ?? 'noor-request',
                 policy,
                 status: traceStatus,
@@ -370,6 +408,17 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 evidenceCount: evidence.length,
                 generationStatus,
                 citationValidation,
+                generationAttemptCount: generationDiagnostics?.generationAttemptCount ?? 0,
+                generationFailurePhase: generationDiagnostics?.generationFailurePhase ?? 'not_run',
+                structuralValidationResult: generationDiagnostics?.structuralValidationResult ?? 'not_run',
+                citationValidationResult: generationDiagnostics?.citationValidationResult ?? 'not_run',
+                citationValidationFailureSubtype: generationDiagnostics?.citationValidationFailureSubtype ?? null,
+                qualityJudgeInvoked: generationDiagnostics?.qualityJudgeInvoked ?? false,
+                generationRetryInvoked: generationDiagnostics?.generationRetryInvoked ?? false,
+                correctionInvoked: generationDiagnostics?.correctionInvoked ?? false,
+                finalGenerationErrorClass: generationDiagnostics?.finalGenerationErrorClass ?? null,
+                statePersistence,
+                stateFingerprint,
                 stageMs: { ...stageMs },
                 finalCopy: queryPlan.requiresClarification && policy === 'allowed'
                     ? CLARIFICATION_REQUIRED
@@ -558,7 +607,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             generationMs = duration(generationStartedAt, safeNow(dependencies));
             stageMs.generation = generationMs;
         }
-        const generationDiagnostics = getGenerationDiagnostics(generated);
+        generationDiagnostics = getGenerationDiagnostics(generated);
         const citationStartedAt = safeNow(dependencies);
         let response: NoorAnswer;
         try {
@@ -586,6 +635,8 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             if (nextState && dependencies.writeValidatedConversationState) {
                 try {
                     await dependencies.writeValidatedConversationState({ uid, state: nextState });
+                    statePersistence = 'persisted';
+                    stateFingerprint = nextState.sourceQuestionFingerprint;
                 } catch {
                     // Conversation state is optional context and must never invalidate a grounded answer.
                 }

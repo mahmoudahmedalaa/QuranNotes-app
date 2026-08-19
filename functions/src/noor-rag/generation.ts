@@ -1,7 +1,13 @@
 import { GoogleGenAI } from '@google/genai';
 
 import type { NoorAnswer, NoorRequest } from './generatedContract';
-import { parseAndValidateGeneratedAnswer, validateGeneratedAnswer, type ValidatedGeneratedAnswer } from './citations';
+import {
+    diagnoseGeneratedAnswer,
+    validateGeneratedAnswer,
+    type CitationValidationFailureSubtype,
+    type GeneratedAnswerValidationFailure,
+    type ValidatedGeneratedAnswer,
+} from './citations';
 import { classifyRequestPolicy } from './policy';
 import type { RetrievedEvidence } from './types';
 
@@ -65,6 +71,21 @@ export type NoorGenerationErrorClass =
 export interface GenerationDiagnostics {
     errorClass: NoorGenerationErrorClass;
     attempts: number;
+    generationAttemptCount: number;
+    generationFailurePhase:
+        | 'none'
+        | 'provider'
+        | 'structural_validation'
+        | 'citation_validation'
+        | 'quality_judgement'
+        | 'quality_correction';
+    structuralValidationResult: 'not_run' | 'passed_first_attempt' | 'passed_after_retry' | 'failed';
+    citationValidationResult: 'not_run' | 'passed_first_attempt' | 'passed_after_retry' | 'failed';
+    citationValidationFailureSubtype: CitationValidationFailureSubtype | null;
+    qualityJudgeInvoked: boolean;
+    generationRetryInvoked: boolean;
+    correctionInvoked: boolean;
+    finalGenerationErrorClass: NoorGenerationErrorClass;
 }
 
 const GENERATION_DIAGNOSTICS = new WeakMap<object, GenerationDiagnostics>();
@@ -74,15 +95,23 @@ export function getGenerationDiagnostics(value: unknown): GenerationDiagnostics 
     return GENERATION_DIAGNOSTICS.get(value) ?? null;
 }
 
-const RESPONSE_SCHEMA: Readonly<Record<string, unknown>> = {
-    type: 'object',
-    additionalProperties: false,
-    required: ['answer', 'citationIds'],
-    properties: {
-        answer: { type: 'string' },
-        citationIds: { type: 'array', items: { type: 'string' } },
-    },
-};
+function responseSchema(evidence: readonly RetrievedEvidence[]): Readonly<Record<string, unknown>> {
+    const allowedCitationIds = evidence.map(item => item.promptSourceId);
+    return {
+        type: 'object',
+        additionalProperties: false,
+        required: ['answer', 'citationIds'],
+        properties: {
+            answer: { type: 'string' },
+            citationIds: {
+                type: 'array',
+                minItems: 1,
+                maxItems: allowedCitationIds.length,
+                items: { type: 'string', enum: allowedCitationIds },
+            },
+        },
+    };
+}
 const ANSWER_QUALITY_SCHEMA: Readonly<Record<string, unknown>> = {
     type: 'object',
     additionalProperties: false,
@@ -198,6 +227,35 @@ function correctivePrompt(
     ].join('\n');
 }
 
+function generationRetryPrompt(
+    originalPrompt: string,
+    failure: GeneratedAnswerValidationFailure | { phase: 'structural_validation'; errorClass: 'malformed_json'; citationSubtype: null },
+    evidence: readonly RetrievedEvidence[],
+): string {
+    if (failure.phase === 'citation_validation') {
+        const allowedIds = evidence.map(item => item.promptSourceId).join(', ');
+        const subtypeCorrection: Record<CitationValidationFailureSubtype, string> = {
+            unknown_citation_id: 'Replace every unknown citation ID with an identifier from the allowed list.',
+            malformed_citation: 'Use citation identifiers exactly in the S<number> format shown in the allowed list.',
+            missing_required_citation: 'Include at least one supporting citation ID. If inline markers are used, cite every substantive paragraph and include every marker in citationIds.',
+            unused_citation: 'Make citationIds and any inline citation markers name the same supporting evidence; remove unused IDs.',
+            duplicate_citation: 'List each citation identifier at most once; remove duplicate citation IDs.',
+        };
+        return [
+            originalPrompt,
+            'Your previous citation IDs were invalid.',
+            `Use only these allowed evidence identifiers: ${allowedIds}.`,
+            subtypeCorrection[failure.citationSubtype],
+            'Every cited claim must reference supplied evidence.',
+        ].join('\n');
+    }
+    return [
+        originalPrompt,
+        'Your previous output did not match the required response structure.',
+        'Return exactly the required schema using only the supplied evidence.',
+    ].join('\n');
+}
+
 function answerQualityPrompt(
     request: NoorRequest,
     evidence: readonly RetrievedEvidence[],
@@ -223,7 +281,7 @@ function answerQualityPrompt(
 
 function providerRequest(
     prompt: string,
-    responseJsonSchema: Readonly<Record<string, unknown>> = RESPONSE_SCHEMA,
+    responseJsonSchema: Readonly<Record<string, unknown>>,
     maxOutputTokens = MAX_OUTPUT_TOKENS,
 ): VertexGenerationRequest {
     return {
@@ -276,29 +334,29 @@ function classifyProviderFailure(error: unknown): Exclude<NoorGenerationErrorCla
     return 'provider_permanent_failure';
 }
 
-function validationErrorClass(text: string, evidence: readonly RetrievedEvidence[]): NoorGenerationErrorClass {
-    let value: unknown;
-    try {
-        value = JSON.parse(text) as unknown;
-    } catch {
-        return 'malformed_json';
-    }
-    try {
-        validateGeneratedAnswer(value, evidence);
-        return null;
-    } catch {
-        if (!isRecord(value) || typeof value.answer !== 'string' || value.answer.trim().length === 0) {
-            return 'answer_validation_failure';
-        }
-        const markers = value.answer.match(/\[S\d+\]/g) ?? [];
-        return markers.length === 0 ? 'answer_validation_failure' : 'citation_validation_failure';
+type GeneratedOutputFailure = GeneratedAnswerValidationFailure
+    | { phase: 'structural_validation'; errorClass: 'malformed_json'; citationSubtype: null };
+
+class GeneratedOutputError extends Error {
+    constructor(readonly failure: GeneratedOutputFailure) {
+        super(failure.errorClass);
     }
 }
 
 function parseGeneratedOutput(text: string, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
-    const errorClass = validationErrorClass(text, evidence);
-    if (errorClass !== null) throw new Error(errorClass);
-    return parseAndValidateGeneratedAnswer(text, evidence);
+    let value: unknown;
+    try {
+        value = JSON.parse(text) as unknown;
+    } catch {
+        throw new GeneratedOutputError({
+            phase: 'structural_validation',
+            errorClass: 'malformed_json',
+            citationSubtype: null,
+        });
+    }
+    const failure = diagnoseGeneratedAnswer(value, evidence);
+    if (failure !== null) throw new GeneratedOutputError(failure);
+    return validateGeneratedAnswer(value, evidence);
 }
 
 function parseAnswerQualityJudgement(text: string): AnswerQualityJudgement {
@@ -356,7 +414,7 @@ function genericQualityCritique(judgement: AnswerQualityJudgement): string {
 function answeredResponse(
     requestId: string,
     answer: ValidatedGeneratedAnswer,
-    attempts: number,
+    diagnostics: GenerationDiagnostics,
 ): NoorAnswer {
     const response: NoorAnswer = {
         requestId,
@@ -364,8 +422,31 @@ function answeredResponse(
         status: 'answered',
         citations: answer.citations,
     };
-    GENERATION_DIAGNOSTICS.set(response, { errorClass: null, attempts });
+    GENERATION_DIAGNOSTICS.set(response, diagnostics);
     return response;
+}
+
+function initialDiagnostics(): GenerationDiagnostics {
+    return {
+        errorClass: null,
+        attempts: 0,
+        generationAttemptCount: 0,
+        generationFailurePhase: 'none',
+        structuralValidationResult: 'not_run',
+        citationValidationResult: 'not_run',
+        citationValidationFailureSubtype: null,
+        qualityJudgeInvoked: false,
+        generationRetryInvoked: false,
+        correctionInvoked: false,
+        finalGenerationErrorClass: null,
+    };
+}
+
+function finalDiagnostics(
+    diagnostics: GenerationDiagnostics,
+    errorClass: NoorGenerationErrorClass,
+): GenerationDiagnostics {
+    return { ...diagnostics, errorClass, finalGenerationErrorClass: errorClass };
 }
 
 export function createVertexGenerationProvider(
@@ -391,52 +472,66 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
     if (built.evidence.length === 0) {
         return fixedAnswer(input.request.requestId, 'insufficient_evidence', INSUFFICIENT_EVIDENCE);
     }
-    const request = providerRequest(built.prompt);
+    const schema = responseSchema(built.evidence);
+    let request = providerRequest(built.prompt, schema);
     let providerCalls = 0;
+    const diagnostics = initialDiagnostics();
     let initialAnswer: ValidatedGeneratedAnswer | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
         let text: string;
         try {
             providerCalls += 1;
+            diagnostics.attempts = providerCalls;
+            diagnostics.generationAttemptCount += 1;
             text = await input.provider.generate(request);
         } catch (error: unknown) {
             // Vertex can transiently fail while the request is otherwise valid.
             // Retry once inside the callable deadline; never leak provider details.
             const errorClass = classifyProviderFailure(error);
-            if (errorClass === 'provider_transient_failure' && attempt === 0) continue;
-            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-                errorClass,
-                attempts: providerCalls,
-            });
+            diagnostics.generationFailurePhase = 'provider';
+            if (errorClass === 'provider_transient_failure' && attempt === 0) {
+                diagnostics.generationRetryInvoked = true;
+                continue;
+            }
+            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+                finalDiagnostics(diagnostics, errorClass));
         }
         try {
             initialAnswer = parseGeneratedOutput(text, built.evidence);
+            diagnostics.structuralValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
+            diagnostics.citationValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
             break;
         } catch (error: unknown) {
-            const errorClass = error instanceof Error
-                && (error.message === 'malformed_json'
-                    || error.message === 'citation_validation_failure'
-                    || error.message === 'answer_validation_failure')
-                ? error.message
-                : 'answer_validation_failure';
-            if (attempt === 1) {
-                return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-                    errorClass,
-                    attempts: providerCalls,
-                });
+            const failure: GeneratedOutputFailure = error instanceof GeneratedOutputError
+                ? error.failure
+                : { phase: 'structural_validation', errorClass: 'answer_validation_failure', citationSubtype: null };
+            diagnostics.generationFailurePhase = failure.phase;
+            diagnostics.citationValidationFailureSubtype = failure.citationSubtype;
+            if (failure.phase === 'structural_validation') {
+                diagnostics.structuralValidationResult = 'failed';
+                diagnostics.citationValidationResult = 'not_run';
+            } else {
+                diagnostics.structuralValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
+                diagnostics.citationValidationResult = 'failed';
             }
+            if (attempt === 1) {
+                return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+                    finalDiagnostics(diagnostics, failure.errorClass));
+            }
+            diagnostics.generationRetryInvoked = true;
+            request = providerRequest(generationRetryPrompt(built.prompt, failure, built.evidence), schema);
         }
     }
     if (initialAnswer === null) {
-        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-            errorClass: 'answer_validation_failure',
-            attempts: providerCalls,
-        });
+        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+            finalDiagnostics(diagnostics, 'answer_validation_failure'));
     }
 
     let initialJudgement: AnswerQualityJudgement;
     try {
         providerCalls += 1;
+        diagnostics.attempts = providerCalls;
+        diagnostics.qualityJudgeInvoked = true;
         initialJudgement = parseAnswerQualityJudgement(await input.provider.generate(providerRequest(
             answerQualityPrompt(input.request, built.evidence, initialAnswer),
             ANSWER_QUALITY_SCHEMA,
@@ -446,40 +541,43 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         const errorClass = error instanceof Error && error.message === 'answer_quality_judgement_failure'
             ? 'answer_quality_judgement_failure'
             : classifyProviderFailure(error);
-        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-            errorClass,
-            attempts: providerCalls,
-        });
+        diagnostics.generationFailurePhase = 'quality_judgement';
+        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+            finalDiagnostics(diagnostics, errorClass));
     }
     if (answerQualityPassed(initialJudgement)) {
-        return answeredResponse(input.request.requestId, initialAnswer, providerCalls);
+        diagnostics.attempts = providerCalls;
+        return answeredResponse(input.request.requestId, initialAnswer, finalDiagnostics(diagnostics, null));
     }
 
     let correctedAnswer: ValidatedGeneratedAnswer;
     try {
         providerCalls += 1;
+        diagnostics.attempts = providerCalls;
+        diagnostics.correctionInvoked = true;
         const correctedText = await input.provider.generate(providerRequest(correctivePrompt(
             input.request,
             built.evidence,
             genericQualityCritique(initialJudgement),
-        )));
+        ), schema));
         correctedAnswer = parseGeneratedOutput(correctedText, built.evidence);
     } catch (error: unknown) {
-        const validationClass = error instanceof Error
-            && (error.message === 'malformed_json'
-                || error.message === 'citation_validation_failure'
-                || error.message === 'answer_validation_failure')
-            ? error.message
-            : null;
-        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-            errorClass: validationClass ?? classifyProviderFailure(error),
-            attempts: providerCalls,
-        });
+        diagnostics.generationFailurePhase = 'quality_correction';
+        if (error instanceof GeneratedOutputError) {
+            diagnostics.citationValidationFailureSubtype = error.failure.citationSubtype;
+            if (error.failure.phase === 'structural_validation') diagnostics.structuralValidationResult = 'failed';
+            else diagnostics.citationValidationResult = 'failed';
+            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+                finalDiagnostics(diagnostics, error.failure.errorClass));
+        }
+        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+            finalDiagnostics(diagnostics, classifyProviderFailure(error)));
     }
 
     let correctedJudgement: AnswerQualityJudgement;
     try {
         providerCalls += 1;
+        diagnostics.attempts = providerCalls;
         correctedJudgement = parseAnswerQualityJudgement(await input.provider.generate(providerRequest(
             answerQualityPrompt(input.request, built.evidence, correctedAnswer),
             ANSWER_QUALITY_SCHEMA,
@@ -489,16 +587,15 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         const errorClass = error instanceof Error && error.message === 'answer_quality_judgement_failure'
             ? 'answer_quality_judgement_failure'
             : classifyProviderFailure(error);
-        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-            errorClass,
-            attempts: providerCalls,
-        });
+        diagnostics.generationFailurePhase = 'quality_judgement';
+        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+            finalDiagnostics(diagnostics, errorClass));
     }
     if (!answerQualityPassed(correctedJudgement)) {
-        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
-            errorClass: 'answer_quality_failure',
-            attempts: providerCalls,
-        });
+        diagnostics.generationFailurePhase = 'quality_correction';
+        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+            finalDiagnostics(diagnostics, 'answer_quality_failure'));
     }
-    return answeredResponse(input.request.requestId, correctedAnswer, providerCalls);
+    diagnostics.attempts = providerCalls;
+    return answeredResponse(input.request.requestId, correctedAnswer, finalDiagnostics(diagnostics, null));
 }

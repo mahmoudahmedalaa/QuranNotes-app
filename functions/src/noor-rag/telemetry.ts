@@ -52,6 +52,16 @@ function safeTraceCase(value: string): string {
     return /^[a-z0-9][a-z0-9_-]{0,63}$/u.test(value) ? value : 'noor-request';
 }
 
+function safeRequestId(value: string): string {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
+        ? value
+        : '00000000-0000-4000-8000-000000000000';
+}
+
+function safeStateFingerprint(value: string | null): string | null {
+    return typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value) ? value : null;
+}
+
 function safeTraceFinalCopy(value: string): string {
     return [
         'Answer available with validated tafsir citations.',
@@ -67,6 +77,7 @@ function safeTraceFinalCopy(value: string): string {
 
 function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
     return {
+        requestId: safeRequestId(trace.requestId),
         case: safeTraceCase(trace.case),
         policy: trace.policy,
         status: trace.status,
@@ -85,6 +96,17 @@ function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
         evidenceCount: boundedCount(trace.evidenceCount, 8),
         generationStatus: trace.generationStatus,
         citationValidation: trace.citationValidation,
+        generationAttemptCount: boundedCount(trace.generationAttemptCount, 2),
+        generationFailurePhase: trace.generationFailurePhase,
+        structuralValidationResult: trace.structuralValidationResult,
+        citationValidationResult: trace.citationValidationResult,
+        citationValidationFailureSubtype: trace.citationValidationFailureSubtype,
+        qualityJudgeInvoked: trace.qualityJudgeInvoked === true,
+        generationRetryInvoked: trace.generationRetryInvoked === true,
+        correctionInvoked: trace.correctionInvoked === true,
+        finalGenerationErrorClass: trace.finalGenerationErrorClass,
+        statePersistence: trace.statePersistence,
+        stateFingerprint: safeStateFingerprint(trace.stateFingerprint),
         stageMs: {
             policy: boundedStageDuration(trace.stageMs.policy),
             context: boundedStageDuration(trace.stageMs.context),
@@ -113,6 +135,7 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
         ...input.event,
         retrievalMs: boundedStageDuration(input.event.retrievalMs),
         generationMs: boundedStageDuration(input.event.generationMs),
+        generationAttemptCount: boundedCount(input.event.generationAttemptCount, 2),
         pseudonym,
         pseudonymKeyVersion: input.pseudonymKeyVersion,
         serverTraceId: input.traceId,

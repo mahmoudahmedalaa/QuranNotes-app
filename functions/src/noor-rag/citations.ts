@@ -12,6 +12,18 @@ export interface ValidatedGeneratedAnswer {
     citations: NoorCitation[];
 }
 
+export type CitationValidationFailureSubtype =
+    | 'unknown_citation_id'
+    | 'malformed_citation'
+    | 'missing_required_citation'
+    | 'unused_citation'
+    | 'duplicate_citation';
+
+export type GeneratedAnswerValidationFailure = Readonly<
+    | { phase: 'structural_validation'; errorClass: 'answer_validation_failure'; citationSubtype: null }
+    | { phase: 'citation_validation'; errorClass: 'citation_validation_failure'; citationSubtype: CitationValidationFailureSubtype }
+>;
+
 function invalidGeneratedAnswer(): never {
     throw new Error('Invalid generated answer');
 }
@@ -34,7 +46,10 @@ function citationFor(evidence: RetrievedEvidence): NoorCitation {
     };
 }
 
-export function validateGeneratedAnswer(value: unknown, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
+export function diagnoseGeneratedAnswer(
+    value: unknown,
+    evidence: readonly RetrievedEvidence[],
+): GeneratedAnswerValidationFailure | null {
     if (!isRecord(value)
         || Object.keys(value).length !== 2
         || !Object.prototype.hasOwnProperty.call(value, 'answer')
@@ -44,19 +59,27 @@ export function validateGeneratedAnswer(value: unknown, evidence: readonly Retri
         || value.answer.length > MAX_ANSWER_CHARACTERS
         || !Array.isArray(value.citationIds)
         || !value.citationIds.every(id => typeof id === 'string')) {
-        return invalidGeneratedAnswer();
+        return { phase: 'structural_validation', errorClass: 'answer_validation_failure', citationSubtype: null };
     }
 
     const citationIds: string[] = value.citationIds;
-    if (new Set(citationIds).size !== citationIds.length
-        || citationIds.some(id => !SOURCE_ID.test(id))) return invalidGeneratedAnswer();
+    if (new Set(citationIds).size !== citationIds.length) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'duplicate_citation' };
+    }
+    if (citationIds.some(id => !SOURCE_ID.test(id))) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'malformed_citation' };
+    }
 
     const byId = new Map(evidence.map(item => [item.promptSourceId, item]));
-    if (byId.size !== evidence.length
-        || evidence.some(item => !SOURCE_ID.test(item.promptSourceId))
-        || citationIds.some(id => !byId.has(id))) return invalidGeneratedAnswer();
-
-    if (citationIds.length === 0) return invalidGeneratedAnswer();
+    if (byId.size !== evidence.length || evidence.some(item => !SOURCE_ID.test(item.promptSourceId))) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'malformed_citation' };
+    }
+    if (citationIds.some(id => !byId.has(id))) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unknown_citation_id' };
+    }
+    if (citationIds.length === 0) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'missing_required_citation' };
+    }
 
     const markers = value.answer.match(CITATION_MARKER) ?? [];
     const usedIds = markers.flatMap(marker => marker
@@ -64,20 +87,37 @@ export function validateGeneratedAnswer(value: unknown, evidence: readonly Retri
         .split(',')
         .map(id => id.trim()));
     if (markers.length > 0) {
-        if (usedIds.some(id => !byId.has(id))) return invalidGeneratedAnswer();
+        if (usedIds.some(id => !SOURCE_ID.test(id))) {
+            return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'malformed_citation' };
+        }
+        if (usedIds.some(id => !byId.has(id))) {
+            return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unknown_citation_id' };
+        }
         const uniqueUsedIds = [...new Set(usedIds)];
-        if (uniqueUsedIds.length !== citationIds.length
-            || uniqueUsedIds.some(id => !citationIds.includes(id))
-            || citationIds.some(id => !uniqueUsedIds.includes(id))) {
-            return invalidGeneratedAnswer();
+        if (citationIds.some(id => !uniqueUsedIds.includes(id))) {
+            return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unused_citation' };
+        }
+        if (uniqueUsedIds.some(id => !citationIds.includes(id))) {
+            return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'missing_required_citation' };
         }
 
         const paragraphs = value.answer.split(/\n\s*\n/).map(paragraph => paragraph.trim()).filter(Boolean);
-        if (paragraphs.some(paragraph => !PARAGRAPH_CITATION_MARKER.test(paragraph))) return invalidGeneratedAnswer();
+        if (paragraphs.some(paragraph => !PARAGRAPH_CITATION_MARKER.test(paragraph))) {
+            return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'missing_required_citation' };
+        }
     }
+    return null;
+}
+
+export function validateGeneratedAnswer(value: unknown, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
+    if (diagnoseGeneratedAnswer(value, evidence) !== null) return invalidGeneratedAnswer();
+
+    const generated = value as { answer: string; citationIds: string[] };
+    const citationIds = generated.citationIds;
+    const byId = new Map(evidence.map(item => [item.promptSourceId, item]));
 
     return {
-        answer: value.answer.trim(),
+        answer: generated.answer.trim(),
         citationIds: [...citationIds],
         citations: citationIds.map(id => citationFor(byId.get(id) as RetrievedEvidence)),
     };

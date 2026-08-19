@@ -155,6 +155,7 @@ describe('riba follow-up sanitized trace', () => {
 
         const trace = traces.at(-1) as NoorSanitizedTrace;
         assert.deepEqual(trace, {
+            requestId: followUpQuestion.requestId,
             case: 'riba-followup',
             policy: 'allowed',
             status: 'answered',
@@ -171,9 +172,21 @@ describe('riba follow-up sanitized trace', () => {
             evidenceCount: 1,
             generationStatus: 'answered',
             citationValidation: 'passed',
+            generationAttemptCount: 0,
+            generationFailurePhase: 'not_run',
+            structuralValidationResult: 'not_run',
+            citationValidationResult: 'not_run',
+            citationValidationFailureSubtype: null,
+            qualityJudgeInvoked: false,
+            generationRetryInvoked: false,
+            correctionInvoked: false,
+            finalGenerationErrorClass: null,
+            statePersistence: 'persisted',
+            stateFingerprint: trace.stateFingerprint,
             stageMs: { policy: 0, context: 0, retrieval: 0, generation: 0, citationValidation: 0 },
             finalCopy: 'Answer available with validated tafsir citations.',
         });
+        assert.match(trace.stateFingerprint ?? '', /^[a-f0-9]{64}$/);
 
         const serialized = JSON.stringify(trace);
         for (const forbidden of [

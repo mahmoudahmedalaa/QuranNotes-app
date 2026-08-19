@@ -467,7 +467,17 @@ describe('handleNoorRequest', () => {
         });
         const citationFailure = harness({ generateGroundedAnswer: async () => generated, emitSanitizedTrace: trace => { traces.push(trace); } });
         assert.equal((await run(citationFailure)).status, 'temporarily_unavailable');
-        assert.equal(traces.at(-1)?.citationValidation, 'failed');
+        const trace = traces.at(-1);
+        assert.equal(trace?.citationValidation, 'failed');
+        assert.equal(trace?.generationAttemptCount, 2);
+        assert.equal(trace?.generationFailurePhase, 'citation_validation');
+        assert.equal(trace?.structuralValidationResult, 'passed_after_retry');
+        assert.equal(trace?.citationValidationResult, 'failed');
+        assert.equal(trace?.citationValidationFailureSubtype, 'unknown_citation_id');
+        assert.equal(trace?.qualityJudgeInvoked, false);
+        assert.equal(trace?.correctionInvoked, false);
+        assert.equal(trace?.finalGenerationErrorClass, 'citation_validation_failure');
+        assert.doesNotMatch(JSON.stringify(trace), /Grounded\. \[S9\]/);
     });
 
     it('returns claim replay without policy/retrieval/model and fails closed on replay ID mismatch', async () => {
@@ -485,8 +495,11 @@ describe('handleNoorRequest', () => {
         assert.equal((await run(value)).status, 'answered');
         assert.equal(value.telemetry.length, 1);
         assert.deepEqual(Object.keys(value.telemetry[0]!).sort(), [
-            'citationCount', 'corpusVersion', 'durationMs', 'entitlementClass', 'errorClass',
-            'generationModel', 'generationMs', 'mode', 'outcome', 'promptVersion', 'requestId', 'retrievalMs', 'retrievedChunkIds',
+            'citationCount', 'citationValidationFailureSubtype', 'citationValidationResult', 'corpusVersion',
+            'correctionInvoked', 'durationMs', 'entitlementClass', 'errorClass', 'finalGenerationErrorClass',
+            'generationAttemptCount', 'generationFailurePhase', 'generationModel', 'generationMs',
+            'generationRetryInvoked', 'mode', 'outcome', 'promptVersion', 'qualityJudgeInvoked',
+            'requestId', 'retrievalMs', 'retrievedChunkIds', 'structuralValidationResult',
         ]);
         const serialized = JSON.stringify(value.telemetry[0]);
         assert.doesNotMatch(serialized, /sensitive|example\.com|Grounded answer|source|provider/i);
@@ -510,7 +523,7 @@ describe('handleNoorRequest', () => {
         const cases = [
             { results: ['not-json', 'still-not-json'], status: 'temporarily_unavailable', errorClass: 'malformed_json' },
             { results: ['{"answer":"Grounded. [S9]","citationIds":["S9"]}', '{"answer":"Grounded. [S9]","citationIds":["S9"]}'], status: 'temporarily_unavailable', errorClass: 'citation_validation_failure' },
-            { results: ['{"answer":"Uncited answer","citationIds":[]}', '{"answer":"Uncited answer","citationIds":[]}'], status: 'temporarily_unavailable', errorClass: 'answer_validation_failure' },
+            { results: ['{"answer":"Incomplete answer"}', '{"answer":"Incomplete answer"}'], status: 'temporarily_unavailable', errorClass: 'answer_validation_failure' },
             { results: [Object.assign(new Error('DEADLINE_EXCEEDED provider-secret'), { code: 'DEADLINE_EXCEEDED' })], status: 'temporarily_unavailable', errorClass: 'provider_timeout' },
             { results: [Object.assign(new Error('temporary upstream failure'), { status: 503 }), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}', QUALITY_PASS], status: 'answered', errorClass: null },
         ] as const;

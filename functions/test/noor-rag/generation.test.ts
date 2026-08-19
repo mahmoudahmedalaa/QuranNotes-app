@@ -294,12 +294,86 @@ describe('Noor grounded generation', () => {
     });
 
     it('retries invalid output once with identical evidence and then succeeds', async () => {
-        const provider = new SequenceProvider(['{"answer":"uncited","citationIds":[]}', '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}', QUALITY_PASS]);
+        const provider = new SequenceProvider(['{"answer":"incomplete"}', '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}', QUALITY_PASS]);
         const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
         assert.equal(answer.status, 'answered');
         assert.equal(answer.citations.length, 1);
         assert.equal(provider.requests.length, 3);
-        assert.deepEqual(provider.requests[0], provider.requests[1]);
+        assert.match(provider.requests[1]?.contents ?? '', /previous output did not match the required response structure/i);
+        assert.match(provider.requests[1]?.contents ?? '', /return exactly the required schema using only the supplied evidence/i);
+        assert.deepEqual(provider.requests[0]?.config.responseJsonSchema, provider.requests[1]?.config.responseJsonSchema);
+    });
+
+    it('derives the structured citation enum from only the evidence selected for this request', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Grounded answer. [S2]","citationIds":["S2"]}',
+            QUALITY_PASS,
+        ]);
+
+        const answer = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: [evidence('S1', 'first'), evidence('S2', 'second'), evidence('S3', 'too large')],
+            maxEvidenceCharacters: 'firstsecond'.length,
+            provider,
+        });
+
+        assert.equal(answer.status, 'answered');
+        const schema = provider.requests[0]?.config.responseJsonSchema as {
+            properties?: { citationIds?: { minItems?: number; maxItems?: number; items?: { enum?: string[] } } };
+        };
+        assert.deepEqual(schema.properties?.citationIds?.items?.enum, ['S1', 'S2']);
+        assert.equal(schema.properties?.citationIds?.minItems, 1);
+        assert.equal(schema.properties?.citationIds?.maxItems, 2);
+        assert.equal(provider.requests.length, 2);
+    });
+
+    it('retries an unknown citation once with the exact dynamically allowed IDs', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Grounded answer. [S9]","citationIds":["S9"]}',
+            '{"answer":"Grounded answer. [S1, S2]","citationIds":["S1","S2"]}',
+            QUALITY_PASS,
+        ]);
+
+        const answer = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 3);
+        assert.match(provider.requests[1]?.contents ?? '', /previous citation IDs were invalid/i);
+        assert.match(provider.requests[1]?.contents ?? '', /only these allowed evidence identifiers:\s*S1, S2/i);
+        assert.doesNotMatch(provider.requests[1]?.contents ?? '', /S9/);
+    });
+
+    it('gives subtype-specific generic correction for duplicate citation IDs', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Grounded answer. [S1]","citationIds":["S1","S1"]}',
+            '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
+        ]);
+
+        const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 3);
+        assert.match(provider.requests[1]?.contents ?? '', /list each citation identifier at most once|remove duplicate citation IDs/i);
+        assert.match(provider.requests[1]?.contents ?? '', /only these allowed evidence identifiers:\s*S1, S2/i);
+    });
+
+    it('accepts valid grouped citations on the first attempt without generation retry', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"One supported claim. [S1, S2]","citationIds":["S1","S2"]}',
+            QUALITY_PASS,
+        ]);
+
+        const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(answer.citations.length, 2);
+        assert.equal(provider.requests.length, 2);
     });
 
     it('retries one transient provider failure before giving up', async () => {

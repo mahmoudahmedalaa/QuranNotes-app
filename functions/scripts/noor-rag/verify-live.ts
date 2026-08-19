@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { applicationDefault, deleteApp, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 import type { NoorAnswer, NoorRequest } from '../../src/noor-rag/types';
 import { parseNoorAnswer } from '../../src/noor-rag/validation';
@@ -15,6 +17,7 @@ import {
     type GoldenManifest,
 } from './golden';
 import { readCorpusArtifacts } from './evaluate-golden';
+import { LOCKED_PROJECT } from './verify-index';
 
 interface LiveCitation {
     chunkId: string;
@@ -39,6 +42,52 @@ interface LiveCaseResult {
     citations: readonly LiveCitation[];
     latencyMs: number;
     errorClass: string | null;
+    turns: readonly LiveTurnResult[];
+}
+
+interface LiveTurnTrace {
+    requestId: string;
+    generationFailurePhase: string;
+    citationValidation: string;
+    qualityJudgeInvoked: boolean;
+    statePersistence: string;
+    stateFingerprint: string | null;
+    conversationState: string;
+    contextSelected: boolean;
+    queryVariantKinds: readonly string[];
+}
+
+interface LiveTurnResult {
+    turnNumber: number;
+    requestId: string;
+    question: string;
+    responseStatus: NoorAnswer['status'];
+    generationFailurePhase: string;
+    citationValidation: string;
+    qualityJudgeInvoked: boolean;
+    stateExpected: boolean;
+    stateFound: boolean;
+    statePersisted: boolean;
+    stateFingerprint: string | null;
+    contextSelected: boolean;
+    contextualQueryProduced: boolean;
+    passed: boolean;
+    latencyMs: number;
+}
+
+interface SequentialLiveTurnsInput {
+    questions: readonly string[];
+    expectedFinalStatus: NoorAnswer['status'];
+    call(request: NoorRequest): Promise<{ answer: NoorAnswer; latencyMs: number }>;
+    readTrace(requestId: string): Promise<unknown>;
+    validateAnsweredCitations(answer: NoorAnswer): boolean;
+}
+
+interface SequentialLiveTurnsResult {
+    requestCount: number;
+    completed: boolean;
+    turns: LiveTurnResult[];
+    finalAnswer: NoorAnswer | null;
 }
 
 interface LiveVerificationReport {
@@ -130,6 +179,93 @@ export function boundedLiveHistoryAnswer(answer: string): string {
     return [...answer].slice(0, MAX_HISTORY_ANSWER_CHARACTERS).join('');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | null {
+    if (!isRecord(value)
+        || value.requestId !== requestId
+        || typeof value.generationFailurePhase !== 'string'
+        || typeof value.citationValidation !== 'string'
+        || typeof value.qualityJudgeInvoked !== 'boolean'
+        || typeof value.statePersistence !== 'string'
+        || (value.stateFingerprint !== null && typeof value.stateFingerprint !== 'string')
+        || typeof value.conversationState !== 'string'
+        || typeof value.contextSelected !== 'boolean'
+        || !Array.isArray(value.queryVariantKinds)
+        || !value.queryVariantKinds.every(kind => typeof kind === 'string')) {
+        return null;
+    }
+    return {
+        requestId,
+        generationFailurePhase: value.generationFailurePhase,
+        citationValidation: value.citationValidation,
+        qualityJudgeInvoked: value.qualityJudgeInvoked,
+        statePersistence: value.statePersistence,
+        stateFingerprint: value.stateFingerprint,
+        conversationState: value.conversationState,
+        contextSelected: value.contextSelected,
+        queryVariantKinds: value.queryVariantKinds,
+    };
+}
+
+export async function executeSequentialLiveTurns(
+    input: SequentialLiveTurnsInput,
+): Promise<SequentialLiveTurnsResult> {
+    const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    const turns: LiveTurnResult[] = [];
+    let finalAnswer: NoorAnswer | null = null;
+    for (let index = 0; index < input.questions.length; index += 1) {
+        const question = input.questions[index]!;
+        const request: NoorRequest = { mode: 'chat', requestId: randomUUID(), question, history: [...history] };
+        const called = await input.call(request);
+        finalAnswer = called.answer;
+        const trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
+        const expectedStatus = index < input.questions.length - 1 ? 'answered' : input.expectedFinalStatus;
+        const stateExpected = expectedStatus === 'answered';
+        const stateFound = trace?.conversationState === 'validated_subject_and_evidence';
+        const statePersisted = trace?.statePersistence === 'persisted';
+        const followUpExpected = index > 0 && expectedStatus === 'answered';
+        const contextualQueryProduced = trace?.queryVariantKinds.includes('context_enriched') === true;
+        const passed = called.answer.status === expectedStatus
+            && trace !== null
+            && (expectedStatus !== 'answered' || (
+                called.answer.citations.length > 0
+                && input.validateAnsweredCitations(called.answer)
+                && trace.citationValidation === 'passed'
+                && trace.qualityJudgeInvoked
+                && statePersisted
+            ))
+            && (!followUpExpected || (
+                trace.conversationState === 'validated_subject_and_evidence'
+                && trace.contextSelected
+                && contextualQueryProduced
+            ));
+        turns.push({
+            turnNumber: index + 1,
+            requestId: request.requestId,
+            question,
+            responseStatus: called.answer.status,
+            generationFailurePhase: trace?.generationFailurePhase ?? 'trace_unavailable',
+            citationValidation: trace?.citationValidation ?? 'trace_unavailable',
+            qualityJudgeInvoked: trace?.qualityJudgeInvoked ?? false,
+            stateExpected,
+            stateFound,
+            statePersisted,
+            stateFingerprint: trace?.stateFingerprint ?? null,
+            contextSelected: trace?.contextSelected ?? false,
+            contextualQueryProduced,
+            passed,
+            latencyMs: called.latencyMs,
+        });
+        if (!passed) return { requestCount: turns.length, completed: false, turns, finalAnswer };
+        history.push({ role: 'user', content: question });
+        history.push({ role: 'assistant', content: boundedLiveHistoryAnswer(called.answer.answer) });
+    }
+    return { requestCount: turns.length, completed: true, turns, finalAnswer };
+}
+
 function answerFromResponse(status: number, body: unknown, expectedRequestId: string): NoorAnswer {
     if (status < 200 || status >= 300 || typeof body !== 'object' || body === null || Array.isArray(body)
         || !Object.prototype.hasOwnProperty.call(body, 'result')) {
@@ -168,6 +304,21 @@ function expectedChunkIds(goldenCase: GoldenCase): string[] {
     return goldenCase.expectedEvidence.flatMap(evidence => [...evidence.chunkIds]);
 }
 
+function liveCitationsResolve(
+    citations: readonly LiveCitation[],
+    corpusVersion: string,
+    artifacts: ReturnType<typeof readCorpusArtifacts>,
+): boolean {
+    const chunksById = new Map(artifacts.chunks.map(chunk => [chunk.chunkId, chunk]));
+    return citations.every(citation => {
+        const chunk = chunksById.get(citation.chunkId);
+        return chunk !== undefined
+            && chunk.canonicalUnitId === citation.canonicalUnitId
+            && chunk.source === citation.source
+            && corpusVersion === citation.corpusVersion;
+    });
+}
+
 export function expectedCitationEvidenceSatisfied(
     goldenCase: Pick<GoldenCase, 'exact' | 'expectedEvidence'>,
     citations: readonly Pick<LiveCitation, 'chunkId' | 'canonicalUnitId' | 'source'>[],
@@ -198,14 +349,7 @@ function validateResult(
         chunkId,
         citations.find(citation => citation.chunkId === chunkId)?.rank ?? null,
     ]));
-    const chunksById = new Map(artifacts.chunks.map(chunk => [chunk.chunkId, chunk]));
-    const citationsResolve = citations.every(citation => {
-        const chunk = chunksById.get(citation.chunkId);
-        return chunk !== undefined
-            && chunk.canonicalUnitId === citation.canonicalUnitId
-            && chunk.source === citation.source
-            && corpusVersion === citation.corpusVersion;
-    });
+    const citationsResolve = liveCitationsResolve(citations, corpusVersion, artifacts);
     const forbiddenChunkAbsent = goldenCase.forbiddenChunkIds.every(chunkId => !actualChunkIds.has(chunkId));
     const forbiddenStatus = !goldenCase.forbiddenStatuses.some(status => status === answer.status);
     const passed = answer.status === goldenCase.expectedStatus
@@ -228,10 +372,12 @@ async function runCase(
     corpusVersion: string,
     artifacts: ReturnType<typeof readCorpusArtifacts>,
     paceRequest: () => Promise<void>,
+    readTrace: (requestId: string) => Promise<unknown>,
 ): Promise<LiveCaseResult> {
     const startedAt = Date.now();
     let answer: NoorAnswer;
     let requestCount = 0;
+    let turns: LiveTurnResult[] = [];
     try {
         if (goldenCase.exact) {
             const request = {
@@ -241,17 +387,43 @@ async function runCase(
                 surah: goldenCase.exact.surah,
                 verse: goldenCase.exact.verse,
             };
-            answer = (await callNoor(request, credentials, paceRequest)).answer;
+            const called = await callNoor(request, credentials, paceRequest);
+            answer = called.answer;
             requestCount = 1;
+            const trace = parseLiveTurnTrace(await readTrace(request.requestId), request.requestId);
+            turns = [{
+                turnNumber: 1,
+                requestId: request.requestId,
+                question: `${goldenCase.exact.source}:${goldenCase.exact.surah}:${goldenCase.exact.verse}`,
+                responseStatus: answer.status,
+                generationFailurePhase: trace?.generationFailurePhase ?? 'trace_unavailable',
+                citationValidation: trace?.citationValidation ?? 'trace_unavailable',
+                qualityJudgeInvoked: trace?.qualityJudgeInvoked ?? false,
+                stateExpected: false,
+                stateFound: false,
+                statePersisted: false,
+                stateFingerprint: null,
+                contextSelected: trace?.contextSelected ?? false,
+                contextualQueryProduced: false,
+                passed: trace !== null
+                    && answer.status === goldenCase.expectedStatus
+                    && (answer.status !== 'answered' || (trace.citationValidation === 'passed' && trace.qualityJudgeInvoked)),
+                latencyMs: called.latencyMs,
+            }];
         } else {
-            const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-            for (const question of goldenCase.turns) {
-                const request = { mode: 'chat' as const, requestId: randomUUID(), question, history };
-                answer = (await callNoor(request, credentials, paceRequest)).answer;
-                requestCount += 1;
-                history.push({ role: 'user', content: question });
-                history.push({ role: 'assistant', content: boundedLiveHistoryAnswer(answer.answer) });
-            }
+            const executed = await executeSequentialLiveTurns({
+                questions: goldenCase.turns,
+                expectedFinalStatus: goldenCase.expectedStatus,
+                call: request => callNoor(request, credentials, paceRequest),
+                readTrace,
+                validateAnsweredCitations: current => liveCitationsResolve(
+                    citationSnapshot(current), corpusVersion, artifacts,
+                ),
+            });
+            requestCount = executed.requestCount;
+            turns = executed.turns;
+            if (executed.finalAnswer === null) throw new Error('malformed_response');
+            answer = executed.finalAnswer;
         }
     } catch (error: unknown) {
         return {
@@ -268,6 +440,7 @@ async function runCase(
             citations: [],
             latencyMs: Math.max(0, Date.now() - startedAt),
             errorClass: classifyLiveTransportError(error),
+            turns,
         };
     }
     const finalAnswer = answer!;
@@ -280,7 +453,7 @@ async function runCase(
         requestCount,
         expectedStatus: goldenCase.expectedStatus,
         actualStatus: finalAnswer.status,
-        passed: validation.passed,
+        passed: validation.passed && turns.length > 0 && turns.every(turn => turn.passed),
         activeCorpusVersion,
         retrievedSourceIds: [...new Set(citations.map(citation => citation.source))],
         retrievedUnitIds: [...new Set(citations.map(citation => citation.canonicalUnitId))],
@@ -288,7 +461,22 @@ async function runCase(
         rankingPositions: validation.rankingPositions,
         citations,
         latencyMs: Math.max(0, Date.now() - startedAt),
-        errorClass: validation.errorClass,
+        errorClass: validation.passed && turns.length > 0 && turns.every(turn => turn.passed)
+            ? null
+            : validation.errorClass ?? 'turn_validation_failure',
+        turns,
+    };
+}
+
+function createLiveTraceReader(firestore: ReturnType<typeof getFirestore>): (requestId: string) => Promise<unknown> {
+    return async requestId => {
+        const snapshot = await firestore.collection('noorTelemetry')
+            .where('sanitizedTrace.requestId', '==', requestId)
+            .limit(2)
+            .get();
+        if (snapshot.size !== 1) return null;
+        const data = snapshot.docs[0]?.data();
+        return isRecord(data) ? data.sanitizedTrace ?? null : null;
     };
 }
 
@@ -313,10 +501,18 @@ async function main(): Promise<void> {
         return;
     }
     const artifacts = readCorpusArtifacts(artifactsPath);
+    const credential = applicationDefault();
+    await credential.getAccessToken();
+    const app = initializeApp({ credential, projectId: LOCKED_PROJECT }, `noor-live-verify-${Date.now()}`);
     const results: LiveCaseResult[] = [];
-    const paceRequest = createLiveRequestPacer();
-    for (const id of LIVE_CASE_IDS) {
-        results.push(await runCase(caseById(manifest, id), credentials, version, artifacts, paceRequest));
+    try {
+        const readTrace = createLiveTraceReader(getFirestore(app));
+        const paceRequest = createLiveRequestPacer();
+        for (const id of LIVE_CASE_IDS) {
+            results.push(await runCase(caseById(manifest, id), credentials, version, artifacts, paceRequest, readTrace));
+        }
+    } finally {
+        await deleteApp(app);
     }
     const failedCaseIds = results.filter(result => !result.passed).map(result => result.id);
     const report: LiveVerificationReport = {
