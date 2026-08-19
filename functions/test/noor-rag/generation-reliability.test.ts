@@ -11,6 +11,14 @@ import type { NoorRequest, RetrievedEvidence } from '../../src/noor-rag/types';
 
 const REQUEST_ID = '6ba7b810-9dad-41d1-80b4-00c04fd430c8';
 const REQUEST: NoorRequest = { mode: 'chat', requestId: REQUEST_ID, question: 'Explain patience', history: [] };
+const QUALITY_PASS = JSON.stringify({
+    grounded: true,
+    answersQuestion: true,
+    preservesMaterialQualifications: true,
+    materiallyMisleading: false,
+    clear: true,
+    citationConsistent: true,
+});
 
 function evidence(id = 'S1'): RetrievedEvidence {
     return {
@@ -48,11 +56,11 @@ describe('Noor generation reliability diagnostics', () => {
     });
 
     it('classifies a transient provider failure while preserving a grounded success', async () => {
-        const provider = new SequenceProvider([providerError('temporary upstream failure', { status: 503 }), '{"answer":"Grounded. [S1]","citationIds":["S1"]}']);
+        const provider = new SequenceProvider([providerError('temporary upstream failure', { status: 503 }), '{"answer":"Grounded. [S1]","citationIds":["S1"]}', QUALITY_PASS]);
         const answer = await generateGroundedAnswer(input(provider));
         assert.equal(answer.status, 'answered');
         assert.equal(getGenerationDiagnostics(answer)?.errorClass, null);
-        assert.equal(provider.requests.length, 2);
+        assert.equal(provider.requests.length, 3);
     });
 
     it('classifies malformed JSON with a safe unavailable answer', async () => {
@@ -109,23 +117,26 @@ describe('Noor generation reliability diagnostics', () => {
             const provider = new SequenceProvider([
                 providerError(`transient ${status}`, { status }),
                 '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+                QUALITY_PASS,
             ]);
             const answer = await generateGroundedAnswer(input(provider));
             assert.equal(answer.status, 'answered');
-            assert.equal(provider.requests.length, 2);
+            assert.equal(provider.requests.length, 3);
         }
         const timeoutMessage = new SequenceProvider([
             providerError('timeout wording but retryable status', { status: 500 }),
             '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
         ]);
         assert.equal((await generateGroundedAnswer(input(timeoutMessage))).status, 'answered');
-        assert.equal(timeoutMessage.requests.length, 2);
+        assert.equal(timeoutMessage.requests.length, 3);
         const nearDeadlineCode = new SequenceProvider([
             providerError('near deadline code', { status: 500, code: 'NOT_DEADLINE_EXCEEDED' }),
             '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
         ]);
         assert.equal((await generateGroundedAnswer(input(nearDeadlineCode))).status, 'answered');
-        assert.equal(nearDeadlineCode.requests.length, 2);
+        assert.equal(nearDeadlineCode.requests.length, 3);
     });
 
     it('treats numeric 408 and 504 and timeout names as non-retryable timeouts', async () => {

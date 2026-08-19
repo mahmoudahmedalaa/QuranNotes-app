@@ -31,6 +31,18 @@ describe('Noor external evaluation cases', () => {
         assert.ok(manifest.cases.some(item => item.family === 'structural-follow-up'));
         assert.ok(manifest.cases.some(item => item.family === 'paraphrase-and-language-variant'));
         assert.ok(manifest.cases.some(item => item.family.startsWith('safety-control-')));
+        for (const id of [
+            'regression-noah',
+            'regression-riba',
+            'regression-riba-follow-up',
+            'regression-al-baqarah-significance',
+            'regression-football',
+            'regression-wudu-ambiguity',
+            'regression-exact-verse',
+            'regression-policy-refusal',
+        ]) {
+            assert.ok(manifest.cases.some(item => item.id === id), `missing ${id}`);
+        }
         assert.equal(Object.keys(buildNoorEvaluationExpectations(manifest)).length, manifest.cases.length);
     });
 

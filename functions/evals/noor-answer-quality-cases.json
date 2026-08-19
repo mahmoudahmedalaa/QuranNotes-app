@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "clearly-grounded-and-clear",
+      "question": "Why is patience paired with prayer in this passage?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "The passage directs believers to seek help through patience and prayer because Allah is with the patient." }
+      ],
+      "generatedAnswer": "The passage presents patience and prayer as ways to seek Allah's help, and it reassures the patient that Allah is with them. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "PASS",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": true,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": false,
+          "clear": true,
+          "citationConsistent": true
+        },
+        "sourceDerivedOracle": "The answer should connect both patience and prayer to seeking help and should not add claims beyond S1."
+      }
+    },
+    {
+      "id": "wudu-ambiguous-wording",
+      "question": "Can you pray without wuduu?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "Allah commanded performing Wudu for prayer. This is a command of obligation in the case of impurity, and in the case of purity it is merely a recommendation; the Prophet prayed five prayers with one Wudu." }
+      ],
+      "generatedAnswer": "Wudu is obligatory in a state of impurity but merely recommended when already pure. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "FAIL",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": false,
+          "preservesMaterialQualifications": false,
+          "materiallyMisleading": true,
+          "clear": false,
+          "citationConsistent": true
+        },
+        "sourceDerivedOracle": "The evidence distinguishes needing Wudu after impurity from not needing to renew an existing still-valid Wudu for every prayer. The answer must make that distinction clear without relying on outside knowledge."
+      }
+    },
+    {
+      "id": "night-prayer-qualification-omitted",
+      "question": "Is night prayer obligatory?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "Standing at night was obligatory at the beginning of the Surah. Allah later lightened this burden, and night prayer became voluntary after it had been obligatory." }
+      ],
+      "generatedAnswer": "Standing for night prayer was obligatory. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "FAIL",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": true,
+          "preservesMaterialQualifications": false,
+          "materiallyMisleading": true,
+          "clear": true,
+          "citationConsistent": true
+        },
+        "sourceDerivedOracle": "The answer must preserve the evidence's temporal distinction: initially obligatory, later made voluntary."
+      }
+    },
+    {
+      "id": "unsupported-factual-claim",
+      "question": "What does this passage teach about patience?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "The passage tells believers to seek help through patience and prayer." }
+      ],
+      "generatedAnswer": "The passage was revealed in the fifth year after Hijrah and tells believers to seek help through patience and prayer. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "FAIL",
+        "properties": {
+          "grounded": false,
+          "answersQuestion": true,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": true,
+          "clear": true,
+          "citationConsistent": false
+        },
+        "sourceDerivedOracle": "The revelation date is absent from S1 and must not be claimed or cited to it."
+      }
+    },
+    {
+      "id": "irrelevant-but-fluent",
+      "question": "What does this passage teach about patience?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "The passage tells believers to seek help through patience and prayer." }
+      ],
+      "generatedAnswer": "Charity purifies wealth and strengthens the community. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "FAIL",
+        "properties": {
+          "grounded": false,
+          "answersQuestion": false,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": false,
+          "clear": true,
+          "citationConsistent": false
+        },
+        "sourceDerivedOracle": "The answer must address patience using S1; fluency about another topic is irrelevant and unsupported."
+      }
+    },
+    {
+      "id": "concise-complete-grounded",
+      "question": "Did the source say to seek help through patience and prayer?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "Seek help through patience and prayer." }
+      ],
+      "generatedAnswer": "Yes. The source says to seek help through patience and prayer. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "PASS",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": true,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": false,
+          "clear": true,
+          "citationConsistent": true
+        },
+        "sourceDerivedOracle": "A concise direct restatement is complete because S1 contains no material qualification to preserve."
+      }
+    },
+    {
+      "id": "citation-mismatch",
+      "question": "What does the selected evidence say about lawful trade?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "The evidence distinguishes lawful trade from riba." },
+        { "promptSourceId": "S2", "text": "The evidence discusses patience during hardship." }
+      ],
+      "generatedAnswer": "The evidence distinguishes lawful trade from riba. [S2]",
+      "citationIds": ["S2"],
+      "expected": {
+        "verdict": "FAIL",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": true,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": false,
+          "clear": true,
+          "citationConsistent": false
+        },
+        "sourceDerivedOracle": "The claim is supported by S1, not S2; the citation must correspond to the evidence that supports the claim."
+      }
+    }
+  ]
+}

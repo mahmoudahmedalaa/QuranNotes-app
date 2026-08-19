@@ -1,4 +1,6 @@
 import * as assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 import {
@@ -7,8 +9,6 @@ import {
     buildGroundedPrompt,
     createVertexGenerationProvider,
     generateGroundedAnswer,
-    isPurificationClarityApplicable,
-    validatePurificationClarity,
     type GenerationProvider,
     type VertexGenerationClient,
     type VertexGenerationClientFactory,
@@ -34,6 +34,22 @@ function evidence(id: string, text: string, source: 'al_sadi_ar' | 'ibn_kathir_e
 }
 
 const EVIDENCE = [evidence('S1', 'Arabic tafsir text'), evidence('S2', 'English tafsir text', 'ibn_kathir_en_abridged')];
+const QUALITY_PASS = JSON.stringify({
+    grounded: true,
+    answersQuestion: true,
+    preservesMaterialQualifications: true,
+    materiallyMisleading: false,
+    clear: true,
+    citationConsistent: true,
+});
+const QUALITY_FAIL = JSON.stringify({
+    grounded: true,
+    answersQuestion: true,
+    preservesMaterialQualifications: false,
+    materiallyMisleading: true,
+    clear: false,
+    citationConsistent: true,
+});
 
 class SequenceProvider implements GenerationProvider {
     readonly requests: VertexGenerationRequest[] = [];
@@ -87,88 +103,143 @@ describe('Noor grounded generation', () => {
         assert.match(built.prompt, /<verseContext><surah>2<\/surah><verse>255<\/verse><\/verseContext>/);
     });
 
-    it('instructs user-facing wording to distinguish valid wudu from optional renewal', () => {
-        const built = buildGroundedPrompt({
-            ...REQUEST,
-            question: 'Can you pray without wuduu?',
-        }, [evidence('S1', 'The command concerns purification before prayer, in the case of impurity and in the case of purity.')], 1000);
+    it('applies one generic grounded answer-quality contract to every answer', () => {
+        const built = buildGroundedPrompt(REQUEST, EVIDENCE, 1000);
 
-        assert.match(built.prompt, /valid ritual purification/i);
-        assert.match(built.prompt, /renew(?:ing)? an already-valid wudu/i);
-        assert.match(built.prompt, /not optional/i);
+        assert.match(built.prompt, /directly answer.*question|answer.*user(?:'s)? (?:question|intent)/i);
+        assert.match(built.prompt, /substantive claims.*supported.*supplied evidence/i);
+        assert.match(built.prompt, /preserve.*material.*(?:conditions|distinctions|limitations|exceptions|qualifications)/i);
+        assert.match(built.prompt, /materially misleading/i);
+        assert.match(built.prompt, /explain.*(?:technical|source).*wording/i);
+        assert.match(built.prompt, /citations.*correspond.*evidence/i);
     });
 
-    it('does not add the purification clarification to an unrelated generation path', () => {
-        const built = buildGroundedPrompt({
-            ...REQUEST,
-            question: 'What does the Quran say about riba?',
-        }, [evidence('S1', 'This passage discusses riba and lawful trade.')], 1000);
-
-        assert.doesNotMatch(built.prompt, /already-valid wudu|required purification is not optional/i);
-    });
-
-    it('rejects a source-faithful purification answer that leaves renewal ambiguous', () => {
-        assert.equal(validatePurificationClarity(
-            'Wudu is obligatory in a state of impurity but merely recommended when already pure. [S1]',
-        ), false);
-    });
-
-    it('accepts purification wording that distinguishes valid wudu from required purification', () => {
-        assert.equal(validatePurificationClarity(
-            'Prayer requires valid ritual purification. If your existing wudu is still valid, you do not need to perform it again for every prayer. If it has been broken, renew it before praying. [S1]',
-        ), true);
-    });
-
-    it('does not apply the purification clarity contract outside its supported question and evidence scope', () => {
-        assert.equal(isPurificationClarityApplicable(
-            { ...REQUEST, question: 'What does the Quran say about riba?' },
-            [evidence('S1', 'This passage discusses purification before prayer.')],
-        ), false);
-        assert.equal(isPurificationClarityApplicable(
+    it('uses the same generic quality instructions for Wudu and an unrelated qualification case', () => {
+        const wudu = buildGroundedPrompt(
             { ...REQUEST, question: 'Can you pray without wuduu?' },
-            [evidence('S1', 'This passage discusses patience and gratitude.')],
-        ), false);
-        assert.equal(isPurificationClarityApplicable(
-            { ...REQUEST, question: 'Can you pray without wuduu?' },
-            [evidence('S1', 'This is the command of wudu for prayer, in the case of impurity and in the case of purity.')],
-        ), true);
+            [evidence('S1', 'A source-derived distinction about the question.')],
+            1000,
+        );
+        const nightPrayer = buildGroundedPrompt(
+            { ...REQUEST, question: 'Is night prayer obligatory?' },
+            [evidence('S1', 'It was initially obligatory, then the obligation was lightened.')],
+            1000,
+        );
+        const systemInstructions = (prompt: string): string => prompt.split('\n<evidence>')[0] ?? '';
+
+        assert.equal(systemInstructions(wudu.prompt), systemInstructions(nightPrayer.prompt));
+        assert.doesNotMatch(systemInstructions(wudu.prompt), /wud|ablution|purification/i);
     });
 
-    it('regenerates once with the same evidence when purification wording is unclear', async () => {
-        const purificationEvidence = [evidence('S1', 'The command concerns purification before prayer, in the case of impurity and in the case of purity.')];
+    it('contains no Wudu-specific generation control flow', () => {
+        const source = readFileSync(resolve(process.cwd(), 'src/noor-rag/generation.ts'), 'utf8');
+
+        assert.doesNotMatch(source, /wud(?:u+|oo+)|ablution|purification_clarity|PURIFICATION_/i);
+    });
+
+    it('judges every generated answer against the same evidence-bound generic quality contract', async () => {
         const provider = new SequenceProvider([
-            '{"answer":"Wudu is obligatory in impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
-            '{"answer":"Prayer requires valid ritual purification. If your existing wudu is still valid, you do not need to perform it again for every prayer. If it has been broken, renew it before praying. [S1]","citationIds":["S1"]}',
+            '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
         ]);
         const answer = await generateGroundedAnswer({
-            request: { ...REQUEST, question: 'Can you pray without wuduu?' },
-            evidence: purificationEvidence,
+            request: REQUEST,
+            evidence: EVIDENCE,
             maxEvidenceCharacters: 1000,
             provider,
         });
+
         assert.equal(answer.status, 'answered');
         assert.equal(provider.requests.length, 2);
-        assert.match(provider.requests[1]?.contents ?? '', /valid purification is required for prayer/i);
-        assert.match(provider.requests[1]?.contents ?? '', /does not need to be renewed/i);
-        assert.match(provider.requests[0]?.contents ?? '', /<chunk-S1>|<promptSourceId>S1<\/promptSourceId>/i);
+        assert.match(provider.requests[1]?.contents ?? '', /evaluate only against.*supplied.*evidence/is);
+        assert.match(provider.requests[1]?.contents ?? '', /<question>.*Explain patience/is);
         assert.match(provider.requests[1]?.contents ?? '', /<promptSourceId>S1<\/promptSourceId>/i);
-        assert.deepEqual(answer.citations.map(citation => citation.chunkId), ['chunk-S1']);
+        assert.match(provider.requests[1]?.contents ?? '', /<generatedAnswer>Grounded answer\. \[S1\]<\/generatedAnswer>/i);
+        assert.match(provider.requests[1]?.contents ?? '', /<citationId>S1<\/citationId>/i);
+        assert.ok((provider.requests[1]?.config.maxOutputTokens ?? 800) <= 256);
+        assert.doesNotMatch(provider.requests[1]?.contents ?? '', /correct wudu|wudu is|night prayer is/i);
     });
 
-    it('fails safely after one unclear purification regeneration', async () => {
+    it('regenerates exactly once with unchanged evidence and a generic critique after quality failure', async () => {
         const provider = new SequenceProvider([
-            '{"answer":"Wudu is obligatory in impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
-            '{"answer":"Wudu is obligatory in impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
+            '{"answer":"A grounded statement that omits the important exception. [S1]","citationIds":["S1"]}',
+            QUALITY_FAIL,
+            '{"answer":"A grounded statement that preserves the important exception. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
         ]);
         const answer = await generateGroundedAnswer({
-            request: { ...REQUEST, question: 'Can you pray without wuduu?' },
-            evidence: [evidence('S1', 'The command concerns purification before prayer, in the case of impurity and in the case of purity.')],
+            request: REQUEST,
+            evidence: [EVIDENCE[0]!],
             maxEvidenceCharacters: 1000,
             provider,
         });
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 4);
+        assert.equal(answer.answer, 'A grounded statement that preserves the important exception. [S1]');
+        assert.match(provider.requests[2]?.contents ?? '', /omits a material qualification.*could mislead/i);
+        assert.equal((provider.requests[0]?.contents.match(/<promptSourceId>S1<\/promptSourceId>/g) ?? []).length, 1);
+        assert.equal((provider.requests[2]?.contents.match(/<promptSourceId>S1<\/promptSourceId>/g) ?? []).length, 1);
+        assert.match(provider.requests[3]?.contents ?? '', /preserves the important exception/i);
+        assert.doesNotMatch(provider.requests[2]?.contents ?? '', /correct wudu|wudu is|night prayer is/i);
+    });
+
+    it('routes the Wudu regression through the generic judge without a topic-specific correction', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Wudu is obligatory in a state of impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
+            QUALITY_FAIL,
+            '{"answer":"Prayer requires valid Wudu. If an existing Wudu is still valid, it does not need renewal for every prayer; after impurity it must be renewed before prayer. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
+        ]);
+        const answer = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'Can you pray without wuduu?' },
+            evidence: [evidence('S1', 'Wudu is commanded for prayer after impurity; renewing it while still pure is recommended, not obligatory.')],
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 4);
+        assert.match(provider.requests[1]?.contents ?? '', /generic grounded-answer quality validator/i);
+        assert.match(provider.requests[2]?.contents ?? '', /omits a material qualification.*could mislead/i);
+        assert.doesNotMatch(provider.requests[2]?.contents ?? '', /valid Wudu|after impurity it must/i);
+    });
+
+    it('fails safely after exactly one generic corrective regeneration', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"A grounded but materially incomplete answer. [S1]","citationIds":["S1"]}',
+            QUALITY_FAIL,
+            '{"answer":"A second grounded but materially incomplete answer. [S1]","citationIds":["S1"]}',
+            QUALITY_FAIL,
+        ]);
+        const answer = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: [EVIDENCE[0]!],
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+
         assert.equal(answer.status, 'temporarily_unavailable');
-        assert.equal(provider.requests.length, 2);
         assert.deepEqual(answer.citations, []);
+        assert.equal(provider.requests.length, 4);
+        assert.equal(provider.requests.filter(request => /Rewrite the answer exactly once/i.test(request.contents)).length, 1);
+    });
+
+    it('fails closed when the generic quality judgement is malformed', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}',
+            'not-a-quality-judgement',
+        ]);
+        const answer = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+
+        assert.equal(answer.status, 'temporarily_unavailable');
+        assert.deepEqual(answer.citations, []);
+        assert.equal(provider.requests.length, 2);
     });
 
     it('sends the exact locked structured request through the global Vertex adapter', async () => {
@@ -223,19 +294,19 @@ describe('Noor grounded generation', () => {
     });
 
     it('retries invalid output once with identical evidence and then succeeds', async () => {
-        const provider = new SequenceProvider(['{"answer":"uncited","citationIds":[]}', '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}']);
+        const provider = new SequenceProvider(['{"answer":"uncited","citationIds":[]}', '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}', QUALITY_PASS]);
         const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
         assert.equal(answer.status, 'answered');
         assert.equal(answer.citations.length, 1);
-        assert.equal(provider.requests.length, 2);
+        assert.equal(provider.requests.length, 3);
         assert.deepEqual(provider.requests[0], provider.requests[1]);
     });
 
     it('retries one transient provider failure before giving up', async () => {
-        const provider = new SequenceProvider([Object.assign(new Error('transient Vertex failure'), { status: 503 }), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}']);
+        const provider = new SequenceProvider([Object.assign(new Error('transient Vertex failure'), { status: 503 }), '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}', QUALITY_PASS]);
         const answer = await generateGroundedAnswer({ request: REQUEST, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
         assert.equal(answer.status, 'answered');
-        assert.equal(provider.requests.length, 2);
+        assert.equal(provider.requests.length, 3);
     });
 
     it('fails calmly after a second invalid output or provider timeout without leaking details', async () => {
