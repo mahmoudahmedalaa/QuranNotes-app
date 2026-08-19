@@ -57,6 +57,7 @@ export type NoorGenerationErrorClass =
     | 'malformed_json'
     | 'citation_validation_failure'
     | 'answer_validation_failure'
+    | 'purification_clarity_failure'
     | null;
 
 export interface GenerationDiagnostics {
@@ -91,7 +92,14 @@ const BASE_SYSTEM_INSTRUCTIONS = [
     'Inline citation markers such as [S1] are optional; if you use them, each marker must match a citationId exactly.',
 ];
 const PURIFICATION_CLARIFICATION = 'For this purification question, distinguish renewing an already-valid wudu from the requirement for valid ritual purification before prayer. Required purification is not optional; state only distinctions supported by the supplied evidence.';
+const PURIFICATION_CLARITY_CORRECTION = 'Clarify explicitly that valid purification is required for prayer. If existing wudu remains valid, it does not need to be renewed for every prayer. Do not describe the requirement for valid purification itself as optional.';
 const PURIFICATION_SIGNAL = /\b(?:wud(?:u+|oo+)|ablution|purification|ritual purity)\b/iu;
+const PRAYER_SIGNAL = /\b(?:pray(?:er|ing)?|salah)\b/iu;
+const PURIFICATION_DISTINCTION_EVIDENCE_SIGNAL = /\b(?:case|state) of (?:impurity|purity)\b|\b(?:pure|impure)\s+state\b/iu;
+const VALID_PURIFICATION_REQUIREMENT = /\b(?:required|obligatory|necessary|must|need)\b/iu;
+const EXISTING_VALID_PURIFICATION = /(?:\b(?:existing|already|still|current|valid|remaining)\b[\s\S]{0,90}\b(?:wud(?:u+|oo+)|ablution|purification|ritual purity)\b|\b(?:wud(?:u+|oo+)|ablution|purification|ritual purity)\b[\s\S]{0,90}\b(?:still|remains?)\s+valid\b)/iu;
+const NO_RENEWAL_NEEDED = /(?:\b(?:do not|don't|does not|doesn't|need not|no need to|not necessary to|not required to|unnecessary to|optional to|recommended to)\b[\s\S]{0,100}\b(?:renew|repeat|perform|redo|make|do)\b|\b(?:renew|repeat|perform|redo|make|do)\b[\s\S]{0,100}\b(?:not necessary|not required|unnecessary|optional|need not)\b)/iu;
+const INVALIDATED_PURIFICATION = /(?:\b(?:if|when|unless)\b[\s\S]{0,120}\b(?:wud(?:u+|oo+)|ablution|purification|ritual purity|it)\b[\s\S]{0,100}\b(?:broken|lost|invalid|impur(?:e|ity)?|no longer valid|not valid|renew|before pray(?:er|ing))\b|\b(?:broken|lost|invalid|impur(?:e|ity)?|no longer valid|not valid)\b[\s\S]{0,100}\b(?:renew|purification|wud(?:u+|oo+)|ablution|before pray(?:er|ing))\b)/iu;
 
 function escapeXml(value: string): string {
     return value.split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;');
@@ -109,15 +117,38 @@ function boundedEvidence(evidence: readonly RetrievedEvidence[], maximumCharacte
     return selected;
 }
 
-function systemInstructions(request: NoorRequest, evidence: readonly RetrievedEvidence[]): string {
-    const question = request.mode === 'verse_summary' ? '' : request.question;
-    const evidenceSupportsPurification = evidence.some(item => (
-        PURIFICATION_SIGNAL.test(item.chunk.originalText)
-        || PURIFICATION_SIGNAL.test(item.chunk.retrievalText)
-    ));
+export function isPurificationClarityApplicable(
+    request: NoorRequest,
+    evidence: readonly RetrievedEvidence[],
+): boolean {
+    if (request.mode === 'verse_summary') return false;
+    if (!PURIFICATION_SIGNAL.test(request.question) || !PRAYER_SIGNAL.test(request.question)) return false;
+    return evidence.some(item => {
+        const text = `${item.chunk.originalText}\n${item.chunk.retrievalText}`;
+        return PURIFICATION_SIGNAL.test(text) && PURIFICATION_DISTINCTION_EVIDENCE_SIGNAL.test(text);
+    });
+}
+
+export function validatePurificationClarity(answer: string): boolean {
+    const hasRequiredPurification = PURIFICATION_SIGNAL.test(answer)
+        && VALID_PURIFICATION_REQUIREMENT.test(answer);
+    return hasRequiredPurification
+        && EXISTING_VALID_PURIFICATION.test(answer)
+        && NO_RENEWAL_NEEDED.test(answer)
+        && INVALIDATED_PURIFICATION.test(answer);
+}
+
+function systemInstructions(
+    request: NoorRequest,
+    evidence: readonly RetrievedEvidence[],
+    purificationClarityRetry = false,
+): string {
+    const purificationClarityApplies = isPurificationClarityApplicable(request, evidence);
     return [
         ...BASE_SYSTEM_INSTRUCTIONS,
-        ...(PURIFICATION_SIGNAL.test(question) && evidenceSupportsPurification ? [PURIFICATION_CLARIFICATION] : []),
+        ...(purificationClarityApplies
+            ? [purificationClarityRetry ? PURIFICATION_CLARITY_CORRECTION : PURIFICATION_CLARIFICATION]
+            : []),
     ].join('\n');
 }
 
@@ -141,6 +172,7 @@ export function buildGroundedPrompt(
     request: NoorRequest,
     evidence: readonly RetrievedEvidence[],
     maxEvidenceCharacters: number,
+    purificationClarityRetry = false,
 ): GroundedPrompt {
     const selected = boundedEvidence(evidence, maxEvidenceCharacters);
     const blocks = selected.map(item => {
@@ -149,7 +181,7 @@ export function buildGroundedPrompt(
     }).join('\n');
     return {
         evidence: selected,
-        prompt: `${systemInstructions(request, selected)}\n<evidence>${blocks}</evidence>\n${requestData(request)}`,
+        prompt: `${systemInstructions(request, selected, purificationClarityRetry)}\n<evidence>${blocks}</evidence>\n${requestData(request)}`,
     };
 }
 
@@ -252,7 +284,9 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
     if (built.evidence.length === 0) {
         return fixedAnswer(input.request.requestId, 'insufficient_evidence', INSUFFICIENT_EVIDENCE);
     }
-    const request = providerRequest(built.prompt);
+    const purificationClarityApplies = isPurificationClarityApplicable(input.request, built.evidence);
+    let request = providerRequest(built.prompt);
+    let purificationClarityRetry = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
         let text: string;
         try {
@@ -269,6 +303,22 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         }
         try {
             const validated = parseGeneratedOutput(text, built.evidence);
+            if (purificationClarityApplies && !validatePurificationClarity(validated.answer)) {
+                if (purificationClarityRetry || attempt === 1) {
+                    return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE, {
+                        errorClass: 'purification_clarity_failure',
+                        attempts: attempt + 1,
+                    });
+                }
+                purificationClarityRetry = true;
+                request = providerRequest(buildGroundedPrompt(
+                    input.request,
+                    built.evidence,
+                    input.maxEvidenceCharacters,
+                    true,
+                ).prompt);
+                continue;
+            }
             const response: NoorAnswer = {
                 requestId: input.request.requestId,
                 answer: validated.answer,

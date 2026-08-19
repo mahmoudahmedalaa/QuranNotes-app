@@ -7,6 +7,8 @@ import {
     buildGroundedPrompt,
     createVertexGenerationProvider,
     generateGroundedAnswer,
+    isPurificationClarityApplicable,
+    validatePurificationClarity,
     type GenerationProvider,
     type VertexGenerationClient,
     type VertexGenerationClientFactory,
@@ -89,7 +91,7 @@ describe('Noor grounded generation', () => {
         const built = buildGroundedPrompt({
             ...REQUEST,
             question: 'Can you pray without wuduu?',
-        }, [evidence('S1', 'The command concerns purification before prayer.')], 1000);
+        }, [evidence('S1', 'The command concerns purification before prayer, in the case of impurity and in the case of purity.')], 1000);
 
         assert.match(built.prompt, /valid ritual purification/i);
         assert.match(built.prompt, /renew(?:ing)? an already-valid wudu/i);
@@ -103,6 +105,70 @@ describe('Noor grounded generation', () => {
         }, [evidence('S1', 'This passage discusses riba and lawful trade.')], 1000);
 
         assert.doesNotMatch(built.prompt, /already-valid wudu|required purification is not optional/i);
+    });
+
+    it('rejects a source-faithful purification answer that leaves renewal ambiguous', () => {
+        assert.equal(validatePurificationClarity(
+            'Wudu is obligatory in a state of impurity but merely recommended when already pure. [S1]',
+        ), false);
+    });
+
+    it('accepts purification wording that distinguishes valid wudu from required purification', () => {
+        assert.equal(validatePurificationClarity(
+            'Prayer requires valid ritual purification. If your existing wudu is still valid, you do not need to perform it again for every prayer. If it has been broken, renew it before praying. [S1]',
+        ), true);
+    });
+
+    it('does not apply the purification clarity contract outside its supported question and evidence scope', () => {
+        assert.equal(isPurificationClarityApplicable(
+            { ...REQUEST, question: 'What does the Quran say about riba?' },
+            [evidence('S1', 'This passage discusses purification before prayer.')],
+        ), false);
+        assert.equal(isPurificationClarityApplicable(
+            { ...REQUEST, question: 'Can you pray without wuduu?' },
+            [evidence('S1', 'This passage discusses patience and gratitude.')],
+        ), false);
+        assert.equal(isPurificationClarityApplicable(
+            { ...REQUEST, question: 'Can you pray without wuduu?' },
+            [evidence('S1', 'This is the command of wudu for prayer, in the case of impurity and in the case of purity.')],
+        ), true);
+    });
+
+    it('regenerates once with the same evidence when purification wording is unclear', async () => {
+        const purificationEvidence = [evidence('S1', 'The command concerns purification before prayer, in the case of impurity and in the case of purity.')];
+        const provider = new SequenceProvider([
+            '{"answer":"Wudu is obligatory in impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
+            '{"answer":"Prayer requires valid ritual purification. If your existing wudu is still valid, you do not need to perform it again for every prayer. If it has been broken, renew it before praying. [S1]","citationIds":["S1"]}',
+        ]);
+        const answer = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'Can you pray without wuduu?' },
+            evidence: purificationEvidence,
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 2);
+        assert.match(provider.requests[1]?.contents ?? '', /valid purification is required for prayer/i);
+        assert.match(provider.requests[1]?.contents ?? '', /does not need to be renewed/i);
+        assert.match(provider.requests[0]?.contents ?? '', /<chunk-S1>|<promptSourceId>S1<\/promptSourceId>/i);
+        assert.match(provider.requests[1]?.contents ?? '', /<promptSourceId>S1<\/promptSourceId>/i);
+        assert.deepEqual(answer.citations.map(citation => citation.chunkId), ['chunk-S1']);
+    });
+
+    it('fails safely after one unclear purification regeneration', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Wudu is obligatory in impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
+            '{"answer":"Wudu is obligatory in impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
+        ]);
+        const answer = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'Can you pray without wuduu?' },
+            evidence: [evidence('S1', 'The command concerns purification before prayer, in the case of impurity and in the case of purity.')],
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+        assert.equal(answer.status, 'temporarily_unavailable');
+        assert.equal(provider.requests.length, 2);
+        assert.deepEqual(answer.citations, []);
     });
 
     it('sends the exact locked structured request through the global Vertex adapter', async () => {
