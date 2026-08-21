@@ -30,12 +30,20 @@ describe('Noor chat response state', () => {
 
     it.each([
         ['not_entitled', 'Noor AI is available with Pro access.'],
+        ['quota_exceeded', 'Your daily Noor allowance is used. It resets at the next UTC day.'],
         ['policy_refusal', "I can't help with that request."],
         ['insufficient_evidence', "I couldn't find enough reliable tafsir evidence to answer that safely."],
         ['temporarily_unavailable', 'Noor is temporarily unavailable. Please try again.'],
         ['invalid_request', 'Please revise your question and try again.'],
     ] as const)('maps %s to calm fixed copy', (status, copy) => {
         expect(getNoorStatusPresentation({ status })).toMatchObject({ message: copy });
+    });
+
+    it('keeps quota, temporary failure, evidence, and policy statuses distinct', () => {
+        expect(getNoorStatusPresentation({ status: 'quota_exceeded' }).action).toBe('none');
+        expect(getNoorStatusPresentation({ status: 'temporarily_unavailable' }).action).toBe('retry');
+        expect(getNoorStatusPresentation({ status: 'insufficient_evidence' }).action).toBe('none');
+        expect(getNoorStatusPresentation({ status: 'policy_refusal' }).action).toBe('none');
     });
 
     it('shows a validated UTC reset for quota status', () => {

@@ -87,6 +87,21 @@ function answer(status: NoorStatus, requestId = REQUEST_ID): NoorAnswer {
     return { requestId, answer: status === 'answered' ? 'Grounded answer' : 'Safe response', status, citations: [] };
 }
 
+function requestIdFor(index: number): string {
+    return `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+}
+
+function seedDaily(repository: MemoryRepository, uid: string, answered: number, dateUtc = '2026-08-11'): void {
+    const resetAt = new Date(`${dateUtc}T00:00:00.000Z`);
+    resetAt.setUTCDate(resetAt.getUTCDate() + 1);
+    repository.documents.set(`noorUsage/${uid}_${dateUtc}`, {
+        dateUtc,
+        answered,
+        reservations: [],
+        expiresAt: resetAt,
+    });
+}
+
 describe('Noor transactional usage and idempotency', () => {
     it('reads only a valid unexpired completed replay', () => {
         const response = answer('answered');
@@ -174,6 +189,125 @@ describe('Noor transactional usage and idempotency', () => {
         assert.equal(nextUtcResetIso(Date.parse('2026-08-11T23:59:59.999Z')), '2026-08-12T00:00:00.000Z');
         assert.deepEqual(DAILY_ANSWER_LIMITS, { paid: 50, grandfathered: 3, owner_qa: 100, none: 0 });
         assert.equal((await claim(new MemoryRepository(), { entitlementClass: 'none' })).kind, 'quota_exceeded');
+    });
+
+    it('enforces the paid daily boundary with one chargeable answer per allowed request', async () => {
+        const observations: Array<{ startingUsage: number; requestResult: string; endingUsage: number }> = [];
+        for (const [index, startingUsage] of [0, 48, 49, 50, 51].entries()) {
+            const repository = new MemoryRepository();
+            seedDaily(repository, UID, startingUsage);
+            const requestId = requestIdFor(index + 10);
+            const result = await claim(repository, {
+                requestId,
+                invocationId: `boundary-owner-${index}`,
+            });
+            if (result.kind === 'claimed') {
+                await finalizeAnswered({
+                    repository,
+                    uid: UID,
+                    requestId,
+                    invocationId: result.leaseOwnerId,
+                    response: answer('answered', requestId),
+                    clock: () => new Date(NOW_MS + 1),
+                });
+            }
+            const daily = repository.documents.get(`noorUsage/${UID}_2026-08-11`) as { answered: number };
+            observations.push({
+                startingUsage,
+                requestResult: result.kind,
+                endingUsage: daily.answered,
+            });
+        }
+        assert.deepEqual(observations, [
+            { startingUsage: 0, requestResult: 'claimed', endingUsage: 1 },
+            { startingUsage: 48, requestResult: 'claimed', endingUsage: 49 },
+            { startingUsage: 49, requestResult: 'claimed', endingUsage: 50 },
+            { startingUsage: 50, requestResult: 'quota_exceeded', endingUsage: 50 },
+            { startingUsage: 51, requestResult: 'quota_exceeded', endingUsage: 51 },
+        ]);
+    });
+
+    it('allows only one of two concurrent requests when one paid answer remains', async () => {
+        const repository = new MemoryRepository();
+        seedDaily(repository, UID, 49);
+        const results = await Promise.all([
+            claim(repository, { requestId: requestIdFor(20), invocationId: 'concurrent-a' }),
+            claim(repository, { requestId: requestIdFor(21), invocationId: 'concurrent-b' }),
+        ]);
+        const claimed = results.filter((result) => result.kind === 'claimed');
+        const blocked = results.filter((result) => result.kind === 'quota_exceeded');
+        assert.equal(claimed.length, 1);
+        assert.equal(blocked.length, 1);
+        const winner = claimed[0];
+        assert.ok(winner?.kind === 'claimed');
+        const winnerIndex = results.indexOf(winner);
+        const winnerRequestId = winnerIndex === 0 ? requestIdFor(20) : requestIdFor(21);
+        await finalizeAnswered({
+            repository,
+            uid: UID,
+            requestId: winnerRequestId,
+            invocationId: winner.leaseOwnerId,
+            response: answer('answered', winnerRequestId),
+            clock: () => new Date(NOW_MS + 1),
+        });
+        const daily = repository.documents.get(`noorUsage/${UID}_2026-08-11`) as { answered: number; reservations: unknown[] };
+        assert.deepEqual({ answered: daily.answered, reservations: daily.reservations.length }, { answered: 50, reservations: 0 });
+    });
+
+    it('isolates daily usage by Firebase UID', async () => {
+        const repository = new MemoryRepository();
+        seedDaily(repository, 'firebase-user-a', 50);
+        seedDaily(repository, 'firebase-user-b', 0);
+        const userA = await claim(repository, {
+            uid: 'firebase-user-a', requestId: requestIdFor(30), invocationId: 'owner-a',
+        });
+        const userB = await claim(repository, {
+            uid: 'firebase-user-b', requestId: requestIdFor(30), invocationId: 'owner-b',
+        });
+        assert.equal(userA.kind, 'quota_exceeded');
+        assert.equal(userB.kind, 'claimed');
+        assert.ok(userB.kind === 'claimed');
+        await finalizeAnswered({
+            repository,
+            uid: 'firebase-user-b',
+            requestId: requestIdFor(30),
+            invocationId: userB.leaseOwnerId,
+            response: answer('answered', requestIdFor(30)),
+            clock: () => new Date(NOW_MS + 1),
+        });
+        assert.equal((repository.documents.get('noorUsage/firebase-user-a_2026-08-11') as { answered: number }).answered, 50);
+        assert.equal((repository.documents.get('noorUsage/firebase-user-b_2026-08-11') as { answered: number }).answered, 1);
+    });
+
+    it('resets quota at UTC midnight without mutating the previous UTC day', async () => {
+        const resetUid = 'firebase-reset-user';
+        const repository = new MemoryRepository();
+        seedDaily(repository, resetUid, 50, '2026-08-11');
+        const beforeReset = await claim(repository, {
+            uid: resetUid,
+            requestId: requestIdFor(40),
+            invocationId: 'before-reset',
+            clock: () => new Date('2026-08-11T23:59:59.999Z'),
+        });
+        const afterReset = await claim(repository, {
+            uid: resetUid,
+            requestId: requestIdFor(41),
+            invocationId: 'after-reset',
+            clock: () => new Date('2026-08-12T00:00:00.000Z'),
+        });
+        assert.equal(beforeReset.kind, 'quota_exceeded');
+        assert.equal(afterReset.kind, 'claimed');
+        assert.ok(afterReset.kind === 'claimed');
+        await finalizeAnswered({
+            repository,
+            uid: resetUid,
+            requestId: requestIdFor(41),
+            invocationId: afterReset.leaseOwnerId,
+            response: answer('answered', requestIdFor(41)),
+            clock: () => new Date('2026-08-12T00:00:00.001Z'),
+        });
+        assert.equal((repository.documents.get(`noorUsage/${resetUid}_2026-08-11`) as { answered: number }).answered, 50);
+        assert.equal((repository.documents.get(`noorUsage/${resetUid}_2026-08-12`) as { answered: number }).answered, 1);
     });
 
     it('atomically limits ten simultaneous distinct requests to five rolling-minute claims', async () => {
