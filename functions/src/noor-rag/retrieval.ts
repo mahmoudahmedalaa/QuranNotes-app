@@ -15,12 +15,16 @@ import type {
     TafsirUnit,
 } from './types';
 import { tokenizeLexicalQuery } from './lexical';
+import type { QuranSurahEntity } from './quranEntities';
 export { tokenizeLexicalQuery } from './lexical';
 
 const SOURCE_ORDER: readonly NoorSource[] = ['ibn_kathir_en_abridged', 'al_sadi_ar'];
 const VECTOR_SEARCH_LIMIT = 8 as const;
 const DISTANCE_RESULT_FIELD = '_noorVectorDistance' as const;
 const LEXICAL_SEARCH_LIMIT = 8 as const;
+const ENTITY_SUMMARY_SECTION_COUNT = 6;
+const ENTITY_SUMMARY_ANCHORS_PER_SECTION = 4;
+const ENTITY_SUMMARY_EVIDENCE_LIMIT = 8;
 
 export interface StoredDocument {
     id: string;
@@ -117,6 +121,18 @@ export interface SemanticRetrievalResult {
     vectorHitCount: number;
     lexicalHitCount: number;
     lexicalSearchStatus: 'available' | 'unavailable' | 'not_configured';
+}
+
+export interface EntitySummaryRetrievalInput {
+    entity: QuranSurahEntity;
+    config: NoorRuntimeConfig;
+    repository: RetrievalRepository;
+}
+
+export interface EntitySummaryRetrievalResult {
+    evidence: readonly ExactRetrievedEvidence[];
+    candidateCount: number;
+    anchorVerses: readonly number[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -299,6 +315,216 @@ export async function retrieveExactVerse(input: ExactRetrievalInput): Promise<Ex
         promptSourceId: `S${index + 1}`,
         chunk: value,
     }));
+}
+
+function entitySummaryAnchorVerses(verseCount: number): number[] {
+    const anchors: number[] = [];
+    const sectionCount = Math.min(ENTITY_SUMMARY_SECTION_COUNT, verseCount);
+    for (let section = 0; section < sectionCount; section += 1) {
+        const start = Math.floor(section * verseCount / sectionCount) + 1;
+        const end = Math.floor((section + 1) * verseCount / sectionCount);
+        const positions = Math.min(ENTITY_SUMMARY_ANCHORS_PER_SECTION, end - start + 1);
+        for (let index = 0; index < positions; index += 1) {
+            anchors.push(Math.floor(start + (index + 0.5) * (end - start + 1) / positions));
+        }
+    }
+    return uniqueInOrder(anchors.map(String)).map(Number);
+}
+
+function entityCoverageSection(verse: number, verseCount: number): number {
+    return Math.min(
+        ENTITY_SUMMARY_SECTION_COUNT - 1,
+        Math.floor((Math.max(1, verse) - 1) * ENTITY_SUMMARY_SECTION_COUNT / verseCount),
+    );
+}
+
+function coverageTokens(value: string): Set<string> {
+    return new Set(value
+        .normalize('NFKC')
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}'-]+/gu, ' ')
+        .split(/\s+/u)
+        .filter(token => token.length >= 3));
+}
+
+function candidateSimilarity(left: ExactRetrievedEvidence, right: ExactRetrievedEvidence): number {
+    const leftEmbedding = left.chunk.embedding;
+    const rightEmbedding = right.chunk.embedding;
+    if (leftEmbedding?.length === EMBEDDING_DIMENSION
+        && rightEmbedding?.length === EMBEDDING_DIMENSION
+        && leftEmbedding.every(Number.isFinite)
+        && rightEmbedding.every(Number.isFinite)) {
+        let dot = 0;
+        let leftNorm = 0;
+        let rightNorm = 0;
+        for (let index = 0; index < EMBEDDING_DIMENSION; index += 1) {
+            const leftValue = leftEmbedding[index]!;
+            const rightValue = rightEmbedding[index]!;
+            dot += leftValue * rightValue;
+            leftNorm += leftValue * leftValue;
+            rightNorm += rightValue * rightValue;
+        }
+        if (leftNorm > 0 && rightNorm > 0) return Math.max(-1, Math.min(1, dot / Math.sqrt(leftNorm * rightNorm)));
+    }
+    const leftTokens = coverageTokens(left.chunk.retrievalText);
+    const rightTokens = coverageTokens(right.chunk.retrievalText);
+    const intersection = [...leftTokens].filter(token => rightTokens.has(token)).length;
+    const union = new Set([...leftTokens, ...rightTokens]).size;
+    return union === 0 ? 0 : intersection / union;
+}
+
+function candidateCentrality(
+    item: ExactRetrievedEvidence,
+    pool: readonly ExactRetrievedEvidence[],
+    entity: QuranSurahEntity,
+): number {
+    const section = entityCoverageSection(item.chunk.verseStart, entity.verseCount);
+    const similarities = pool
+        .filter(other => other.chunk.chunkId !== item.chunk.chunkId
+            && other.chunk.source === item.chunk.source
+            && entityCoverageSection(other.chunk.verseStart, entity.verseCount) !== section)
+        .map(other => candidateSimilarity(item, other))
+        .sort((left, right) => right - left)
+        .slice(0, 4);
+    return similarities.length === 0
+        ? 0
+        : similarities.reduce((total, value) => total + value, 0) / similarities.length;
+}
+
+function selectEntitySummaryCoverage(
+    candidates: readonly ExactRetrievedEvidence[],
+    entity: QuranSurahEntity,
+    maximumCharacters: number,
+): ExactRetrievedEvidence[] {
+    const representatives = new Map<string, ExactRetrievedEvidence>();
+    for (const item of candidates) {
+        if (item.chunk.surah !== entity.surahNumber) continue;
+        const key = `${item.chunk.source}:${item.chunk.canonicalUnitId}`;
+        const current = representatives.get(key);
+        if (current === undefined || item.chunk.chunkIndex < current.chunk.chunkIndex) representatives.set(key, item);
+    }
+    const pool = [...representatives.values()].sort((left, right) => (
+        left.chunk.verseStart - right.chunk.verseStart
+        || left.chunk.source.localeCompare(right.chunk.source)
+        || left.chunk.chunkId.localeCompare(right.chunk.chunkId)
+    ));
+    const centrality = new Map(pool.map(item => [item.chunk.chunkId, candidateCentrality(item, pool, entity)]));
+    const selected: ExactRetrievedEvidence[] = [];
+    const selectedIds = new Set<string>();
+    const sourceCounts = new Map<NoorSource, number>();
+    const sectionCounts = new Map<number, number>();
+    let characters = 0;
+
+    const add = (item: ExactRetrievedEvidence): boolean => {
+        if (selectedIds.has(item.chunk.chunkId)
+            || selected.length >= ENTITY_SUMMARY_EVIDENCE_LIMIT
+            || characters + item.chunk.originalText.length > maximumCharacters) {
+            return false;
+        }
+        selected.push(item);
+        selectedIds.add(item.chunk.chunkId);
+        characters += item.chunk.originalText.length;
+        sourceCounts.set(item.chunk.source, (sourceCounts.get(item.chunk.source) ?? 0) + 1);
+        const section = entityCoverageSection(item.chunk.verseStart, entity.verseCount);
+        sectionCounts.set(section, (sectionCounts.get(section) ?? 0) + 1);
+        return true;
+    };
+
+    for (let section = 0; section < Math.min(ENTITY_SUMMARY_SECTION_COUNT, entity.verseCount); section += 1) {
+        const inSection = pool.filter(item => entityCoverageSection(item.chunk.verseStart, entity.verseCount) === section);
+        const preferredSource = SOURCE_ORDER[section % SOURCE_ORDER.length];
+        const preferredPool = inSection.some(item => item.chunk.source === preferredSource)
+            ? inSection.filter(item => item.chunk.source === preferredSource)
+            : inSection;
+        const preferred = [...preferredPool].sort((left, right) => (
+            (centrality.get(right.chunk.chunkId) ?? 0) - (centrality.get(left.chunk.chunkId) ?? 0)
+            || left.chunk.verseStart - right.chunk.verseStart
+            || left.chunk.chunkId.localeCompare(right.chunk.chunkId)
+        ))[0];
+        if (preferred) add(preferred);
+    }
+
+    while (selected.length < ENTITY_SUMMARY_EVIDENCE_LIMIT) {
+        const remaining = pool
+            .filter(item => !selectedIds.has(item.chunk.chunkId))
+            .sort((left, right) => {
+                const leftSection = entityCoverageSection(left.chunk.verseStart, entity.verseCount);
+                const rightSection = entityCoverageSection(right.chunk.verseStart, entity.verseCount);
+                const leftNovelty = selected.length === 0 ? 0 : Math.max(...selected.map(item => candidateSimilarity(left, item)));
+                const rightNovelty = selected.length === 0 ? 0 : Math.max(...selected.map(item => candidateSimilarity(right, item)));
+                const leftScore = (centrality.get(left.chunk.chunkId) ?? 0) - 0.35 * leftNovelty;
+                const rightScore = (centrality.get(right.chunk.chunkId) ?? 0) - 0.35 * rightNovelty;
+                return (sectionCounts.get(leftSection) ?? 0) - (sectionCounts.get(rightSection) ?? 0)
+                    || (sourceCounts.get(left.chunk.source) ?? 0) - (sourceCounts.get(right.chunk.source) ?? 0)
+                    || rightScore - leftScore
+                    || left.chunk.verseStart - right.chunk.verseStart
+                    || left.chunk.chunkId.localeCompare(right.chunk.chunkId);
+            });
+        if (remaining.length === 0) break;
+        let added = false;
+        for (const item of remaining) {
+            if (add(item)) {
+                added = true;
+                break;
+            }
+        }
+        if (!added) break;
+    }
+
+    return selected.map((item, index) => ({ ...item, promptSourceId: `S${index + 1}` }));
+}
+
+export async function retrieveEntitySummaryWithStats(
+    input: EntitySummaryRetrievalInput,
+): Promise<EntitySummaryRetrievalResult> {
+    const anchorVerses = entitySummaryAnchorVerses(input.entity.verseCount);
+    const basePath = `corpora/${input.config.activeCorpusVersion}`;
+    const expectedLookups = SOURCE_ORDER.flatMap(source => anchorVerses.map(verse => ({
+        source,
+        verse,
+        id: `${source}_${input.entity.surahNumber}_${verse}`,
+    })));
+    const lookupDocuments = await input.repository.readDocuments(
+        expectedLookups.map(item => `${basePath}/verseLookup/${item.id}`),
+    );
+    const lookupDocumentsById = new Map(lookupDocuments.map(document => [document.id, document]));
+    const lookups = expectedLookups.map(expected => {
+        const document = lookupDocumentsById.get(expected.id);
+        if (!document) throw new Error(`Entity-summary verse lookup document is missing: ${expected.id}`);
+        return parseLookup(document, {
+            id: expected.id,
+            source: expected.source,
+            surah: input.entity.surahNumber,
+            verse: expected.verse,
+            corpusVersion: input.config.activeCorpusVersion,
+        });
+    });
+    const unitIds = uniqueInOrder(lookups.map(lookup => lookup.canonicalUnitId));
+    const unitDocuments = await input.repository.readDocuments(unitIds.map(id => `${basePath}/units/${id}`));
+    const unitsById = new Map(unitDocuments.map(document => [document.id, parseUnit(document)]));
+    const chunkIds = uniqueInOrder(lookups.flatMap(lookup => lookup.chunkIds));
+    const chunkDocuments = await input.repository.readDocuments(chunkIds.map(id => `${basePath}/chunks/${id}`));
+    const chunksById = new Map(chunkDocuments.map(document => [document.id, parseChunk(document)]));
+    const candidates = lookups.flatMap(lookup => {
+        const unit = unitsById.get(lookup.canonicalUnitId);
+        if (!unit) throw new Error(`Entity-summary canonical unit document is missing: ${lookup.canonicalUnitId}`);
+        const chunks = uniqueInOrder(lookup.chunkIds).map(chunkId => {
+            const chunk = chunksById.get(chunkId);
+            if (!chunk) throw new Error(`Entity-summary chunk document is missing: ${chunkId}`);
+            return chunk;
+        });
+        assertExactRelationships(lookup, unit, chunks);
+        return chunks.map((chunk, index): ExactRetrievedEvidence => ({
+            kind: 'exact',
+            promptSourceId: `C${index + 1}`,
+            chunk,
+        }));
+    });
+    return {
+        evidence: selectEntitySummaryCoverage(candidates, input.entity, input.config.maxEvidenceCharacters),
+        candidateCount: new Set(candidates.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`)).size,
+        anchorVerses,
+    };
 }
 
 function validateSemanticHit(

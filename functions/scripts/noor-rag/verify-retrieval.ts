@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-import { selectAnswerableEvidence } from '../../src/noor-rag/answerability';
+import { isEntitySummaryEvidenceSufficient, selectAnswerableEvidence } from '../../src/noor-rag/answerability';
 import { createVertexEmbedder, type VertexEmbeddingClient } from '../../src/noor-rag/embedding';
 import { readRuntimeConfig, verifyCorpusReady } from '../../src/noor-rag/firestore';
 import {
@@ -10,7 +10,11 @@ import {
     buildControlledRecoveryQuery,
     createValidatedConversationState,
 } from '../../src/noor-rag/queryRewrite';
-import { createFirestoreRetrievalRepository, retrieveSemanticWithStats } from '../../src/noor-rag/retrieval';
+import {
+    createFirestoreRetrievalRepository,
+    retrieveEntitySummaryWithStats,
+    retrieveSemanticWithStats,
+} from '../../src/noor-rag/retrieval';
 import type { NoorAnswer, NoorChatRequest, RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
 import { LOCKED_PROJECT } from './verify-index';
 
@@ -32,6 +36,30 @@ interface RetrievalPreflightCaseResult {
     query: string;
     candidateIds: string[];
     answerableIds: string[];
+    passed: boolean;
+    retrievalPath: 'point_question';
+    retrievalMs: number;
+    evidenceCount: number;
+    evidenceTokenCount: number;
+}
+
+interface SynthesisPreflightCase {
+    id: 'AlBaqarahThemes' | 'YusufSummary' | 'MaryamOverview';
+    query: string;
+}
+
+interface SynthesisPreflightCaseResult {
+    id: SynthesisPreflightCase['id'];
+    query: string;
+    retrievalPath: 'entity_summary';
+    entity: { surahNumber: number; canonicalName: string };
+    anchorVerses: readonly number[];
+    candidateCount: number;
+    evidenceCount: number;
+    evidenceTokenCount: number;
+    evidenceRanges: string[];
+    sourceCount: number;
+    retrievalMs: number;
     passed: boolean;
 }
 
@@ -129,6 +157,14 @@ function preflightCases(): readonly RetrievalPreflightCase[] {
     ];
 }
 
+function synthesisPreflightCases(): readonly SynthesisPreflightCase[] {
+    return [
+        { id: 'AlBaqarahThemes', query: 'What are the main themes of Surah Al-Baqarah?' },
+        { id: 'YusufSummary', query: 'Summarize Surah Yusuf.' },
+        { id: 'MaryamOverview', query: 'What is Surah Maryam mainly about?' },
+    ];
+}
+
 async function main(): Promise<void> {
     const credential = applicationDefault();
     await credential.getAccessToken();
@@ -140,8 +176,10 @@ async function main(): Promise<void> {
     const embedder = createVertexEmbedder(vertex.models as VertexEmbeddingClient);
     const repository = createFirestoreRetrievalRepository(firestore);
     const results: RetrievalPreflightCaseResult[] = [];
+    const synthesisResults: SynthesisPreflightCaseResult[] = [];
 
     for (const testCase of preflightCases()) {
+        const startedAt = Date.now();
         const retrieval = await retrieveSemanticWithStats({
             content: testCase.query,
             config,
@@ -160,10 +198,51 @@ async function main(): Promise<void> {
             candidateIds: retrieval.evidence.map(item => item.chunk.chunkId),
             answerableIds: answerable.map(item => item.chunk.chunkId),
             passed: hasExpectedEvidence && !hasForbiddenEvidence,
+            retrievalPath: 'point_question',
+            retrievalMs: Math.max(0, Date.now() - startedAt),
+            evidenceCount: answerable.length,
+            evidenceTokenCount: answerable.reduce((total, item) => total + item.chunk.tokenCount, 0),
         });
     }
 
-    const failed = results.filter(result => !result.passed);
+    for (const testCase of synthesisPreflightCases()) {
+        const request: NoorChatRequest = {
+            mode: 'chat',
+            requestId: `40000000-0000-4000-8000-${String(synthesisResults.length + 1).padStart(12, '0')}`,
+            question: testCase.query,
+            history: [],
+        };
+        const plan = buildChatQueryPlan({ request, validatedConversationState: null });
+        if (plan.retrievalTask !== 'entity_summary' || plan.entity === null) {
+            throw new Error(`Synthesis task did not resolve: ${testCase.id}`);
+        }
+        const startedAt = Date.now();
+        const retrieval = await retrieveEntitySummaryWithStats({
+            entity: plan.entity,
+            config,
+            repository,
+        });
+        const retrievalMs = Math.max(0, Date.now() - startedAt);
+        const evidenceRanges = retrieval.evidence.map(item => `${item.chunk.surah}:${item.chunk.verseStart}-${item.chunk.verseEnd}`);
+        const sameEntity = retrieval.evidence.every(item => item.chunk.surah === plan.entity!.surahNumber);
+        const bounded = retrieval.candidateCount <= 48 && retrieval.evidence.length <= 8;
+        synthesisResults.push({
+            id: testCase.id,
+            query: testCase.query,
+            retrievalPath: 'entity_summary',
+            entity: { surahNumber: plan.entity.surahNumber, canonicalName: plan.entity.canonicalName },
+            anchorVerses: retrieval.anchorVerses,
+            candidateCount: retrieval.candidateCount,
+            evidenceCount: retrieval.evidence.length,
+            evidenceTokenCount: retrieval.evidence.reduce((total, item) => total + item.chunk.tokenCount, 0),
+            evidenceRanges,
+            sourceCount: new Set(retrieval.evidence.map(item => item.chunk.source)).size,
+            retrievalMs,
+            passed: sameEntity && bounded && isEntitySummaryEvidenceSufficient(plan.entity, retrieval.evidence),
+        });
+    }
+
+    const failed = [...results, ...synthesisResults].filter(result => !result.passed);
     process.stdout.write(`${JSON.stringify({
         project: LOCKED_PROJECT,
         corpusVersion: config.activeCorpusVersion,
@@ -176,9 +255,10 @@ async function main(): Promise<void> {
                 history: [],
             },
         }),
-        passed: results.length - failed.length,
+        passed: results.length + synthesisResults.length - failed.length,
         failed: failed.length,
         cases: results,
+        synthesisCases: synthesisResults,
     }, undefined, 2)}\n`);
     process.stdout.write(`SEMANTIC RETRIEVAL PREFLIGHT: ${failed.length === 0 ? 'VERIFIED' : 'FAILED'}\n`);
     if (failed.length > 0) process.exitCode = 1;

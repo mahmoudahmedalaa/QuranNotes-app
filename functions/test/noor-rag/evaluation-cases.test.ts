@@ -30,6 +30,7 @@ describe('Noor external evaluation cases', () => {
         assert.ok(manifest.cases.length >= 10);
         assert.ok(manifest.cases.some(item => item.family === 'structural-follow-up'));
         assert.ok(manifest.cases.some(item => item.family === 'paraphrase-and-language-variant'));
+        assert.ok(manifest.cases.some(item => item.family === 'entity-wide-synthesis'));
         assert.ok(manifest.cases.some(item => item.family.startsWith('safety-control-')));
         for (const id of [
             'regression-noah',

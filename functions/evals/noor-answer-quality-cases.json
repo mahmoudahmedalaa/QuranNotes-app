@@ -148,6 +148,52 @@
         },
         "sourceDerivedOracle": "The claim is supported by S1, not S2; the citation must correspond to the evidence that supports the claim."
       }
+    },
+    {
+      "id": "entity-themes-substituted-with-one-virtue",
+      "question": "What are the main themes of this work?",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "The opening passage describes a distinctive virtue." },
+        { "promptSourceId": "S2", "text": "A middle section develops accountability and covenant." },
+        { "promptSourceId": "S3", "text": "A later section discusses ethical conduct and community obligations." }
+      ],
+      "generatedAnswer": "Its main theme is the distinctive virtue described in the opening passage. [S1]",
+      "citationIds": ["S1"],
+      "expected": {
+        "verdict": "FAIL",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": false,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": true,
+          "clear": true,
+          "citationConsistent": true
+        },
+        "sourceDerivedOracle": "A single local property does not fulfill an entity-wide themes task when the selected evidence represents multiple sections."
+      }
+    },
+    {
+      "id": "entity-summary-synthesizes-sections",
+      "question": "Summarize this work.",
+      "selectedEvidence": [
+        { "promptSourceId": "S1", "text": "The opening establishes a covenant and guidance." },
+        { "promptSourceId": "S2", "text": "The middle develops patience through a family trial." },
+        { "promptSourceId": "S3", "text": "The conclusion emphasizes accountability and mercy." }
+      ],
+      "generatedAnswer": "The work moves from covenant and guidance [S1], through patience under trial [S2], to accountability and mercy [S3].",
+      "citationIds": ["S1", "S2", "S3"],
+      "expected": {
+        "verdict": "PASS",
+        "properties": {
+          "grounded": true,
+          "answersQuestion": true,
+          "preservesMaterialQualifications": true,
+          "materiallyMisleading": false,
+          "clear": true,
+          "citationConsistent": true
+        },
+        "sourceDerivedOracle": "The summary must synthesize the represented sections and cite each section used."
+      }
     }
   ]
 }

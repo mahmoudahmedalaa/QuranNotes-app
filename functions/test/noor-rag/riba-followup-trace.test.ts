@@ -122,6 +122,7 @@ describe('riba follow-up sanitized trace', () => {
                 queries.push(query);
                 return { evidence: firstEvidence, vectorHitCount: 4, lexicalHitCount: 2, lexicalSearchStatus: 'available' as const };
             },
+            retrieveEntitySummary: async () => ({ evidence: [], candidateCount: 0, anchorVerses: [] }),
             retrieveExact: async () => firstEvidence,
             generateGroundedAnswer: async ({ request: currentRequest }) => ({
                 ...ANSWERED,

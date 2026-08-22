@@ -21,6 +21,26 @@
       "expected": { "allowedStatuses": ["answered", "insufficient_evidence"], "minimumCitationValidationPassed": 0 }
     },
     {
+      "id": "entity-wide-synthesis",
+      "family": "entity-wide-synthesis",
+      "variants": [
+        { "turns": ["What are the main themes of Surah Al-Baqarah?"] },
+        { "turns": ["Summarize Surah Yusuf."] },
+        { "turns": ["What is Surah Maryam mainly about?"] },
+        { "turns": ["Give me an overview of Surah Al-Kahf."] },
+        { "turns": ["What lessons can we learn from Surah Nuh?"] }
+      ],
+      "expected": { "allowedStatuses": ["answered"], "minimumEvidenceFound": 1, "minimumCitationValidationPassed": 1 }
+    },
+    {
+      "id": "entity-wide-synthesis-follow-up",
+      "family": "entity-wide-synthesis",
+      "variants": [
+        { "turns": ["Tell me about Surah Al-Mulk.", "What are its main themes?"] }
+      ],
+      "expected": { "allowedStatuses": ["answered"], "minimumContextSelected": 1, "minimumCitationValidationPassed": 1 }
+    },
+    {
       "id": "validated-follow-up",
       "family": "structural-follow-up",
       "variants": [

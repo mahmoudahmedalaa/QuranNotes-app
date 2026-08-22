@@ -59,6 +59,8 @@ describe('Noor answer-quality evaluation fixtures', () => {
             ['irrelevant-but-fluent', 'FAIL'],
             ['concise-complete-grounded', 'PASS'],
             ['citation-mismatch', 'FAIL'],
+            ['entity-themes-substituted-with-one-virtue', 'FAIL'],
+            ['entity-summary-synthesizes-sections', 'PASS'],
         ] as const);
 
         assert.equal(cases.length, expected.size);

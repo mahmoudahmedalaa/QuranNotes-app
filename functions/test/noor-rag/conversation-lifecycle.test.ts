@@ -65,6 +65,7 @@ function lifecycleHarness(generate: (request: NoorChatRequest, evidence: readonl
                 lexicalSearchStatus: 'available',
             };
         },
+        retrieveEntitySummary: async () => ({ evidence: [], candidateCount: 0, anchorVerses: [] }),
         retrieveExact: async () => [],
         generateGroundedAnswer: async input => generate(input.request as NoorChatRequest, input.evidence),
         finalizeAnswered: async () => ({ kind: 'finalized' }),

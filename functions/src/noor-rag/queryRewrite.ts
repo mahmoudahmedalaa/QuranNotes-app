@@ -2,6 +2,12 @@ import { createHash } from 'node:crypto';
 
 import type { NoorAnswer, NoorChatRequest, NoorRequest } from './types';
 import type { RetrievedEvidence } from './types';
+import {
+    canonicalSurahByNumber,
+    hasEntitySummarySignal,
+    resolveQuranSurahEntity,
+    type QuranSurahEntity,
+} from './quranEntities';
 
 const MAX_SUBJECT_TOKENS = 8;
 const MAX_STORED_EVIDENCE_IDS = 8;
@@ -22,6 +28,10 @@ const FOLLOW_UP_TOKENS = new Set([
     'his', 'more', 'next', 'she', 'their', 'theirs', 'them', 'then', 'they',
     'this', 'those', 'tell', 'instead', 'its',
 ]);
+const SUMMARY_TASK_TOKENS = new Set([
+    'across', 'its', 'learn', 'lesson', 'lessons', 'main', 'mainly', 'overview',
+    'summary', 'summarise', 'summarize', 'surah', 'theme', 'themes',
+]);
 
 export interface ValidatedConversationState {
     subjectTokens: readonly string[];
@@ -29,6 +39,7 @@ export interface ValidatedConversationState {
     evidenceCount: number;
     expiresAt: string;
     sourceQuestionFingerprint: string;
+    entity?: QuranSurahEntity;
 }
 
 export interface QueryVariant {
@@ -41,6 +52,9 @@ export interface ChatQueryPlan {
     contextSelected: boolean;
     conversationState: 'validated_subject_and_evidence' | 'none';
     requiresClarification: boolean;
+    taskType: 'point_question' | 'entity_summary' | 'contextual_followup';
+    retrievalTask: 'point_question' | 'entity_summary';
+    entity: QuranSurahEntity | null;
 }
 
 export interface CreateValidatedConversationStateInput {
@@ -127,12 +141,31 @@ export function parseValidatedConversationState(value: unknown, nowMs = Date.now
         .filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 256)
         .slice(0, MAX_STORED_EVIDENCE_IDS);
     if (subjectTokens.length === 0 || evidenceIds.length === 0 || evidenceIds.length !== evidenceCount) return null;
+    let entity: QuranSurahEntity | undefined;
+    if (value.entity !== undefined) {
+        if (!isRecord(value.entity)
+            || value.entity.entityType !== 'surah'
+            || typeof value.entity.surahNumber !== 'number'
+            || !Number.isInteger(value.entity.surahNumber)
+            || typeof value.entity.canonicalName !== 'string'
+            || typeof value.entity.verseCount !== 'number') {
+            return null;
+        }
+        const canonical = canonicalSurahByNumber(value.entity.surahNumber);
+        if (canonical === null
+            || canonical.canonicalName !== value.entity.canonicalName
+            || canonical.verseCount !== value.entity.verseCount) {
+            return null;
+        }
+        entity = canonical;
+    }
     return {
         subjectTokens,
         evidenceIds,
         evidenceCount: evidenceIds.length,
         expiresAt: new Date(expiresAtMs).toISOString(),
         sourceQuestionFingerprint,
+        ...(entity ? { entity } : {}),
     };
 }
 
@@ -155,12 +188,18 @@ export function createValidatedConversationState(
         ? questionTokens
         : extractCitedEvidenceTokens(citedEvidence);
     if (citedEvidence.length === 0 || subjectTokens.length === 0) return null;
+    const resolvedEntity = resolveQuranSurahEntity(input.request.question);
+    const entity = resolvedEntity !== null
+        && citedEvidence.every(item => item.chunk.surah === resolvedEntity.surahNumber)
+        ? resolvedEntity
+        : undefined;
     return parseValidatedConversationState({
         subjectTokens,
         evidenceIds: citedEvidence.map(item => item.chunk.chunkId),
         evidenceCount: citedEvidence.length,
         expiresAt: new Date(nowMs + CONVERSATION_STATE_RETENTION_MS).toISOString(),
         sourceQuestionFingerprint: fingerprintQuestion(input.request.question),
+        ...(entity ? { entity } : {}),
     }, nowMs);
 }
 
@@ -208,9 +247,35 @@ export function buildChatQueryPlan(input: Readonly<{
         ? ` Regarding Quran ${input.request.verseContext.surah}:${input.request.verseContext.verse}.`
         : '';
     const structuralFollowUp = isStructuralFollowUp(input.request.question);
+    const summarySignal = hasEntitySummarySignal(input.request.question);
+    const directEntity = resolveQuranSurahEntity(input.request.question);
+    const priorMatches = state !== null && hasPriorSubjectMatch(input.request, state);
+    const contextualSummary = summarySignal && directEntity === null && state?.entity !== undefined && priorMatches;
+    const entity = directEntity ?? (contextualSummary ? state?.entity ?? null : null);
+    const retrievalTask = summarySignal && entity !== null ? 'entity_summary' : 'point_question';
+    const unresolvedSurahReference = directEntity === null && /\b(?:surah|surat)\b/iu.test(input.request.question);
+    const summaryNeedsEntity = summarySignal
+        && entity === null
+        && (unresolvedSurahReference
+            || extractSubjectTokens(input.request.question).every(token => SUMMARY_TASK_TOKENS.has(token)));
     const contextSelected = state !== null
-        && structuralFollowUp
-        && hasPriorSubjectMatch(input.request, state);
+        && (structuralFollowUp || contextualSummary)
+        && priorMatches;
+    const taskType: ChatQueryPlan['taskType'] = contextualSummary
+        ? 'contextual_followup'
+        : retrievalTask === 'entity_summary' ? 'entity_summary'
+            : contextSelected ? 'contextual_followup' : 'point_question';
+    if (summaryNeedsEntity) {
+        return {
+            variants: [],
+            contextSelected: false,
+            conversationState: 'none',
+            requiresClarification: true,
+            taskType: 'entity_summary',
+            retrievalTask: 'entity_summary',
+            entity: null,
+        };
+    }
     if (!contextSelected || state === null) {
         return {
             variants: structuralFollowUp
@@ -219,6 +284,9 @@ export function buildChatQueryPlan(input: Readonly<{
             contextSelected: false,
             conversationState: 'none',
             requiresClarification: structuralFollowUp && !input.request.verseContext,
+            taskType,
+            retrievalTask,
+            entity,
         };
     }
     return {
@@ -232,6 +300,9 @@ export function buildChatQueryPlan(input: Readonly<{
         contextSelected: true,
         conversationState: 'validated_subject_and_evidence',
         requiresClarification: false,
+        taskType,
+        retrievalTask,
+        entity,
     };
 }
 

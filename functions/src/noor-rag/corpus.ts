@@ -13,7 +13,7 @@ export const MAX_CHUNKING_CONCURRENCY = 32;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const SOURCE_ORDER: readonly NoorSource[] = ['ibn_kathir_en_abridged', 'al_sadi_ar'];
-const QURAN_VERSE_COUNTS: readonly number[] = [
+export const QURAN_VERSE_COUNTS: readonly number[] = [
     7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111, 43, 52, 99, 128, 111, 110, 98,
     135, 112, 78, 118, 64, 77, 227, 93, 88, 69, 60, 34, 30, 73, 54, 45, 83, 182, 88, 75, 85,
     54, 53, 89, 59, 37, 35, 38, 29, 18, 45, 60, 49, 62, 55, 78, 96, 29, 22, 24, 13, 14, 11,

@@ -18,7 +18,12 @@ import { createVertexGenerationProvider, generateGroundedAnswer, type VertexGene
 import { handleNoorRequest, type NoorSanitizedTrace } from './handler';
 import { classifyRequestPolicy } from './policy';
 import { parseValidatedConversationState } from './queryRewrite';
-import { createFirestoreRetrievalRepository, retrieveExactVerse, retrieveSemanticWithStats } from './retrieval';
+import {
+    createFirestoreRetrievalRepository,
+    retrieveEntitySummaryWithStats,
+    retrieveExactVerse,
+    retrieveSemanticWithStats,
+} from './retrieval';
 import { recordNoorSanitizedTrace, recordNoorTelemetry } from './telemetry';
 import { claimRequest, finalizeAnswered, finalizeNonAnswer, readCompletedReplay } from './usage';
 import { parseNoorRequest } from './validation';
@@ -124,6 +129,11 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
                 embedder,
                 repository: retrievalRepository,
             }),
+            retrieveEntitySummary: input => retrieveEntitySummaryWithStats({
+                entity: input.entity,
+                config: input.config,
+                repository: retrievalRepository,
+            }),
             retrieveExact: input => retrieveExactVerse({
                 source: input.request.source,
                 surah: input.request.surah,
@@ -136,6 +146,7 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
                 evidence: input.evidence,
                 maxEvidenceCharacters: input.config.maxEvidenceCharacters,
                 provider: generationProvider,
+                taskPlan: input.taskPlan,
             }),
             finalizeAnswered: input => finalizeAnswered({ ...input, repository: usageRepository }),
             finalizeNonAnswer: input => finalizeNonAnswer({ ...input, repository: usageRepository }),

@@ -75,6 +75,7 @@ function harness(overrides: Partial<NoorHandlerDependencies> = {}): Harness {
         claimUsage: async () => { events.push('claim'); return { kind: 'claimed', leaseOwnerId: INVOCATION_ID, leaseExpiresAt: '2026-08-11T12:02:00.000Z' }; },
         classifyPolicy: () => { events.push('policy'); return 'allowed'; },
         retrieveSemantic: async () => { events.push('semantic'); return EVIDENCE; },
+        retrieveEntitySummary: async () => { events.push('entity-summary'); return { evidence: EVIDENCE, candidateCount: 1, anchorVerses: [153] }; },
         retrieveExact: async () => { events.push('exact'); return EVIDENCE; },
         generateGroundedAnswer: async () => { events.push('model'); return ANSWERED; },
         finalizeAnswered: async () => { events.push('finalize-answered'); return { kind: 'finalized' }; },

@@ -5,7 +5,7 @@ import {
     type GenerationDiagnostics,
     type NoorGenerationErrorClass,
 } from './generation';
-import { selectAnswerableEvidence } from './answerability';
+import { isEntitySummaryEvidenceSufficient, selectAnswerableEvidence } from './answerability';
 import type { NoorPolicyCategory } from './policy';
 import {
     buildChatQueryPlan,
@@ -146,6 +146,15 @@ export interface NoorHandlerDependencies {
         config: NoorRuntimeConfig;
         query: string;
     }>): Promise<NoorSemanticRetrievalOutput>;
+    retrieveEntitySummary(input: Readonly<{
+        request: Extract<NoorRequest, { mode: 'chat' }>;
+        config: NoorRuntimeConfig;
+        entity: NonNullable<ChatQueryPlan['entity']>;
+    }>): Promise<Readonly<{
+        evidence: readonly RetrievedEvidence[];
+        candidateCount: number;
+        anchorVerses: readonly number[];
+    }>>;
     retrieveExact(input: Readonly<{
         request: Extract<NoorRequest, { mode: 'verse_summary' | 'verse_question' }>;
         config: NoorRuntimeConfig;
@@ -154,6 +163,7 @@ export interface NoorHandlerDependencies {
         request: NoorRequest;
         evidence: readonly RetrievedEvidence[];
         config: NoorRuntimeConfig;
+        taskPlan: ChatQueryPlan;
     }>): Promise<unknown>;
     finalizeAnswered(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
     finalizeNonAnswer(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
@@ -337,7 +347,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let policy: NoorPolicyCategory = 'out_of_scope';
     let queryPlan: ChatQueryPlan = request.mode === 'chat'
         ? buildChatQueryPlan({ request, validatedConversationState: null })
-        : { variants: [], contextSelected: false, conversationState: 'none', requiresClarification: false };
+        : {
+            variants: [], contextSelected: false, conversationState: 'none', requiresClarification: false,
+            taskType: 'point_question', retrievalTask: 'point_question', entity: null,
+        };
     let vectorHitCount = 0;
     let lexicalHitCount = 0;
     let lexicalSearchStatus: NoorSanitizedTrace['lexicalSearchStatus'] = 'not_configured';
@@ -540,45 +553,55 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         const retrievalStartedAt = safeNow(dependencies);
         try {
             if (request.mode === 'chat') {
-                const results = await Promise.all(queryPlan.variants.map(variant => dependencies.retrieveSemantic({
-                    request, config, query: variant.query,
-                })));
-                const normalized = results.map(normalizeSemanticRetrieval);
-                vectorHitCount = normalized.reduce((total, value) => total + value.vectorHitCount, 0);
-                lexicalHitCount = normalized.reduce((total, value) => total + value.lexicalHitCount, 0);
-                lexicalSearchStatus = normalized.some(value => value.lexicalSearchStatus === 'unavailable')
-                    ? 'unavailable'
-                    : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
-                const answerabilityGateActive = results.length > 0 && results.every(isSemanticRetrievalResult);
-                const answerableGroups = answerabilityGateActive
-                    ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
-                    : normalized.map(value => value.evidence);
-                evidence = mergeEvidence(answerableGroups, config);
-                if (answerabilityGateActive && evidence.length === 0) {
-                    const recoveryQuery = buildControlledRecoveryQuery({
-                        request,
-                        validatedConversationState,
+                if (queryPlan.retrievalTask === 'entity_summary') {
+                    if (queryPlan.entity === null) throw new HandlerFailure('insufficient_evidence');
+                    const summary = await dependencies.retrieveEntitySummary({
+                        request, config, entity: queryPlan.entity,
                     });
-                    if (recoveryQuery !== null) {
-                        try {
-                            const recovery = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
-                                request,
-                                config,
-                                query: recoveryQuery,
-                            }));
-                            vectorHitCount += recovery.vectorHitCount;
-                            lexicalHitCount += recovery.lexicalHitCount;
-                            if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
-                            else if (recovery.lexicalSearchStatus === 'available' && lexicalSearchStatus === 'not_configured') lexicalSearchStatus = 'available';
-                            const recoveryAnswerabilityQuery = [...queryPlan.variants]
-                                .reverse()
-                                .find(variant => variant.kind === 'context_enriched')?.query
-                                ?? queryPlan.variants[0]?.query
-                                ?? request.question;
-                            const recoveryEvidence = selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config);
-                            evidence = mergeEvidence([...answerableGroups, recoveryEvidence], config);
-                        } catch {
-                            // Initial retrieval succeeded. Optional recovery failure preserves the safe abstention.
+                    evidence = isEntitySummaryEvidenceSufficient(queryPlan.entity, summary.evidence)
+                        ? [...summary.evidence]
+                        : [];
+                } else {
+                    const results = await Promise.all(queryPlan.variants.map(variant => dependencies.retrieveSemantic({
+                        request, config, query: variant.query,
+                    })));
+                    const normalized = results.map(normalizeSemanticRetrieval);
+                    vectorHitCount = normalized.reduce((total, value) => total + value.vectorHitCount, 0);
+                    lexicalHitCount = normalized.reduce((total, value) => total + value.lexicalHitCount, 0);
+                    lexicalSearchStatus = normalized.some(value => value.lexicalSearchStatus === 'unavailable')
+                        ? 'unavailable'
+                        : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
+                    const answerabilityGateActive = results.length > 0 && results.every(isSemanticRetrievalResult);
+                    const answerableGroups = answerabilityGateActive
+                        ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
+                        : normalized.map(value => value.evidence);
+                    evidence = mergeEvidence(answerableGroups, config);
+                    if (answerabilityGateActive && evidence.length === 0) {
+                        const recoveryQuery = buildControlledRecoveryQuery({
+                            request,
+                            validatedConversationState,
+                        });
+                        if (recoveryQuery !== null) {
+                            try {
+                                const recovery = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
+                                    request,
+                                    config,
+                                    query: recoveryQuery,
+                                }));
+                                vectorHitCount += recovery.vectorHitCount;
+                                lexicalHitCount += recovery.lexicalHitCount;
+                                if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
+                                else if (recovery.lexicalSearchStatus === 'available' && lexicalSearchStatus === 'not_configured') lexicalSearchStatus = 'available';
+                                const recoveryAnswerabilityQuery = [...queryPlan.variants]
+                                    .reverse()
+                                    .find(variant => variant.kind === 'context_enriched')?.query
+                                    ?? queryPlan.variants[0]?.query
+                                    ?? request.question;
+                                const recoveryEvidence = selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config);
+                                evidence = mergeEvidence([...answerableGroups, recoveryEvidence], config);
+                            } catch {
+                                // Initial retrieval succeeded. Optional recovery failure preserves the safe abstention.
+                            }
                         }
                     }
                 }
@@ -600,7 +623,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         let generated: unknown;
         const generationStartedAt = safeNow(dependencies);
         try {
-            generated = await dependencies.generateGroundedAnswer({ request, evidence, config });
+            generated = await dependencies.generateGroundedAnswer({ request, evidence, config, taskPlan: queryPlan });
         } catch {
             throw new HandlerFailure('generation_unavailable');
         } finally {

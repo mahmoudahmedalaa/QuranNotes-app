@@ -1,5 +1,10 @@
 import type { NoorRuntimeConfig } from './config';
 import type { RetrievedEvidence } from './types';
+import type { QuranSurahEntity } from './quranEntities';
+
+const ENTITY_SUMMARY_COVERAGE_SECTIONS = 6;
+const MIN_ENTITY_SUMMARY_UNITS = 4;
+const MIN_ENTITY_SUMMARY_SECTIONS = 4;
 
 const ANSWERABILITY_IGNORED_TOKENS = new Set([
     'a', 'about', 'an', 'and', 'are', 'but', 'can', 'could', 'describe', 'did', 'does', 'do',
@@ -86,6 +91,24 @@ function verseRangesOverlap(left: RetrievedEvidence, right: RetrievedEvidence): 
         && right.chunk.verseStart <= left.chunk.verseEnd;
 }
 
+function evidenceConceptSimilarity(left: RetrievedEvidence, right: RetrievedEvidence): number {
+    const leftTokens = evidenceTokens(left.chunk.retrievalText);
+    const rightTokens = evidenceTokens(right.chunk.retrievalText);
+    const intersection = [...leftTokens].filter(token => rightTokens.has(token)).length;
+    const union = new Set([...leftTokens, ...rightTokens]).size;
+    return union === 0 ? 1 : intersection / union;
+}
+
+function entitySummaryConceptClusterCount(evidence: readonly RetrievedEvidence[]): number {
+    const representatives: RetrievedEvidence[] = [];
+    for (const item of evidence) {
+        if (!representatives.some(representative => evidenceConceptSimilarity(item, representative) >= 0.9)) {
+            representatives.push(item);
+        }
+    }
+    return representatives.length;
+}
+
 export function selectAnswerableEvidence(
     query: string,
     evidence: readonly RetrievedEvidence[],
@@ -101,4 +124,26 @@ export function selectAnswerableEvidence(
         return item.similarity >= threshold
             && directlySupported.some(direct => verseRangesOverlap(direct, item));
     });
+}
+
+export function isEntitySummaryEvidenceSufficient(
+    entity: QuranSurahEntity,
+    evidence: readonly RetrievedEvidence[],
+): boolean {
+    if (evidence.length === 0 || evidence.some(item => item.chunk.surah !== entity.surahNumber)) return false;
+    const units = new Set(evidence.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`));
+    const sections = new Set(evidence.map(item => Math.min(
+        ENTITY_SUMMARY_COVERAGE_SECTIONS - 1,
+        Math.floor((item.chunk.verseStart - 1) * ENTITY_SUMMARY_COVERAGE_SECTIONS / entity.verseCount),
+    )));
+    const requiredUnits = Math.min(MIN_ENTITY_SUMMARY_UNITS, entity.verseCount);
+    const requiredSections = Math.min(MIN_ENTITY_SUMMARY_SECTIONS, entity.verseCount);
+    const requiredConceptClusters = Math.min(3, evidence.length);
+    const starts = evidence.map(item => item.chunk.verseStart);
+    const span = Math.max(...starts) - Math.min(...starts);
+    const requiredSpan = entity.verseCount <= 2 ? 0 : Math.floor(entity.verseCount / 2);
+    return units.size >= requiredUnits
+        && sections.size >= requiredSections
+        && entitySummaryConceptClusterCount(evidence) >= requiredConceptClusters
+        && span >= requiredSpan;
 }

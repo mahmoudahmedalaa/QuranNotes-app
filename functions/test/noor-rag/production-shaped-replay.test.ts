@@ -61,6 +61,32 @@ function retrievalResult(evidence: readonly RetrievedEvidence[]): NoorSemanticRe
     };
 }
 
+function entitySummaryEvidence(surah: number, verses: readonly number[]): RetrievedEvidence[] {
+    return verses.map((verse, index) => {
+        const source = index % 2 === 0 ? 'ibn_kathir_en_abridged' : 'al_sadi_ar';
+        const text = `Production-shaped local tafsir section at Quran ${surah}:${verse}.`;
+        return {
+            kind: 'exact',
+            promptSourceId: `S${index + 1}`,
+            chunk: {
+                ...BAQARAH_VIRTUES_PRODUCTION_REPLAY.chunk,
+                chunkId: `summary-${surah}-${verse}-${source}`,
+                canonicalUnitId: `summary-unit-${surah}-${verse}-${source}`,
+                source,
+                sourceTitle: source === 'al_sadi_ar' ? "Tafsir Al-Sa'di" : 'Tafsir Ibn Kathir',
+                language: source === 'al_sadi_ar' ? 'ar' : 'en',
+                surah,
+                verseStart: verse,
+                verseEnd: verse,
+                originalStart: 0,
+                originalEnd: text.length,
+                originalText: text,
+                retrievalText: text,
+            },
+        } satisfies RetrievedEvidence;
+    });
+}
+
 function dependencies(overrides: Partial<NoorHandlerDependencies>): NoorHandlerDependencies {
     return {
         loadRuntimeConfig: async () => CONFIG,
@@ -70,6 +96,7 @@ function dependencies(overrides: Partial<NoorHandlerDependencies>): NoorHandlerD
         claimUsage: async () => ({ kind: 'claimed', leaseOwnerId: 'lease', leaseExpiresAt: '2026-08-18T12:00:00.000Z' }),
         classifyPolicy: () => 'allowed',
         retrieveSemantic: async () => retrievalResult([]),
+        retrieveEntitySummary: async () => ({ evidence: [], candidateCount: 0, anchorVerses: [] }),
         retrieveExact: async () => [],
         generateGroundedAnswer: async input => citationAnswer(input.request.requestId, input.evidence[0]!),
         finalizeAnswered: async () => ({ kind: 'finalized' }),
@@ -85,6 +112,88 @@ async function run(request: NoorChatRequest, value: NoorHandlerDependencies): Pr
 }
 
 describe('production-shaped semantic replay', () => {
+    it('routes a Yusuf summary through one entity-constrained envelope and aggregates distributed evidence', async () => {
+        const summary = entitySummaryEvidence(12, [9, 28, 46, 65, 83, 102]);
+        let semanticCalls = 0;
+        let summaryCalls = 0;
+        let generatedEvidence: readonly RetrievedEvidence[] = [];
+        const value = dependencies({
+            retrieveSemantic: async () => {
+                semanticCalls += 1;
+                return retrievalResult([]);
+            },
+            retrieveEntitySummary: async input => {
+                summaryCalls += 1;
+                assert.equal(input.entity.surahNumber, 12);
+                return { evidence: summary, candidateCount: 12, anchorVerses: [9, 28, 46, 65, 83, 102] };
+            },
+            generateGroundedAnswer: async input => {
+                generatedEvidence = input.evidence;
+                assert.equal(input.taskPlan.retrievalTask, 'entity_summary');
+                return citationAnswer(input.request.requestId, input.evidence[0]!);
+            },
+        });
+
+        const response = await run({
+            mode: 'chat',
+            requestId: '10000000-0000-4000-8000-000000000012',
+            question: 'Summarize Surah Yusuf.',
+            history: [],
+        }, value);
+
+        assert.equal(response.status, 'answered');
+        assert.equal(summaryCalls, 1);
+        assert.equal(semanticCalls, 0);
+        assert.equal(generatedEvidence.length, 6);
+        assert.ok(generatedEvidence.every(item => item.chunk.surah === 12));
+        assert.equal(new Set(generatedEvidence.map(item => item.chunk.verseStart)).size, 6);
+    });
+
+    it('resolves an Al-Mulk synthesis follow-up from validated prior entity state', async () => {
+        const firstRequest: NoorChatRequest = {
+            mode: 'chat',
+            requestId: '10000000-0000-4000-8000-000000000013',
+            question: 'Tell me about Surah Al-Mulk.',
+            history: [],
+        };
+        const priorEvidence = entitySummaryEvidence(67, [1])[0]!;
+        const state = createValidatedConversationState({
+            request: firstRequest,
+            response: citationAnswer(firstRequest.requestId, priorEvidence),
+            evidence: [priorEvidence],
+        });
+        assert.ok(state);
+        const summary = entitySummaryEvidence(67, [3, 8, 13, 18, 23, 28]);
+        let semanticCalls = 0;
+        let summaryCalls = 0;
+        const value = dependencies({
+            readValidatedConversationState: async () => state,
+            retrieveSemantic: async () => {
+                semanticCalls += 1;
+                return retrievalResult([]);
+            },
+            retrieveEntitySummary: async input => {
+                summaryCalls += 1;
+                assert.equal(input.entity.surahNumber, 67);
+                return { evidence: summary, candidateCount: 12, anchorVerses: [3, 8, 13, 18, 23, 28] };
+            },
+        });
+
+        const response = await run({
+            mode: 'chat',
+            requestId: '10000000-0000-4000-8000-000000000014',
+            question: 'What are its main themes?',
+            history: [
+                { role: 'user', content: firstRequest.question },
+                { role: 'assistant', content: 'A grounded prior answer.' },
+            ],
+        }, value);
+
+        assert.equal(response.status, 'answered');
+        assert.equal(summaryCalls, 1);
+        assert.equal(semanticCalls, 0);
+    });
+
     it('accepts strong Noah evidence expressed with the corpus spelling Nuh', async () => {
         let generatedEvidence: readonly RetrievedEvidence[] = [];
         const value = dependencies({
