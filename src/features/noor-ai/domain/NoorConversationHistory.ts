@@ -6,11 +6,26 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserScopedStorage } from '../../../core/storage/UserScopedStorage';
+import { NoorChatRequest } from './generatedContract';
 import { NoorMessage, NoorConversation, VerseContext } from './types';
 
 // ── Constants ──
 const STORAGE_KEY = '@noor_conversations_v1';
+const PENDING_REQUEST_STORAGE_KEY = '@noor_pending_request_v1';
 const MAX_CONVERSATIONS = 50;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_PENDING_RECOVERY_AGE_MS = 9 * 60_000;
+
+export interface PendingNoorRequest {
+    version: 1;
+    status: 'pending' | 'recovering';
+    ownerUid: string;
+    conversationId: string;
+    userMessageId: string;
+    createdAt: number;
+    request: NoorChatRequest;
+}
 
 // ── Simple Async Mutex ──
 let _lockPromise: Promise<void> = Promise.resolve();
@@ -81,6 +96,48 @@ async function loadAllRaw(): Promise<NoorConversation[]> {
 
 async function saveAllRaw(conversations: NoorConversation[]): Promise<void> {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPendingNoorRequest(value: unknown): value is PendingNoorRequest {
+    if (!isRecord(value)
+        || value.version !== 1
+        || (value.status !== 'pending' && value.status !== 'recovering')
+        || typeof value.ownerUid !== 'string'
+        || value.ownerUid.trim() === ''
+        || typeof value.conversationId !== 'string'
+        || value.conversationId.trim() === ''
+        || typeof value.userMessageId !== 'string'
+        || value.userMessageId.trim() === ''
+        || typeof value.createdAt !== 'number'
+        || !Number.isFinite(value.createdAt)
+        || value.createdAt <= 0
+        || !isRecord(value.request)) return false;
+
+    const request = value.request;
+    if (request.mode !== 'chat'
+        || typeof request.requestId !== 'string'
+        || !UUID_PATTERN.test(request.requestId)
+        || typeof request.question !== 'string'
+        || request.question.trim() === ''
+        || !Array.isArray(request.history)
+        || request.history.length > 6
+        || !request.history.every((turn) => isRecord(turn)
+            && (turn.role === 'user' || turn.role === 'assistant')
+            && typeof turn.content === 'string')) return false;
+
+    if (request.verseContext !== undefined) {
+        if (!isRecord(request.verseContext)
+            || !Number.isInteger(request.verseContext.surah)
+            || !Number.isInteger(request.verseContext.verse)
+            || (request.verseContext.surah as number) < 1
+            || (request.verseContext.verse as number) < 1) return false;
+    }
+
+    return true;
 }
 
 // ── Public API ──
@@ -190,4 +247,41 @@ export async function deleteConversation(id: string): Promise<void> {
  */
 export async function clearAllConversations(): Promise<void> {
     await AsyncStorage.removeItem(STORAGE_KEY);
+}
+
+/** Persist only the replayable request payload and local conversation identity. */
+export async function savePendingNoorRequest(pending: PendingNoorRequest): Promise<void> {
+    await UserScopedStorage.setItem(
+        PENDING_REQUEST_STORAGE_KEY,
+        pending.ownerUid,
+        JSON.stringify(pending),
+    );
+}
+
+export async function loadPendingNoorRequest(ownerUid: string): Promise<PendingNoorRequest | null> {
+    try {
+        const raw = await UserScopedStorage.getItem(PENDING_REQUEST_STORAGE_KEY, ownerUid, false);
+        if (!raw) return null;
+        const parsed: unknown = JSON.parse(raw);
+        if (isPendingNoorRequest(parsed) && parsed.ownerUid === ownerUid) return parsed;
+    } catch {
+        // Invalid local state is removed below and never replayed.
+    }
+    await UserScopedStorage.removeItem(PENDING_REQUEST_STORAGE_KEY, ownerUid);
+    return null;
+}
+
+export async function clearPendingNoorRequest(requestId: string, ownerUid: string): Promise<void> {
+    const pending = await loadPendingNoorRequest(ownerUid);
+    if (pending?.request.requestId === requestId) {
+        await UserScopedStorage.removeItem(PENDING_REQUEST_STORAGE_KEY, ownerUid);
+    }
+}
+
+export function isPendingNoorRequestRecoverable(
+    pending: PendingNoorRequest,
+    nowMs = Date.now(),
+): boolean {
+    const ageMs = nowMs - pending.createdAt;
+    return ageMs >= 0 && ageMs < MAX_PENDING_RECOVERY_AGE_MS;
 }

@@ -121,6 +121,40 @@ describe('handleNoorRequest', () => {
         assert.ok(!value.events.includes('entitlement'));
     });
 
+    it('replays a completed mobile request without duplicate generation, claim, or conversation state', async () => {
+        let completed: NoorAnswer | null = null;
+        let claimCount = 0;
+        let generationCount = 0;
+        let finalizeCount = 0;
+        let stateWriteCount = 0;
+        const value = harness({
+            readCompletedReplay: async () => completed,
+            claimUsage: async () => {
+                claimCount += 1;
+                return { kind: 'claimed' as const, leaseOwnerId: INVOCATION_ID, leaseExpiresAt: '2026-08-11T12:02:00.000Z' };
+            },
+            generateGroundedAnswer: async () => {
+                generationCount += 1;
+                return ANSWERED;
+            },
+            finalizeAnswered: async (input) => {
+                finalizeCount += 1;
+                completed = input.response;
+                return { kind: 'finalized' as const };
+            },
+            writeValidatedConversationState: async () => {
+                stateWriteCount += 1;
+            },
+        });
+
+        assert.deepEqual(await run(value), ANSWERED);
+        assert.deepEqual(await run(value), ANSWERED);
+        assert.equal(claimCount, 1);
+        assert.equal(generationCount, 1);
+        assert.equal(finalizeCount, 1);
+        assert.equal(stateWriteCount, 1);
+    });
+
     it('maps inactive entitlement, entitlement outage, quota, rate limit, and contention', async () => {
         const none = harness({ resolveEntitlement: async () => ({ class: 'none', expiresAt: null, source: 'revenuecat' }) });
         assert.equal((await run(none)).status, 'not_entitled');

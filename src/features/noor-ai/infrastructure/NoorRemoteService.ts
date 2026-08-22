@@ -38,7 +38,7 @@ export class NoorTransportError extends Error {
 }
 
 export interface NoorRemoteClient {
-    ask(request: NoorRequest): Promise<NoorAnswer>;
+    ask(request: NoorRequest, expectedOwnerUid?: string): Promise<NoorAnswer>;
 }
 
 interface NoorRemoteDependencies {
@@ -141,14 +141,20 @@ export function createNoorRemoteService(overrides: NoorRemoteOverrides = {}): No
     };
 
     return {
-        async ask(request: NoorRequest): Promise<NoorAnswer> {
+        async ask(request: NoorRequest, expectedOwnerUid?: string): Promise<NoorAnswer> {
             let authToken: string;
             let appCheckToken: string;
             try {
+                if (expectedOwnerUid && auth.currentUser?.uid !== expectedOwnerUid) {
+                    throw new NoorTransportError('signed_out');
+                }
                 authToken = await dependencies.getAuthToken();
                 if (!authToken) throw new NoorTransportError('signed_out');
                 appCheckToken = await dependencies.getAppCheckToken();
                 if (!appCheckToken) throw new NoorTransportError('temporarily_unavailable');
+                if (expectedOwnerUid && auth.currentUser?.uid !== expectedOwnerUid) {
+                    throw new NoorTransportError('signed_out');
+                }
             } catch (error: unknown) {
                 if (error instanceof NoorTransportError) throw error;
                 throw new NoorTransportError('temporarily_unavailable');

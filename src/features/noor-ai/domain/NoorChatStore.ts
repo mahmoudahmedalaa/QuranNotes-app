@@ -54,6 +54,19 @@ export function createNoorMessage(
     };
 }
 
+/** Merge a recovered response without duplicating the assistant turn. */
+export function appendNoorResponseOnce(
+    messages: NoorMessage[],
+    responseMessage: NoorMessage,
+): NoorMessage[] {
+    if (responseMessage.requestId
+        && messages.some((message) => message.role === 'noor'
+            && message.requestId === responseMessage.requestId)) {
+        return messages;
+    }
+    return [...messages, responseMessage];
+}
+
 /**
  * Create the initial greeting message based on time of day.
  */

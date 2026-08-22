@@ -19,6 +19,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Keyboard,
+    AppState,
 } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,8 +30,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 
 import { NoorMessage, VerseContext, NoorAIParams } from '../domain/types';
-import { askNoor, getSuggestedQuestions } from '../domain/NoorAIService';
 import {
+    createNoorChatRequest,
+    getSuggestedQuestions,
+    isNoorResumeTransition,
+    recoverNoorRequest,
+} from '../domain/NoorAIService';
+import {
+    appendNoorResponseOnce,
     createUserMessage,
     createNoorMessage,
     createGreetingMessage,
@@ -39,6 +46,11 @@ import {
 import {
     saveConversation,
     loadConversation,
+    clearPendingNoorRequest,
+    isPendingNoorRequestRecoverable,
+    loadPendingNoorRequest,
+    PendingNoorRequest,
+    savePendingNoorRequest,
 } from '../domain/NoorConversationHistory';
 import { getNoorStatusPresentation } from '../domain/NoorStatusPresentation';
 
@@ -48,6 +60,7 @@ import NoorSuggestionChips from './NoorSuggestionChips';
 import NoorConversationList from './NoorConversationList';
 import { Spacing } from '../../../core/theme/DesignSystem';
 import { AsyncGenerationGuard } from '../domain/AsyncGenerationGuard';
+import { auth } from '../../../core/firebase/config';
 
 export default function NoorAIScreen() {
     const theme = useTheme();
@@ -60,12 +73,24 @@ export default function NoorAIScreen() {
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [transientError, setTransientError] = useState<string | null>(null);
-    const [conversationId, setConversationId] = useState<string | null>(null);
     const [showHistory, setShowHistory] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const inFlightRef = useRef(false);
+    const messagesRef = useRef<NoorMessage[]>([]);
+    const conversationIdRef = useRef<string | null>(null);
+    const pendingRequestRef = useRef<PendingNoorRequest | null>(null);
+    const appStateRef = useRef(AppState.currentState);
     const requestGenerationRef = useRef(new AsyncGenerationGuard());
     const requestGeneration = requestGenerationRef.current;
+
+    const replaceMessages = useCallback((nextMessages: NoorMessage[]) => {
+        messagesRef.current = nextMessages;
+        setMessages(nextMessages);
+    }, []);
+
+    const replaceConversationId = useCallback((nextConversationId: string | null) => {
+        conversationIdRef.current = nextConversationId;
+    }, []);
 
     useEffect(() => () => {
         requestGeneration.invalidate();
@@ -85,108 +110,231 @@ export default function NoorAIScreen() {
             : undefined
     ), [params.arabicText, params.surahName, params.surahNumber, params.translation, params.verseNumber]);
 
-    // ── Initialize: load existing conversation or create greeting ──
-    useEffect(() => {
-        const init = async () => {
-            // Check if resuming a past conversation
-            if (params.conversationId) {
-                const conv = await loadConversation(params.conversationId as string);
-                if (conv) {
-                    setMessages(conv.messages);
-                    setConversationId(conv.id);
-                    return;
-                }
-            }
-
-            // New conversation
-            const greeting = verseContext
-                ? createVerseGreetingMessage(verseContext)
-                : createGreetingMessage();
-            setMessages([greeting]);
-
-            // If an initial question was passed, auto-send it
-            if (params.initialQuestion) {
-                setTimeout(() => {
-                    handleSend(params.initialQuestion!);
-                }, 600);
-            }
-        };
-        init();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     // ── Resume a past conversation from the history list ──
     const handleResumeConversation = useCallback(async (id: string) => {
+        if (pendingRequestRef.current) return;
         requestGeneration.invalidate();
         inFlightRef.current = false;
         setIsLoading(false);
         const resumeGeneration = requestGeneration.next();
         const conv = await loadConversation(id);
         if (conv && requestGeneration.isCurrent(resumeGeneration)) {
-            setMessages(conv.messages);
-            setConversationId(conv.id);
+            replaceMessages(conv.messages);
+            replaceConversationId(conv.id);
             setShowHistory(false);
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
         }
-    }, [requestGeneration]);
+    }, [replaceConversationId, replaceMessages, requestGeneration]);
 
     // ── Suggested questions ──
     const suggestedQuestions = getSuggestedQuestions(verseContext);
 
-    // ── Send message ──
-    const handleSend = useCallback(
-        async (textOverride?: string) => {
-            const text = (textOverride || inputText).trim();
-            if (!text || inFlightRef.current) return;
-            inFlightRef.current = true;
-            const generation = requestGeneration.next();
+    const runPendingRequest = useCallback(async (initialPending: PendingNoorRequest) => {
+        const activeOwnerUid = auth.currentUser?.uid;
+        if (activeOwnerUid !== initialPending.ownerUid) {
+            pendingRequestRef.current = null;
+            inFlightRef.current = false;
+            setIsLoading(false);
+            return;
+        }
+        if (!isPendingNoorRequestRecoverable(initialPending)) {
+            await clearPendingNoorRequest(initialPending.request.requestId, initialPending.ownerUid);
+            pendingRequestRef.current = null;
+            inFlightRef.current = false;
+            setIsLoading(false);
+            setTransientError('Noor could not safely recover this older request. Please ask again.');
+            return;
+        }
 
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Keyboard.dismiss();
-            setTransientError(null);
+        const generation = requestGeneration.next();
+        inFlightRef.current = true;
+        pendingRequestRef.current = initialPending;
+        setTransientError(null);
+        setIsLoading(true);
 
-            // Add user message
-            const userMsg = createUserMessage(text, verseContext);
-            setMessages((prev) => [...prev, userMsg]);
-            setInputText('');
-            setIsLoading(true);
+        try {
+            const response = await recoverNoorRequest(initialPending.request, undefined, {
+                onStateChange: async (status) => {
+                    if (!requestGeneration.isCurrent(generation)) return;
+                    const updatedPending: PendingNoorRequest = { ...initialPending, status };
+                    pendingRequestRef.current = updatedPending;
+                    await savePendingNoorRequest(updatedPending);
+                },
+                canAttempt: () => auth.currentUser?.uid === initialPending.ownerUid
+                    && isPendingNoorRequestRecoverable(initialPending),
+                expectedOwnerUid: initialPending.ownerUid,
+            });
+            if (!requestGeneration.isCurrent(generation)
+                || auth.currentUser?.uid !== initialPending.ownerUid) return;
 
-            // Scroll to bottom
-            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+            const presentation = getNoorStatusPresentation(response);
+            const safeResponse = response.status === 'answered'
+                ? response
+                : { ...response, answer: presentation.message };
+            const noorMessage = createNoorMessage(safeResponse, false, verseContext);
+            const updatedMessages = appendNoorResponseOnce(messagesRef.current, noorMessage);
+            replaceMessages(updatedMessages);
 
-            try {
-                const history = [...messages, userMsg].filter((m) => m.role !== 'noor' || messages.indexOf(m) > 0);
-                const response = await askNoor(text, history, undefined, verseContext);
-                if (!requestGeneration.isCurrent(generation)) return;
-                const presentation = getNoorStatusPresentation(response);
-                const safeResponse = response.status === 'answered'
-                    ? response
-                    : { ...response, answer: presentation.message };
-                const noorMsg = createNoorMessage(safeResponse, false, verseContext);
-                const updatedMessages = [...messages, userMsg, noorMsg];
-                setMessages(updatedMessages);
+            // Save the recovered local turn before clearing its replay identity.
+            await saveConversation(initialPending.conversationId, updatedMessages, verseContext);
+            if (!requestGeneration.isCurrent(generation)) return;
+            await clearPendingNoorRequest(initialPending.request.requestId, initialPending.ownerUid);
+            pendingRequestRef.current = null;
 
-                // Persist conversation
-                const savedId = await saveConversation(conversationId, updatedMessages, verseContext);
-                if (!requestGeneration.isCurrent(generation)) return;
-                if (!conversationId) setConversationId(savedId);
-                if (presentation.action === 'paywall') {
-                    router.push('/paywall?reason=noor-ai' as never);
-                }
-            } catch {
-                if (requestGeneration.isCurrent(generation)) {
-                    setTransientError('Noor is temporarily unavailable. Your message was not sent. Please try again.');
-                }
-            } finally {
-                if (requestGeneration.isCurrent(generation)) {
-                    inFlightRef.current = false;
-                    setIsLoading(false);
-                    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
+            if (presentation.action === 'paywall') {
+                router.push('/paywall?reason=noor-ai' as never);
+            }
+        } catch {
+            if (requestGeneration.isCurrent(generation)) {
+                if (auth.currentUser?.uid !== initialPending.ownerUid) {
+                    pendingRequestRef.current = null;
+                    setTransientError(null);
+                } else if (!isPendingNoorRequestRecoverable(initialPending)) {
+                    await clearPendingNoorRequest(initialPending.request.requestId, initialPending.ownerUid);
+                    pendingRequestRef.current = null;
+                    setTransientError('Noor could not safely recover this older request. Please ask again.');
+                } else {
+                    setTransientError('Noor is temporarily unavailable. Tap to retry this question safely.');
                 }
             }
-        },
-        [inputText, messages, verseContext, conversationId, router, requestGeneration],
-    );
+        } finally {
+            if (requestGeneration.isCurrent(generation)) {
+                inFlightRef.current = false;
+                setIsLoading(false);
+                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
+            }
+        }
+    }, [replaceMessages, requestGeneration, router, verseContext]);
+
+    const handleRetryPending = useCallback(() => {
+        const pending = pendingRequestRef.current;
+        if (!pending) return;
+        requestGeneration.invalidate();
+        inFlightRef.current = false;
+        void runPendingRequest({ ...pending, status: 'recovering' });
+    }, [requestGeneration, runPendingRequest]);
+
+    // ── Send message ──
+    const handleSend = useCallback(async (textOverride?: string) => {
+        const text = (textOverride || inputText).trim();
+        if (!text || inFlightRef.current || pendingRequestRef.current) return;
+        const ownerUid = auth.currentUser?.uid;
+        if (!ownerUid) {
+            setTransientError('Please sign in to use Noor.');
+            return;
+        }
+        inFlightRef.current = true;
+
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Keyboard.dismiss();
+        setTransientError(null);
+        setInputText('');
+        setIsLoading(true);
+
+        const existingMessages = messagesRef.current;
+        const userMessage = createUserMessage(text, verseContext);
+        const messagesWithQuestion = [...existingMessages, userMessage];
+        replaceMessages(messagesWithQuestion);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+
+        try {
+            // Persist the visible question before dispatch so a suspended app can restore it.
+            const savedId = await saveConversation(
+                conversationIdRef.current,
+                messagesWithQuestion,
+                verseContext,
+            );
+            replaceConversationId(savedId);
+
+            const history = messagesWithQuestion.filter((message, index) => (
+                message.role !== 'noor' || index > 0
+            ));
+            const pending: PendingNoorRequest = {
+                version: 1,
+                status: 'pending',
+                ownerUid,
+                conversationId: savedId,
+                userMessageId: userMessage.id,
+                createdAt: Date.now(),
+                request: createNoorChatRequest(text, history, undefined, verseContext),
+            };
+            pendingRequestRef.current = pending;
+            await savePendingNoorRequest(pending);
+            inFlightRef.current = false;
+            await runPendingRequest(pending);
+        } catch {
+            inFlightRef.current = false;
+            setIsLoading(false);
+            setTransientError('Noor is temporarily unavailable. Tap to retry this question safely.');
+        }
+    }, [inputText, replaceConversationId, replaceMessages, runPendingRequest, verseContext]);
+
+    // ── Initialize: restore a pending request before normal conversation routing ──
+    useEffect(() => {
+        let cancelled = false;
+        let initialQuestionTimer: ReturnType<typeof setTimeout> | undefined;
+        const init = async () => {
+            const ownerUid = auth.currentUser?.uid;
+            const pending = ownerUid ? await loadPendingNoorRequest(ownerUid) : null;
+            if (cancelled) return;
+            if (pending) {
+                const conversation = await loadConversation(pending.conversationId);
+                if (cancelled) return;
+                if (conversation) {
+                    pendingRequestRef.current = pending;
+                    replaceMessages(conversation.messages);
+                    replaceConversationId(conversation.id);
+                    void runPendingRequest({ ...pending, status: 'recovering' });
+                    return;
+                }
+                await clearPendingNoorRequest(pending.request.requestId, pending.ownerUid);
+            }
+
+            if (params.conversationId) {
+                const conversation = await loadConversation(params.conversationId as string);
+                if (cancelled) return;
+                if (conversation) {
+                    replaceMessages(conversation.messages);
+                    replaceConversationId(conversation.id);
+                    return;
+                }
+            }
+
+            const greeting = verseContext
+                ? createVerseGreetingMessage(verseContext)
+                : createGreetingMessage();
+            replaceMessages([greeting]);
+
+            if (params.initialQuestion) {
+                initialQuestionTimer = setTimeout(() => {
+                    void handleSend(params.initialQuestion!);
+                }, 600);
+            }
+        };
+        void init();
+        return () => {
+            cancelled = true;
+            if (initialQuestionTimer) clearTimeout(initialQuestionTimer);
+        };
+        // Route parameters are intentionally consumed only for initial screen setup.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // A foreground transition supersedes any suspended JS promise and replays the
+    // exact same request identity. The backend decides whether it is busy or done.
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextState) => {
+            const previousState = appStateRef.current;
+            appStateRef.current = nextState;
+            const pending = pendingRequestRef.current;
+            if (isNoorResumeTransition(previousState, nextState, Boolean(pending)) && pending) {
+                requestGeneration.invalidate();
+                inFlightRef.current = false;
+                void runPendingRequest({ ...pending, status: 'recovering' });
+            }
+        });
+        return () => subscription.remove();
+    }, [requestGeneration, runPendingRequest]);
 
     // ── Derived: can send ──
     const canSend = inputText.trim().length > 0 && !isLoading;
@@ -332,15 +480,20 @@ export default function NoorAIScreen() {
                     }
                 />
 
-                {transientError && (
+                {transientError && pendingRequestRef.current && (
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Retry sending your Noor question"
-                        onPress={() => handleSend(messages.filter((message) => message.role === 'user').at(-1)?.content)}
+                        onPress={handleRetryPending}
                         style={styles.transientError}
                     >
                         <Text style={{ color: theme.colors.error }}>{transientError}</Text>
                     </Pressable>
+                )}
+                {transientError && !pendingRequestRef.current && (
+                    <View style={styles.transientError}>
+                        <Text style={{ color: theme.colors.error }}>{transientError}</Text>
+                    </View>
                 )}
 
                 {/* ── Premium Input Bar ── */}

@@ -1,5 +1,6 @@
 import { createNoorRemoteService } from './NoorRemoteService';
 import { NoorRequest } from '../domain/generatedContract';
+import { auth } from '../../../core/firebase/config';
 
 jest.mock('../../../core/firebase/config', () => ({ auth: { currentUser: null } }));
 jest.mock('../../../core/firebase/AppCheckService', () => ({
@@ -32,6 +33,10 @@ const answer = {
 };
 
 describe('NoorRemoteService', () => {
+    afterEach(() => {
+        (auth as unknown as { currentUser: { uid: string } | null }).currentUser = null;
+    });
+
     it('uses the exact authenticated callable wire envelope', async () => {
         const fetchImpl = jest.fn(async () => ({
             ok: true,
@@ -104,5 +109,22 @@ describe('NoorRemoteService', () => {
         await jest.advanceTimersByTimeAsync(25_000);
         await pending;
         jest.useRealTimers();
+    });
+
+    it('never sends a persisted request with a different Firebase user token', async () => {
+        const mutableAuth = auth as unknown as { currentUser: { uid: string } | null };
+        mutableAuth.currentUser = { uid: 'owner-a' };
+        const fetchImpl = jest.fn();
+        const service = createNoorRemoteService({
+            getAuthToken: async () => {
+                mutableAuth.currentUser = { uid: 'owner-b' };
+                return 'owner-b-token';
+            },
+            getAppCheckToken: async () => 'app-check-token',
+            fetchImpl,
+        });
+
+        await expect(service.ask(request, 'owner-a')).rejects.toMatchObject({ code: 'signed_out' });
+        expect(fetchImpl).not.toHaveBeenCalled();
     });
 });
