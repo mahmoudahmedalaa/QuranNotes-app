@@ -7,6 +7,7 @@ const PARAGRAPH_CITATION_MARKER = /\[S\d+(?:\s*,\s*S\d+)*\]/;
 const SOURCE_ID = /^S[1-9]\d*$/;
 
 export interface ValidatedGeneratedAnswer {
+    status: 'answered' | 'insufficient_evidence';
     answer: string;
     citationIds: string[];
     citations: NoorCitation[];
@@ -50,10 +51,14 @@ export function diagnoseGeneratedAnswer(
     value: unknown,
     evidence: readonly RetrievedEvidence[],
 ): GeneratedAnswerValidationFailure | null {
+    const keys = isRecord(value) ? Object.keys(value).sort().join('|') : '';
     if (!isRecord(value)
-        || Object.keys(value).length !== 2
+        || (keys !== 'answer|citationIds' && keys !== 'answer|citationIds|status')
         || !Object.prototype.hasOwnProperty.call(value, 'answer')
         || !Object.prototype.hasOwnProperty.call(value, 'citationIds')
+        || (Object.prototype.hasOwnProperty.call(value, 'status')
+            && value.status !== 'answered'
+            && value.status !== 'insufficient_evidence')
         || typeof value.answer !== 'string'
         || value.answer.trim().length === 0
         || value.answer.length > MAX_ANSWER_CHARACTERS
@@ -63,6 +68,7 @@ export function diagnoseGeneratedAnswer(
     }
 
     const citationIds: string[] = value.citationIds;
+    const status = value.status === 'insufficient_evidence' ? 'insufficient_evidence' : 'answered';
     if (new Set(citationIds).size !== citationIds.length) {
         return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'duplicate_citation' };
     }
@@ -76,6 +82,11 @@ export function diagnoseGeneratedAnswer(
     }
     if (citationIds.some(id => !byId.has(id))) {
         return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unknown_citation_id' };
+    }
+    if (status === 'insufficient_evidence') {
+        return citationIds.length === 0
+            ? null
+            : { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unused_citation' };
     }
     if (citationIds.length === 0) {
         return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'missing_required_citation' };
@@ -112,11 +123,12 @@ export function diagnoseGeneratedAnswer(
 export function validateGeneratedAnswer(value: unknown, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
     if (diagnoseGeneratedAnswer(value, evidence) !== null) return invalidGeneratedAnswer();
 
-    const generated = value as { answer: string; citationIds: string[] };
+    const generated = value as { status?: 'answered' | 'insufficient_evidence'; answer: string; citationIds: string[] };
     const citationIds = generated.citationIds;
     const byId = new Map(evidence.map(item => [item.promptSourceId, item]));
 
     return {
+        status: generated.status ?? 'answered',
         answer: generated.answer.trim(),
         citationIds: [...citationIds],
         citations: citationIds.map(id => citationFor(byId.get(id) as RetrievedEvidence)),

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { NoorRuntimeConfig } from './config';
 import type { EntitlementDecision } from './entitlement';
 import {
@@ -7,11 +9,13 @@ import {
 } from './generation';
 import { isEntitySummaryEvidenceSufficient, selectAnswerableEvidence } from './answerability';
 import type { NoorPolicyCategory } from './policy';
+import { CANONICAL_INSUFFICIENT_EVIDENCE, normalizeNoorOutcome, type OutcomeNormalizationReason } from './outcome';
 import {
     buildChatQueryPlan,
     buildControlledRecoveryQuery,
     createValidatedConversationState,
     type ChatQueryPlan,
+    type DiscourseEntity,
     type ValidatedConversationState,
 } from './queryRewrite';
 import type { ClaimResult, FinalizeResult, NoorEntitlementClass } from './usage';
@@ -20,7 +24,7 @@ import { parseNoorAnswer } from './validation';
 
 const POLICY_REFUSAL = 'Noor only explains Quran passages using Tafsir Ibn Kathir and Tafsir Al-Sa\'di. For personal rulings, please speak with a qualified scholar.';
 const SCOPE_REFUSAL = 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.';
-const INSUFFICIENT_EVIDENCE = 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.';
+const INSUFFICIENT_EVIDENCE = CANONICAL_INSUFFICIENT_EVIDENCE;
 const CLARIFICATION_REQUIRED = 'Please name the Quran topic, verse, or person you mean so I can search the tafsir.';
 const TEMPORARILY_UNAVAILABLE = 'Noor is temporarily unavailable. Please try again shortly.';
 const NOT_ENTITLED = 'Noor is available with an active QuranNotes subscription.';
@@ -82,7 +86,16 @@ export interface NoorSanitizedTrace {
     contextSelected: boolean;
     selectedPriorUserContext: 'validated_prior_subject' | 'none';
     queryVariantCount: number;
-    queryVariantKinds: Array<'original' | 'context_enriched'>;
+    queryVariantKinds: Array<'original' | 'context_enriched' | 'entity_branch'>;
+    taskType: ChatQueryPlan['taskType'];
+    resolvedEntityIds: string[];
+    sanitizedRewriteFingerprint: string;
+    preAnswerabilityEvidenceIds: string[];
+    postAnswerabilityEvidenceIds: string[];
+    answerabilityReason: 'not_run' | 'sufficient' | 'insufficient' | 'entity_scope_filtered' | 'adaptive_coverage_insufficient' | 'balanced_multi_entity';
+    policyReasonCode: NoorPolicyCategory;
+    outcomeNormalizationReason: OutcomeNormalizationReason;
+    stateAction: 'persisted' | 'replaced' | 'cleared' | 'unchanged';
     vectorHitCount: number;
     lexicalHitCount: number;
     lexicalSearchStatus: 'available' | 'unavailable' | 'not_configured';
@@ -154,6 +167,7 @@ export interface NoorHandlerDependencies {
         evidence: readonly RetrievedEvidence[];
         candidateCount: number;
         anchorVerses: readonly number[];
+        coverageCapacity?: Readonly<{ canonicalUnits: number; sections: number; span: number }>;
     }>>;
     retrieveExact(input: Readonly<{
         request: Extract<NoorRequest, { mode: 'verse_summary' | 'verse_question' }>;
@@ -211,7 +225,11 @@ function duration(startedAt: number, endedAt: number): number {
     return Math.max(0, Math.min(MAX_TELEMETRY_DURATION_MS, Math.floor(endedAt - startedAt)));
 }
 
-function validateResponse(value: unknown, requestId: string): NoorAnswer {
+function validateResponse(
+    value: unknown,
+    requestId: string,
+    explicitSurahScope: number | null = null,
+): { response: NoorAnswer; normalizationReason: OutcomeNormalizationReason } {
     let response: NoorAnswer;
     try {
         response = parseNoorAnswer(value);
@@ -219,10 +237,17 @@ function validateResponse(value: unknown, requestId: string): NoorAnswer {
         throw new HandlerFailure('response_invalid');
     }
     if (response.requestId !== requestId) throw new HandlerFailure('response_invalid');
+    const normalized = normalizeNoorOutcome(response);
+    response = normalized.response;
     if (response.status === 'answered' && response.citations.length === 0) {
         throw new HandlerFailure('citation_validation_failure');
     }
-    return response;
+    if (response.status === 'answered'
+        && explicitSurahScope !== null
+        && response.citations.some(citation => citation.surah !== explicitSurahScope)) {
+        throw new HandlerFailure('citation_validation_failure');
+    }
+    return { response, normalizationReason: normalized.reason };
 }
 
 function responseErrorClass(response: NoorAnswer): NoorHandlerErrorClass {
@@ -332,8 +357,85 @@ function mergeEvidence(
     return merged.map((item, index) => ({ ...item, promptSourceId: `S${index + 1}` }));
 }
 
-function traceEvidenceIds(evidence: readonly RetrievedEvidence[]): string[] {
-    return evidence.slice(0, MAX_TELEMETRY_CHUNK_IDS).map((_item, index) => `E${index + 1}`);
+function evidenceKey(item: RetrievedEvidence): string {
+    return `${item.chunk.source}:${item.chunk.chunkId}`;
+}
+
+function hasDistinctEntityBranchSupport(
+    entities: readonly DiscourseEntity[],
+    evidence: readonly RetrievedEvidence[],
+    branchGroups: readonly (readonly RetrievedEvidence[])[],
+): boolean {
+    const finalKeys = new Set(evidence.map(evidenceKey));
+    const eligibleKeys = entities.map((_entity, index) => (branchGroups[index] ?? [])
+        .map(evidenceKey)
+        .filter(key => finalKeys.has(key)));
+    const assign = (index: number, used: ReadonlySet<string>): boolean => {
+        if (index >= eligibleKeys.length) return true;
+        return (eligibleKeys[index] ?? []).some(key => (
+            !used.has(key) && assign(index + 1, new Set([...used, key]))
+        ));
+    };
+    return entities.length > 1 && assign(0, new Set());
+}
+
+function traceEvidenceAliases(...groups: readonly (readonly RetrievedEvidence[])[]): Map<string, string> {
+    const aliases = new Map<string, string>();
+    for (const item of groups.flat()) {
+        const key = `${item.chunk.source}:${item.chunk.chunkId}`;
+        if (!aliases.has(key) && aliases.size < MAX_TELEMETRY_CHUNK_IDS) {
+            aliases.set(key, `E${aliases.size + 1}`);
+        }
+    }
+    return aliases;
+}
+
+function traceEvidenceIds(
+    evidence: readonly RetrievedEvidence[],
+    aliases = traceEvidenceAliases(evidence),
+): string[] {
+    return [...new Set(evidence.flatMap(item => {
+        const alias = aliases.get(`${item.chunk.source}:${item.chunk.chunkId}`);
+        return alias ? [alias] : [];
+    }))];
+}
+
+function sanitizedEntityIds(plan: ChatQueryPlan): string[] {
+    return plan.entitySet.map(entity => entity.kind === 'surah'
+        ? entity.id
+        : `subject:${createHash('sha256').update(entity.id).digest('hex').slice(0, 12)}`);
+}
+
+function rewriteFingerprint(plan: ChatQueryPlan): string {
+    const value = [
+        plan.taskType,
+        plan.retrievalTask,
+        plan.contextSelected ? 'context' : 'direct',
+        ...plan.variants.map(variant => {
+            const tokenCount = Math.min(32, variant.query.trim().split(/\s+/u).filter(Boolean).length);
+            const lengthBucket = Math.min(10, Math.ceil(variant.query.length / 50));
+            return `${variant.kind}:${tokenCount}:${lengthBucket}`;
+        }),
+    ].join('|');
+    return createHash('sha256').update(value).digest('hex');
+}
+
+function scopeEvidenceToTaskBranch(
+    evidence: readonly RetrievedEvidence[],
+    plan: ChatQueryPlan,
+    branchIndex: number,
+): { evidence: RetrievedEvidence[]; filtered: boolean } {
+    if (plan.retrievalTask === 'multi_entity_comparison') {
+        const branchEntity = plan.entitySet[branchIndex];
+        if (branchEntity?.kind !== 'surah') return { evidence: [...evidence], filtered: false };
+        const scoped = evidence.filter(item => item.chunk.surah === branchEntity.surahNumber);
+        return { evidence: scoped, filtered: scoped.length !== evidence.length };
+    }
+    if (!plan.explicitEntity || plan.entity === null) {
+        return { evidence: [...evidence], filtered: false };
+    }
+    const scoped = evidence.filter(item => item.chunk.surah === plan.entity!.surahNumber);
+    return { evidence: scoped, filtered: scoped.length !== evidence.length };
 }
 
 export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<NoorAnswer> {
@@ -350,16 +452,22 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         : {
             variants: [], contextSelected: false, conversationState: 'none', requiresClarification: false,
             taskType: 'point_question', retrievalTask: 'point_question', entity: null,
+            entitySet: [], primaryEntity: null, explicitEntity: false,
         };
     let vectorHitCount = 0;
     let lexicalHitCount = 0;
     let lexicalSearchStatus: NoorSanitizedTrace['lexicalSearchStatus'] = 'not_configured';
     let evidence: readonly RetrievedEvidence[] = [];
+    let multiEntitySupportGroups: readonly (readonly RetrievedEvidence[])[] = [];
+    let preAnswerabilityEvidence: readonly RetrievedEvidence[] = [];
+    let answerabilityReason: NoorSanitizedTrace['answerabilityReason'] = 'not_run';
+    let outcomeNormalizationReason: OutcomeNormalizationReason = 'none';
     let generationStatus: NoorSanitizedTrace['generationStatus'] = 'not_run';
     let citationValidation: NoorSanitizedTrace['citationValidation'] = 'not_run';
     let generationDiagnostics: GenerationDiagnostics | null = null;
     let statePersistence: NoorSanitizedTrace['statePersistence'] = request.mode === 'chat' ? 'not_persisted' : 'not_expected';
     let stateFingerprint: string | null = null;
+    let stateAction: NoorSanitizedTrace['stateAction'] = 'unchanged';
     let traceStatus: NoorAnswer['status'] = 'temporarily_unavailable';
     let citationCount = 0;
     const stageMs: NoorSanitizedTrace['stageMs'] = {
@@ -403,6 +511,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         }
         if (!traceEmitted && dependencies.emitSanitizedTrace) {
             traceEmitted = true;
+            const evidenceAliases = traceEvidenceAliases(preAnswerabilityEvidence, evidence);
             const trace: NoorSanitizedTrace = {
                 requestId: request.requestId,
                 case: input.traceCase ?? 'noor-request',
@@ -414,10 +523,19 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 selectedPriorUserContext: queryPlan.contextSelected ? 'validated_prior_subject' : 'none',
                 queryVariantCount: queryPlan.variants.length,
                 queryVariantKinds: queryPlan.variants.map(variant => variant.kind),
+                taskType: queryPlan.taskType,
+                resolvedEntityIds: sanitizedEntityIds(queryPlan),
+                sanitizedRewriteFingerprint: rewriteFingerprint(queryPlan),
+                preAnswerabilityEvidenceIds: traceEvidenceIds(preAnswerabilityEvidence, evidenceAliases),
+                postAnswerabilityEvidenceIds: traceEvidenceIds(evidence, evidenceAliases),
+                answerabilityReason,
+                policyReasonCode: policy,
+                outcomeNormalizationReason,
+                stateAction,
                 vectorHitCount,
                 lexicalHitCount,
                 lexicalSearchStatus,
-                evidenceIds: traceEvidenceIds(evidence),
+                evidenceIds: traceEvidenceIds(evidence, evidenceAliases),
                 evidenceCount: evidence.length,
                 generationStatus,
                 citationValidation,
@@ -473,7 +591,9 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     }
     if (replay !== null) {
         try {
-            const response = validateResponse(replay, request.requestId);
+            const normalized = validateResponse(replay, request.requestId);
+            const response = normalized.response;
+            outcomeNormalizationReason = normalized.normalizationReason;
             return finish(response, responseErrorClass(response));
         } catch {
             return finish(temporaryAnswer(request.requestId), 'replay_invalid');
@@ -501,7 +621,9 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     }
     if (claim.kind === 'replay') {
         try {
-            const response = validateResponse(claim.response, request.requestId);
+            const normalized = validateResponse(claim.response, request.requestId);
+            const response = normalized.response;
+            outcomeNormalizationReason = normalized.normalizationReason;
             return finish(response, responseErrorClass(response));
         } catch {
             return finish(temporaryAnswer(request.requestId), 'replay_invalid');
@@ -558,36 +680,69 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                     const summary = await dependencies.retrieveEntitySummary({
                         request, config, entity: queryPlan.entity,
                     });
-                    evidence = isEntitySummaryEvidenceSufficient(queryPlan.entity, summary.evidence)
+                    preAnswerabilityEvidence = [...summary.evidence];
+                    evidence = isEntitySummaryEvidenceSufficient(
+                        queryPlan.entity,
+                        summary.evidence,
+                        summary.coverageCapacity,
+                    )
                         ? [...summary.evidence]
                         : [];
+                    answerabilityReason = evidence.length > 0 ? 'sufficient' : 'adaptive_coverage_insufficient';
                 } else {
                     const results = await Promise.all(queryPlan.variants.map(variant => dependencies.retrieveSemantic({
                         request, config, query: variant.query,
                     })));
-                    const normalized = results.map(normalizeSemanticRetrieval);
+                    let entityScopeFiltered = false;
+                    const normalized = results.map(normalizeSemanticRetrieval).map((result, index) => {
+                        const scoped = scopeEvidenceToTaskBranch(result.evidence, queryPlan, index);
+                        if (scoped.filtered) entityScopeFiltered = true;
+                        return { ...result, evidence: scoped.evidence };
+                    });
+                    preAnswerabilityEvidence = normalized.flatMap(value => value.evidence);
                     vectorHitCount = normalized.reduce((total, value) => total + value.vectorHitCount, 0);
                     lexicalHitCount = normalized.reduce((total, value) => total + value.lexicalHitCount, 0);
                     lexicalSearchStatus = normalized.some(value => value.lexicalSearchStatus === 'unavailable')
                         ? 'unavailable'
                         : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
                     const answerabilityGateActive = results.length > 0 && results.every(isSemanticRetrievalResult);
-                    const answerableGroups = answerabilityGateActive
-                        ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
-                        : normalized.map(value => value.evidence);
+                    const answerableGroups = queryPlan.retrievalTask === 'multi_entity_comparison'
+                        ? normalized.map((value, index) => {
+                            const branch = queryPlan.variants[index];
+                            return branch ? selectAnswerableEvidence(branch.query, value.evidence, config) : [];
+                        })
+                        : answerabilityGateActive
+                            ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
+                            : normalized.map(value => value.evidence);
                     evidence = mergeEvidence(answerableGroups, config);
-                    if (answerabilityGateActive && evidence.length === 0) {
+                    if (queryPlan.retrievalTask === 'multi_entity_comparison') {
+                        multiEntitySupportGroups = answerableGroups;
+                        const supportedEntityCount = answerableGroups.filter(group => group.length > 0).length;
+                        if (supportedEntityCount !== queryPlan.entitySet.length
+                            || !hasDistinctEntityBranchSupport(queryPlan.entitySet, evidence, answerableGroups)) {
+                            evidence = [];
+                        }
+                        answerabilityReason = evidence.length > 0 ? 'balanced_multi_entity' : 'insufficient';
+                    } else {
+                        answerabilityReason = entityScopeFiltered
+                            ? 'entity_scope_filtered'
+                            : evidence.length > 0 ? 'sufficient' : 'insufficient';
+                    }
+                    if (answerabilityGateActive && evidence.length === 0 && queryPlan.retrievalTask !== 'multi_entity_comparison') {
                         const recoveryQuery = buildControlledRecoveryQuery({
                             request,
                             validatedConversationState,
                         });
                         if (recoveryQuery !== null) {
                             try {
-                                const recovery = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
+                                const recoveryResult = normalizeSemanticRetrieval(await dependencies.retrieveSemantic({
                                     request,
                                     config,
                                     query: recoveryQuery,
                                 }));
+                                const scopedRecovery = scopeEvidenceToTaskBranch(recoveryResult.evidence, queryPlan, 0);
+                                if (scopedRecovery.filtered) entityScopeFiltered = true;
+                                const recovery = { ...recoveryResult, evidence: scopedRecovery.evidence };
                                 vectorHitCount += recovery.vectorHitCount;
                                 lexicalHitCount += recovery.lexicalHitCount;
                                 if (recovery.lexicalSearchStatus === 'unavailable') lexicalSearchStatus = 'unavailable';
@@ -599,6 +754,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                                     ?? request.question;
                                 const recoveryEvidence = selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config);
                                 evidence = mergeEvidence([...answerableGroups, recoveryEvidence], config);
+                                if (evidence.length > 0) answerabilityReason = 'sufficient';
                             } catch {
                                 // Initial retrieval succeeded. Optional recovery failure preserves the safe abstention.
                             }
@@ -607,6 +763,8 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 }
             } else {
                 evidence = await dependencies.retrieveExact({ request, config });
+                preAnswerabilityEvidence = [...evidence];
+                answerabilityReason = evidence.length > 0 ? 'sufficient' : 'insufficient';
             }
         } catch {
             throw new HandlerFailure('retrieval_unavailable');
@@ -634,7 +792,22 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         const citationStartedAt = safeNow(dependencies);
         let response: NoorAnswer;
         try {
-            response = validateResponse(generated, request.requestId);
+            const normalized = validateResponse(
+                generated,
+                request.requestId,
+                queryPlan.explicitEntity && queryPlan.entity !== null && queryPlan.retrievalTask !== 'multi_entity_comparison'
+                    ? queryPlan.entity.surahNumber
+                    : null,
+            );
+            response = normalized.response;
+            outcomeNormalizationReason = normalized.normalizationReason;
+            if (response.status === 'answered' && queryPlan.retrievalTask === 'multi_entity_comparison') {
+                const citedKeys = new Set(response.citations.map(citation => `${citation.source}:${citation.chunkId}`));
+                const citedEvidence = evidence.filter(item => citedKeys.has(evidenceKey(item)));
+                if (!hasDistinctEntityBranchSupport(queryPlan.entitySet, citedEvidence, multiEntitySupportGroups)) {
+                    throw new HandlerFailure('citation_validation_failure');
+                }
+            }
             citationValidation = generationDiagnostics?.errorClass === 'citation_validation_failure'
                 ? 'failed'
                 : response.status === 'answered' && response.citations.length > 0 ? 'passed' : 'not_run';
@@ -653,13 +826,20 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 throw new HandlerFailure('finalization_unavailable');
             }
             const nextState = request.mode === 'chat'
-                ? createValidatedConversationState({ request, response, evidence })
+                ? createValidatedConversationState({
+                    request,
+                    response,
+                    evidence,
+                    taskPlan: queryPlan,
+                    previousState: validatedConversationState,
+                })
                 : null;
             if (nextState && dependencies.writeValidatedConversationState) {
                 try {
                     await dependencies.writeValidatedConversationState({ uid, state: nextState });
                     statePersistence = 'persisted';
                     stateFingerprint = nextState.sourceQuestionFingerprint;
+                    stateAction = validatedConversationState ? 'replaced' : 'persisted';
                 } catch {
                     // Conversation state is optional context and must never invalidate a grounded answer.
                 }

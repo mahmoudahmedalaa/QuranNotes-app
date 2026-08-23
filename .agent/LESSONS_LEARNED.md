@@ -115,3 +115,13 @@ When the Khatma feature had too many bugs, doing a full rewrite with proper stat
 
 **Rules added**:
 - Run `npm run clean:deep` and `npx expo prebuild --clean` unconditionally when encountering unexplainable native build errors, stale bundles, or simulator ghosting.
+
+### 2026-08-23 — Noor Conversation Robustness
+
+**What went wrong**:
+- Curated wording passed while equivalent natural phrasing, multi-entity references, small-entity coverage, and non-answer semantics crossed different runtime boundaries.
+
+**Rules added**:
+- Test semantic classes with paraphrases, narrow counterexamples, and mixed transcripts rather than one canonical sentence.
+- Preserve requested entities and branch provenance through final evidence and citations; incidental retrieval text must not rewrite discourse roles.
+- Treat non-answer status, zero citations, zero answered usage, and zero state persistence as one server-owned invariant.

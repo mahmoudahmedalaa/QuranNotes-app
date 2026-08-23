@@ -86,7 +86,26 @@ function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
         contextSelected: trace.contextSelected === true,
         selectedPriorUserContext: trace.selectedPriorUserContext,
         queryVariantCount: boundedCount(trace.queryVariantCount, 2),
-        queryVariantKinds: trace.queryVariantKinds.filter(value => value === 'original' || value === 'context_enriched').slice(0, 2),
+        queryVariantKinds: trace.queryVariantKinds
+            .filter(value => value === 'original' || value === 'context_enriched' || value === 'entity_branch')
+            .slice(0, 2),
+        taskType: trace.taskType,
+        resolvedEntityIds: trace.resolvedEntityIds
+            .filter(value => /^(?:surah:\d{1,3}|subject:[a-f0-9]{12})$/u.test(value))
+            .slice(0, 2),
+        sanitizedRewriteFingerprint: /^[a-f0-9]{64}$/u.test(trace.sanitizedRewriteFingerprint)
+            ? trace.sanitizedRewriteFingerprint
+            : '0'.repeat(64),
+        preAnswerabilityEvidenceIds: trace.preAnswerabilityEvidenceIds
+            .filter(value => /^E\d{1,2}$/u.test(value))
+            .slice(0, 8),
+        postAnswerabilityEvidenceIds: trace.postAnswerabilityEvidenceIds
+            .filter(value => /^E\d{1,2}$/u.test(value))
+            .slice(0, 8),
+        answerabilityReason: trace.answerabilityReason,
+        policyReasonCode: trace.policyReasonCode,
+        outcomeNormalizationReason: trace.outcomeNormalizationReason,
+        stateAction: trace.stateAction,
         vectorHitCount: boundedCount(trace.vectorHitCount, 100),
         lexicalHitCount: boundedCount(trace.lexicalHitCount, 100),
         lexicalSearchStatus: trace.lexicalSearchStatus === 'available' || trace.lexicalSearchStatus === 'unavailable'

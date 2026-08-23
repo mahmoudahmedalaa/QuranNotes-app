@@ -75,7 +75,14 @@ const TRACE_POLICIES = new Set<NoorPolicyCategory>([
     'allowed', 'personal_ruling', 'standalone_hadith', 'medical_legal_crisis',
     'prompt_injection', 'out_of_scope',
 ]);
-const TRACE_QUERY_VARIANTS = new Set(['original', 'context_enriched']);
+const TRACE_QUERY_VARIANTS = new Set(['original', 'context_enriched', 'entity_branch']);
+const TRACE_TASK_TYPES = new Set(['point_question', 'entity_summary', 'multi_entity_comparison', 'contextual_followup']);
+const TRACE_ANSWERABILITY_REASONS = new Set([
+    'not_run', 'sufficient', 'insufficient', 'entity_scope_filtered',
+    'adaptive_coverage_insufficient', 'balanced_multi_entity',
+]);
+const TRACE_OUTCOME_REASONS = new Set(['none', 'abstention_language', 'non_answer_citations_removed']);
+const TRACE_STATE_ACTIONS = new Set(['persisted', 'replaced', 'cleared', 'unchanged']);
 const TRACE_CONVERSATION_STATES = new Set(['validated_subject_and_evidence', 'none']);
 const TRACE_LEXICAL_STATUSES = new Set(['available', 'unavailable', 'not_configured']);
 const TRACE_GENERATION_STATUSES = new Set([...TRACE_STATUSES, 'not_run']);
@@ -123,6 +130,17 @@ function isSanitizedTrace(value: unknown): value is NoorSanitizedTrace {
         || value.queryVariantKinds.length !== value.queryVariantCount
         || !value.queryVariantKinds.every(item => typeof item === 'string' && TRACE_QUERY_VARIANTS.has(item))
         || new Set(value.queryVariantKinds).size !== value.queryVariantKinds.length
+        || typeof value.taskType !== 'string' || !TRACE_TASK_TYPES.has(value.taskType)
+        || !isStringArray(value.resolvedEntityIds, 2)
+        || !value.resolvedEntityIds.every(item => /^(?:surah:\d{1,3}|subject:[a-f0-9]{12})$/u.test(item))
+        || typeof value.sanitizedRewriteFingerprint !== 'string'
+        || !/^[a-f0-9]{64}$/u.test(value.sanitizedRewriteFingerprint)
+        || !isStringArray(value.preAnswerabilityEvidenceIds, MAX_TRACE_EVIDENCE)
+        || !isStringArray(value.postAnswerabilityEvidenceIds, MAX_TRACE_EVIDENCE)
+        || typeof value.answerabilityReason !== 'string' || !TRACE_ANSWERABILITY_REASONS.has(value.answerabilityReason)
+        || typeof value.policyReasonCode !== 'string' || !TRACE_POLICIES.has(value.policyReasonCode as NoorPolicyCategory)
+        || typeof value.outcomeNormalizationReason !== 'string' || !TRACE_OUTCOME_REASONS.has(value.outcomeNormalizationReason)
+        || typeof value.stateAction !== 'string' || !TRACE_STATE_ACTIONS.has(value.stateAction)
         || !isBoundedInteger(value.vectorHitCount, Number.MAX_SAFE_INTEGER)
         || !isBoundedInteger(value.lexicalHitCount, Number.MAX_SAFE_INTEGER)
         || typeof value.lexicalSearchStatus !== 'string' || !TRACE_LEXICAL_STATUSES.has(value.lexicalSearchStatus)

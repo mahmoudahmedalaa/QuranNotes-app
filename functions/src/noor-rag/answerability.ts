@@ -4,7 +4,6 @@ import type { QuranSurahEntity } from './quranEntities';
 
 const ENTITY_SUMMARY_COVERAGE_SECTIONS = 6;
 const MIN_ENTITY_SUMMARY_UNITS = 4;
-const MIN_ENTITY_SUMMARY_SECTIONS = 4;
 
 const ANSWERABILITY_IGNORED_TOKENS = new Set([
     'a', 'about', 'an', 'and', 'are', 'but', 'can', 'could', 'describe', 'did', 'does', 'do',
@@ -29,6 +28,22 @@ const ANSWERABILITY_CONCEPTS = new Map<string, string>([
     ['options', 'alternative'],
     ['trade', 'alternative'],
     ['trading', 'alternative'],
+    ['story', 'narrative'],
+    ['stories', 'narrative'],
+    ['account', 'narrative'],
+    ['accounts', 'narrative'],
+    ['haram', 'prohibition'],
+    ['forbidden', 'prohibition'],
+    ['prohibited', 'prohibition'],
+    ['impermissible', 'prohibition'],
+    ['halal', 'permission'],
+    ['lawful', 'permission'],
+    ['permitted', 'permission'],
+    ['allowed', 'permission'],
+    ['obligatory', 'obligation'],
+    ['required', 'obligation'],
+    ['commanded', 'obligation'],
+    ['mandatory', 'obligation'],
 ]);
 const LATIN_TOKEN = /^[a-z'-]+$/;
 
@@ -129,6 +144,7 @@ export function selectAnswerableEvidence(
 export function isEntitySummaryEvidenceSufficient(
     entity: QuranSurahEntity,
     evidence: readonly RetrievedEvidence[],
+    capacity?: Readonly<{ canonicalUnits: number; sections: number; span: number }>,
 ): boolean {
     if (evidence.length === 0 || evidence.some(item => item.chunk.surah !== entity.surahNumber)) return false;
     const units = new Set(evidence.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`));
@@ -136,12 +152,22 @@ export function isEntitySummaryEvidenceSufficient(
         ENTITY_SUMMARY_COVERAGE_SECTIONS - 1,
         Math.floor((item.chunk.verseStart - 1) * ENTITY_SUMMARY_COVERAGE_SECTIONS / entity.verseCount),
     )));
-    const requiredUnits = Math.min(MIN_ENTITY_SUMMARY_UNITS, entity.verseCount);
-    const requiredSections = Math.min(MIN_ENTITY_SUMMARY_SECTIONS, entity.verseCount);
+    const availableUnits = Math.max(units.size, Math.floor(capacity?.canonicalUnits ?? units.size));
+    const availableSections = Math.max(sections.size, Math.floor(capacity?.sections ?? sections.size));
+    const selectableUnits = Math.min(8, availableUnits);
+    const requiredUnits = selectableUnits <= MIN_ENTITY_SUMMARY_UNITS
+        ? selectableUnits
+        : Math.ceil(selectableUnits * 0.75);
+    const requiredSections = Math.min(
+        ENTITY_SUMMARY_COVERAGE_SECTIONS,
+        availableSections,
+        Math.max(1, Math.ceil(availableSections * 0.67)),
+    );
     const requiredConceptClusters = Math.min(3, evidence.length);
     const starts = evidence.map(item => item.chunk.verseStart);
     const span = Math.max(...starts) - Math.min(...starts);
-    const requiredSpan = entity.verseCount <= 2 ? 0 : Math.floor(entity.verseCount / 2);
+    const availableSpan = Math.max(0, Math.min(entity.verseCount - 1, Math.floor(capacity?.span ?? entity.verseCount - 1)));
+    const requiredSpan = availableSpan <= 1 ? 0 : Math.ceil(availableSpan / 2);
     return units.size >= requiredUnits
         && sections.size >= requiredSections
         && entitySummaryConceptClusterCount(evidence) >= requiredConceptClusters

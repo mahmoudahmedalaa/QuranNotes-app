@@ -133,6 +133,11 @@ export interface EntitySummaryRetrievalResult {
     evidence: readonly ExactRetrievedEvidence[];
     candidateCount: number;
     anchorVerses: readonly number[];
+    coverageCapacity: {
+        canonicalUnits: number;
+        sections: number;
+        span: number;
+    };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -520,10 +525,17 @@ export async function retrieveEntitySummaryWithStats(
             chunk,
         }));
     });
+    const candidateVerses = candidates.map(item => item.chunk.verseStart);
+    const candidateCount = new Set(candidates.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`)).size;
     return {
         evidence: selectEntitySummaryCoverage(candidates, input.entity, input.config.maxEvidenceCharacters),
-        candidateCount: new Set(candidates.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`)).size,
+        candidateCount,
         anchorVerses,
+        coverageCapacity: {
+            canonicalUnits: candidateCount,
+            sections: new Set(candidateVerses.map(verse => entityCoverageSection(verse, input.entity.verseCount))).size,
+            span: candidateVerses.length === 0 ? 0 : Math.max(...candidateVerses) - Math.min(...candidateVerses),
+        },
     };
 }
 

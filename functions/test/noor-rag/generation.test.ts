@@ -278,6 +278,29 @@ describe('Noor grounded generation', () => {
         assert.equal(missing.requestId, REQUEST_ID);
     });
 
+    it('accepts a structured insufficient-evidence outcome with zero citations and no quality-judge call', async () => {
+        const provider = new SequenceProvider([
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                answer: 'This is an unsupported substantive answer that must never reach the client.',
+                citationIds: [],
+            }),
+        ]);
+
+        const response = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
+
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.deepEqual(response.citations, []);
+        assert.equal(response.answer, 'I could not find enough reliable tafsir evidence to answer that safely.');
+        assert.doesNotMatch(response.answer, /unsupported substantive/iu);
+        assert.equal(provider.requests.length, 1);
+    });
+
     it('keeps unfamiliar questions evidence-bound instead of keyword-refusing them', async () => {
         const provider = new SequenceProvider([]);
         const unfamiliar = await generateGroundedAnswer({
@@ -285,7 +308,7 @@ describe('Noor grounded generation', () => {
             maxEvidenceCharacters: 1000, provider,
         });
         assert.equal(unfamiliar.status, 'insufficient_evidence');
-        assert.equal(unfamiliar.answer, 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.');
+        assert.equal(unfamiliar.answer, 'I could not find enough reliable tafsir evidence to answer that safely.');
         const ambiguous = await generateGroundedAnswer({
             request: { ...REQUEST, question: 'What does this verse mean?' }, evidence: [],
             maxEvidenceCharacters: 1000, provider,
@@ -322,7 +345,14 @@ describe('Noor grounded generation', () => {
             properties?: { citationIds?: { minItems?: number; maxItems?: number; items?: { enum?: string[] } } };
         };
         assert.deepEqual(schema.properties?.citationIds?.items?.enum, ['S1', 'S2']);
-        assert.equal(schema.properties?.citationIds?.minItems, 1);
+        assert.equal(schema.properties?.citationIds?.minItems, 0);
+        assert.deepEqual((provider.requests[0]?.config.responseJsonSchema as {
+            required?: string[];
+            properties?: { status?: { enum?: string[] } };
+        }).required, ['status', 'answer', 'citationIds']);
+        assert.deepEqual((provider.requests[0]?.config.responseJsonSchema as {
+            properties?: { status?: { enum?: string[] } };
+        }).properties?.status?.enum, ['answered', 'insufficient_evidence']);
         assert.equal(schema.properties?.citationIds?.maxItems, 2);
         assert.equal(provider.requests.length, 2);
     });

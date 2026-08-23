@@ -41,6 +41,11 @@ describe('Noor external evaluation cases', () => {
             'regression-wudu-ambiguity',
             'regression-exact-verse',
             'regression-policy-refusal',
+            'multi-entity-discourse',
+            'normative-relation-paraphrases',
+            'general-worship-pronoun-paraphrases',
+            'unsupported-current-world',
+            'personalized-condition-control',
         ]) {
             assert.ok(manifest.cases.some(item => item.id === id), `missing ${id}`);
         }

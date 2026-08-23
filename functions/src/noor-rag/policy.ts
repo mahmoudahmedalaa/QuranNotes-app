@@ -15,8 +15,11 @@ const KNOWN_TAFSIR_SOURCE = /(?:ibn kathir|al-sa['’]?di|ابن كثير|الس
 const HADITH_MENTION = /(?:hadith|حديث)/i;
 const CITED_IN_VERSE_CONTEXT = /(?:(?:cit|mention|explain).{0,70}(?:this|the) verse|(?:ذكر|أورد|استشهد|شرح).{0,70}(?:تفسير )?(?:هذه|تلك) الآية|تفسير (?:هذه|تلك) الآية)/i;
 const STANDALONE_HADITH = /(?:(?:give|show|quote|find|tell me|share|is there|invent|fabricate|make up|create|write).{0,50}(?:a |the )?hadith|(?:is (?:this|the) hadith authentic|verify.{0,40}authenticity.{0,40}hadith|authenticate.{0,40}hadith)|(?:حديث|أعطني حديث))/i;
-const PERSONAL_CONTEXT = /\b(?:for me|for my situation|for my case|for my circumstances|in my situation|in my case|personally|my personal|what should i do|should i|can i|must i|may i)\b|(?:لي|وضعي|حالي|ظروفي|شخصيًا|ماذا أفعل)/i;
-const PERSONAL_RULING = /(?:\b(?:halal|haram|permissible|forbidden|fatwa|ruling)\b|(?:حلال|حرام|فتوى|حكم شرعي)).{0,100}(?:\b(?:for me|can i|should i|must i|may i)\b|(?:لي|وضعي|حالي|ظروفي))|\b(?:can i|should i|must i|may i)\b.{0,120}\b(?:halal|haram|permissible|forbidden)\b/i;
+const PERSONAL_CIRCUMSTANCES = /\b(?:for my (?:situation|case|circumstances)|in my (?:situation|case|circumstances)|given my|because i am|because i have|while (?:pregnant|ill|taking my medication)|my (?:pregnancy|illness|medical condition|medication|contract|finances|family circumstances)|personally tailored)\b|(?:وضعي|حالي|ظروفي|حالتي الصحية|بسبب مرضي)/i;
+const PERSONAL_CONDITION_CLAUSE = /\b(?:if|since|while) i(?:'m| am| have)\b|\b(?:during|due to|because of) my\b|(?:إذا كنت|بسبب|أثناء حالتي)/i;
+const EXPLICIT_PERSONAL_RULING = /(?:\b(?:halal|haram|permissible|forbidden|fatwa|ruling)\b|(?:حلال|حرام|فتوى|حكم شرعي)).{0,100}(?:\b(?:for me|for my situation|for my case|for my circumstances|in my situation|in my case)\b|(?:لي|وضعي|حالي|ظروفي))/i;
+const PRESCRIPTIVE_RULING_REQUEST = /\b(?:issue|give|provide|decide|determine)\b.{0,60}\b(?:personal|individual|tailored)?\s*(?:fatwa|ruling)\b|(?:أعطني|أصدر|حدد).{0,40}(?:فتوى|حكم شرعي)/i;
+const PERSONAL_DECISION_REQUEST = /\b(?:(?:can|may|must|should) i|what should i|tell me whether i should|decide whether i should)\b|(?:هل أستطيع|هل يجوز لي|هل ينبغي لي|ماذا ينبغي أن أفعل|قرر لي)/i;
 
 function isTafsirHadithContext(content: string): boolean {
     return KNOWN_TAFSIR_SOURCE.test(content)
@@ -27,7 +30,11 @@ function isTafsirHadithContext(content: string): boolean {
 export function classifyPolicy(content: string): NoorPolicyCategory {
     if (PROMPT_INJECTION.test(content)) return 'prompt_injection';
     if (MEDICAL_LEGAL_CRISIS.test(content)) return 'medical_legal_crisis';
-    if (PERSONAL_RULING.test(content) || PERSONAL_CONTEXT.test(content)) return 'personal_ruling';
+    if (EXPLICIT_PERSONAL_RULING.test(content)
+        || ((PERSONAL_CIRCUMSTANCES.test(content) || PERSONAL_CONDITION_CLAUSE.test(content))
+            && (PRESCRIPTIVE_RULING_REQUEST.test(content) || PERSONAL_DECISION_REQUEST.test(content)))) {
+        return 'personal_ruling';
+    }
     if (UNSAFE_HADITH_INTENT.test(content)) return 'standalone_hadith';
     if (isTafsirHadithContext(content)) return 'allowed';
     if (STANDALONE_HADITH.test(content)) return 'standalone_hadith';

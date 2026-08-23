@@ -282,6 +282,330 @@ describe('handleNoorRequest', () => {
         assert.ok(failure.events.includes('finalize-non-answer'));
     });
 
+    it('normalizes abstention semantics before citations, usage finalization, and conversation state', async () => {
+        const traces: NoorSanitizedTrace[] = [];
+        let stateWrites = 0;
+        const value = harness({
+            generateGroundedAnswer: async () => ({
+                ...ANSWERED,
+                answer: 'I could not find enough reliable tafsir evidence to answer that safely.',
+            }),
+            writeValidatedConversationState: async () => { stateWrites += 1; },
+            emitSanitizedTrace: trace => { traces.push(trace); },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'Which current investment is doing well now?',
+            history: [],
+        });
+
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.deepEqual(response.citations, []);
+        assert.equal(stateWrites, 0);
+        assert.ok(value.events.includes('finalize-non-answer'));
+        assert.ok(!value.events.includes('finalize-answered'));
+        assert.equal((traces[0] as unknown as { outcomeNormalizationReason?: string })?.outcomeNormalizationReason, 'abstention_language');
+        assert.equal((traces[0] as unknown as { stateAction?: string })?.stateAction, 'unchanged');
+    });
+
+    it('strips citations from an explicitly typed generated non-answer', async () => {
+        let stateWrites = 0;
+        const value = harness({
+            generateGroundedAnswer: async () => ({
+                ...ANSWERED,
+                status: 'insufficient_evidence',
+                answer: 'The supplied evidence is insufficient for this request.',
+            }),
+            writeValidatedConversationState: async () => { stateWrites += 1; },
+        });
+
+        const response = await run(value);
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.deepEqual(response.citations, []);
+        assert.equal(stateWrites, 0);
+        assert.ok(value.events.includes('finalize-non-answer'));
+        assert.ok(!value.events.includes('finalize-answered'));
+    });
+
+    it('executes explicit whole-Surah synthesis even when the phrasing contains a pronoun', async () => {
+        let summaryCalls = 0;
+        let generationCalls = 0;
+        const summaryEvidence = [1, 30, 60, 111].map((verse, index) => ({
+            ...EVIDENCE[0]!,
+            promptSourceId: `S${index + 1}`,
+            chunk: {
+                ...chunk(`yusuf-summary-${index}`, `Distinct Yusuf summary concept ${index}`),
+                canonicalUnitId: `unit-yusuf-${index}`,
+                surah: 12,
+                verseStart: verse,
+                verseEnd: verse,
+            },
+        } satisfies RetrievedEvidence));
+        const value = harness({
+            retrieveEntitySummary: async () => {
+                summaryCalls += 1;
+                return {
+                    evidence: summaryEvidence,
+                    candidateCount: 4,
+                    anchorVerses: [1, 30, 60, 111],
+                    coverageCapacity: { canonicalUnits: 4, sections: 4, span: 110 },
+                };
+            },
+            generateGroundedAnswer: async input => {
+                generationCalls += 1;
+                return {
+                    requestId: input.request.requestId,
+                    status: 'answered',
+                    answer: 'Grounded whole-Surah synthesis.',
+                    citations: input.evidence.map(item => ({
+                        chunkId: item.chunk.chunkId,
+                        canonicalUnitId: item.chunk.canonicalUnitId,
+                        source: item.chunk.source,
+                        sourceTitle: item.chunk.sourceTitle,
+                        surah: item.chunk.surah,
+                        verseStart: item.chunk.verseStart,
+                        verseEnd: item.chunk.verseEnd,
+                        corpusVersion: item.chunk.corpusVersion,
+                    })),
+                };
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'Explain Surah Yusuf like I know nothing about it.',
+            history: [],
+        });
+        assert.equal(response.status, 'answered');
+        assert.equal(summaryCalls, 1);
+        assert.equal(generationCalls, 1);
+        assert.ok(!value.events.includes('semantic'));
+    });
+
+    it('enforces explicit Surah containment on the ordinary point path', async () => {
+        const maryam = {
+            ...EVIDENCE[0]!,
+            chunk: {
+                ...chunk('a-maryam', 'Maryam happened within this requested Surah Maryam passage.'),
+                canonicalUnitId: 'unit-maryam',
+                surah: 19,
+                verseStart: 16,
+                verseEnd: 16,
+            },
+        } satisfies RetrievedEvidence;
+        const crossSurah = {
+            ...EVIDENCE[0]!,
+            promptSourceId: 'S2',
+            chunk: {
+                ...chunk('b-cross-surah', 'Maryam happened and is mentioned in this other passage.'),
+                canonicalUnitId: 'unit-cross-surah',
+                surah: 21,
+                verseStart: 91,
+                verseEnd: 91,
+            },
+        } satisfies RetrievedEvidence;
+        let selected: readonly RetrievedEvidence[] = [];
+        const value = harness({
+            retrieveSemantic: async () => ({
+                evidence: [maryam, crossSurah],
+                vectorHitCount: 2,
+                lexicalHitCount: 2,
+                lexicalSearchStatus: 'available' as const,
+            }),
+            generateGroundedAnswer: async input => {
+                selected = input.evidence;
+                const item = input.evidence[0]!;
+                return {
+                    requestId: input.request.requestId,
+                    status: 'answered',
+                    answer: 'Grounded Maryam answer. [S1]',
+                    citations: [{
+                        chunkId: item.chunk.chunkId,
+                        canonicalUnitId: item.chunk.canonicalUnitId,
+                        source: item.chunk.source,
+                        sourceTitle: item.chunk.sourceTitle,
+                        surah: item.chunk.surah,
+                        verseStart: item.chunk.verseStart,
+                        verseEnd: item.chunk.verseEnd,
+                        corpusVersion: item.chunk.corpusVersion,
+                    }],
+                };
+            },
+        });
+
+        const response = await run(value, { ...REQUEST, question: 'What happened in Surah Maryam?', history: [] });
+        assert.equal(response.status, 'answered');
+        assert.deepEqual(selected.map(item => item.chunk.surah), [19]);
+        assert.deepEqual(response.citations.map(item => item.surah), [19]);
+    });
+
+    it('keeps explicit Surah containment across bounded recovery retrieval', async () => {
+        const crossSurah = {
+            ...EVIDENCE[0]!,
+            chunk: {
+                ...chunk('cross-recovery', 'Maryam appears in this different Surah passage.'),
+                canonicalUnitId: 'unit-cross-recovery',
+                surah: 21,
+                verseStart: 91,
+                verseEnd: 91,
+            },
+        } satisfies RetrievedEvidence;
+        let retrievals = 0;
+        const value = harness({
+            retrieveSemantic: async () => {
+                retrievals += 1;
+                return {
+                    evidence: [crossSurah],
+                    vectorHitCount: 1,
+                    lexicalHitCount: 1,
+                    lexicalSearchStatus: 'available' as const,
+                };
+            },
+            generateGroundedAnswer: async () => { throw new Error('generation must not receive cross-Surah evidence'); },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'What happened in Surah Maryam?',
+            history: [],
+            verseContext: { surah: 19, verse: 16 },
+        });
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.equal(retrievals, 2);
+        assert.ok(!value.events.includes('model'));
+    });
+
+    it('retrieves balanced evidence through one bounded branch per requested entity', async () => {
+        const nuh = {
+            ...EVIDENCE[0]!,
+            chunk: { ...chunk('nuh-branch', 'Nuh story patience warning people'), canonicalUnitId: 'unit-nuh', surah: 71, verseStart: 1, verseEnd: 1 },
+        } satisfies RetrievedEvidence;
+        const musa = {
+            ...EVIDENCE[0]!,
+            chunk: { ...chunk('musa-branch', 'Musa story signs Pharaoh people'), canonicalUnitId: 'unit-musa', surah: 20, verseStart: 9, verseEnd: 9 },
+        } satisfies RetrievedEvidence;
+        const queries: string[] = [];
+        let selected: readonly RetrievedEvidence[] = [];
+        const value = harness({
+            retrieveSemantic: async input => {
+                queries.push(input.query);
+                const item = /musa/iu.test(input.query) && !/nuh/iu.test(input.query) ? musa : nuh;
+                return { evidence: [item], vectorHitCount: 1, lexicalHitCount: 1, lexicalSearchStatus: 'available' as const };
+            },
+            generateGroundedAnswer: async input => {
+                selected = input.evidence;
+                return {
+                    requestId: input.request.requestId,
+                    status: 'answered',
+                    answer: 'The two grounded story paths differ. [S1, S2]',
+                    citations: input.evidence.map(item => ({
+                        chunkId: item.chunk.chunkId,
+                        canonicalUnitId: item.chunk.canonicalUnitId,
+                        source: item.chunk.source,
+                        sourceTitle: item.chunk.sourceTitle,
+                        surah: item.chunk.surah,
+                        verseStart: item.chunk.verseStart,
+                        verseEnd: item.chunk.verseEnd,
+                        corpusVersion: item.chunk.corpusVersion,
+                    })),
+                };
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'How are the stories of Nuh and Musa different?',
+            history: [],
+        });
+        assert.equal(response.status, 'answered');
+        assert.equal(queries.length, 2);
+        assert.ok(queries.some(query => /nuh/iu.test(query) && !/musa/iu.test(query)));
+        assert.ok(queries.some(query => /musa/iu.test(query) && !/nuh/iu.test(query)));
+        assert.deepEqual(new Set(selected.map(item => item.chunk.chunkId)), new Set(['nuh-branch', 'musa-branch']));
+    });
+
+    it('rejects distinct incidental name mentions as substantive entity-branch support', async () => {
+        const shared = {
+            ...EVIDENCE[0]!,
+            chunk: {
+                ...chunk('shared-incidental', 'Nuh and Musa are both named incidentally.'),
+                canonicalUnitId: 'unit-shared-incidental',
+                surah: 7,
+            },
+        } satisfies RetrievedEvidence;
+        const secondShared = {
+            ...shared,
+            promptSourceId: 'S2',
+            chunk: {
+                ...shared.chunk,
+                chunkId: 'second-incidental',
+                canonicalUnitId: 'unit-second-incidental',
+                retrievalText: 'Musa and Nuh are listed together incidentally.',
+                originalText: 'Musa and Nuh are listed together incidentally.',
+            },
+        } satisfies RetrievedEvidence;
+        const value = harness({
+            retrieveSemantic: async () => ({
+                evidence: [shared, secondShared], vectorHitCount: 2, lexicalHitCount: 2, lexicalSearchStatus: 'available' as const,
+            }),
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'How are the stories of Nuh and Musa different?',
+            history: [],
+        });
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.ok(!value.events.includes('model'));
+    });
+
+    it('rejects a multi-entity answer whose final citations support only one requested entity', async () => {
+        const nuh = {
+            ...EVIDENCE[0]!,
+            chunk: { ...chunk('nuh-final', 'Nuh story called his people patiently.'), canonicalUnitId: 'unit-nuh-final', surah: 71 },
+        } satisfies RetrievedEvidence;
+        const musa = {
+            ...EVIDENCE[0]!,
+            chunk: { ...chunk('musa-final', 'Musa story confronted Pharaoh with signs.'), canonicalUnitId: 'unit-musa-final', surah: 20 },
+        } satisfies RetrievedEvidence;
+        const value = harness({
+            retrieveSemantic: async input => ({
+                evidence: [/musa/iu.test(input.query) && !/nuh/iu.test(input.query) ? musa : nuh],
+                vectorHitCount: 1,
+                lexicalHitCount: 1,
+                lexicalSearchStatus: 'available' as const,
+            }),
+            generateGroundedAnswer: async input => {
+                const cited = input.evidence.find(item => /nuh/iu.test(item.chunk.retrievalText))!;
+                return {
+                    requestId: input.request.requestId,
+                    status: 'answered',
+                    answer: 'A superficially balanced answer with one-sided citations.',
+                    citations: [{
+                        chunkId: cited.chunk.chunkId,
+                        canonicalUnitId: cited.chunk.canonicalUnitId,
+                        source: cited.chunk.source,
+                        sourceTitle: cited.chunk.sourceTitle,
+                        surah: cited.chunk.surah,
+                        verseStart: cited.chunk.verseStart,
+                        verseEnd: cited.chunk.verseEnd,
+                        corpusVersion: cited.chunk.corpusVersion,
+                    }],
+                };
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'How are the stories of Nuh and Musa different?',
+            history: [],
+        });
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.ok(value.events.includes('finalize-non-answer'));
+        assert.ok(!value.events.includes('finalize-answered'));
+    });
+
     it('performs one bounded recovery retrieval and generates only from relevant evidence', async () => {
         const unrelated = {
             ...EVIDENCE[0]!,

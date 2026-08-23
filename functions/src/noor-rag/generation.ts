@@ -9,6 +9,7 @@ import {
     type ValidatedGeneratedAnswer,
 } from './citations';
 import { classifyRequestPolicy } from './policy';
+import { CANONICAL_INSUFFICIENT_EVIDENCE, containsAbstentionLanguage } from './outcome';
 import type { RetrievedEvidence } from './types';
 import type { ChatQueryPlan } from './queryRewrite';
 
@@ -19,7 +20,7 @@ const QUALITY_MAX_OUTPUT_TOKENS = 256;
 
 const POLICY_REFUSAL = 'Noor only explains Quran passages using Tafsir Ibn Kathir and Tafsir Al-Sa\'di. For personal rulings, please speak with a qualified scholar.';
 const SCOPE_REFUSAL = 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.';
-const INSUFFICIENT_EVIDENCE = 'I could not find the answer in the available Tafsir Ibn Kathir and Tafsir Al-Sa\'di passages.';
+const INSUFFICIENT_EVIDENCE = CANONICAL_INSUFFICIENT_EVIDENCE;
 const TEMPORARILY_UNAVAILABLE = 'Noor is temporarily unavailable. Please try again shortly.';
 
 export interface VertexGenerationRequest {
@@ -102,12 +103,13 @@ function responseSchema(evidence: readonly RetrievedEvidence[]): Readonly<Record
     return {
         type: 'object',
         additionalProperties: false,
-        required: ['answer', 'citationIds'],
+        required: ['status', 'answer', 'citationIds'],
         properties: {
+            status: { type: 'string', enum: ['answered', 'insufficient_evidence'] },
             answer: { type: 'string' },
             citationIds: {
                 type: 'array',
-                minItems: 1,
+                minItems: 0,
                 maxItems: allowedCitationIds.length,
                 items: { type: 'string', enum: allowedCitationIds },
             },
@@ -156,7 +158,9 @@ const BASE_SYSTEM_INSTRUCTIONS = [
     'Do not phrase a technically source-faithful statement in a way that creates a materially misleading normal-language conclusion.',
     'Explain technical or source wording clearly enough for a normal user to understand the answer.',
     'Ensure citations correspond to the selected evidence and to the claims they support.',
-    'Return a JSON object with exactly two keys: answer and citationIds. citationIds must list every source that supports the answer.',
+    'Return a JSON object with exactly three keys: status, answer, and citationIds.',
+    'Use status answered only for a substantive evidence-supported answer and include every supporting source in citationIds.',
+    'Use status insufficient_evidence for a non-answer and return citationIds as an empty array.',
     'Unless task-specific instructions require them, inline citation markers such as [S1] are optional; if you use them, each marker must match a citationId exactly.',
 ];
 
@@ -177,6 +181,17 @@ function boundedEvidence(evidence: readonly RetrievedEvidence[], maximumCharacte
 }
 
 function taskInstructions(taskPlan?: ChatQueryPlan): string {
+    if (taskPlan?.retrievalTask === 'multi_entity_comparison') {
+        const entities = taskPlan.entitySet
+            .map(entity => `<entity><id>${escapeXml(entity.id)}</id><label>${escapeXml(entity.label)}</label></entity>`)
+            .join('');
+        return [
+            '<taskType>multi_entity_comparison</taskType>',
+            `<requestedEntities>${entities}</requestedEntities>`,
+            'Use balanced supporting evidence for every requested entity. Address the relation the user actually requested across the entities; contrast them only when the question asks for differences.',
+            'Do not substitute an incidental concept from one evidence passage for either requested entity.',
+        ].join('\n');
+    }
     if (taskPlan?.retrievalTask !== 'entity_summary' || taskPlan.entity === null) return '';
     return [
         `<taskType>entity_summary</taskType>`,
@@ -407,13 +422,14 @@ function parseAnswerQualityJudgement(text: string): AnswerQualityJudgement {
     };
 }
 
-function answerQualityPassed(judgement: AnswerQualityJudgement): boolean {
+function answerQualityPassed(judgement: AnswerQualityJudgement, answer: ValidatedGeneratedAnswer): boolean {
     return judgement.grounded
         && judgement.answersQuestion
         && judgement.preservesMaterialQualifications
         && !judgement.materiallyMisleading
         && judgement.clear
-        && judgement.citationConsistent;
+        && judgement.citationConsistent
+        && !containsAbstentionLanguage(answer.answer);
 }
 
 function synthesisCitationCoveragePassed(
@@ -596,6 +612,14 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, 'answer_validation_failure'));
     }
+    if (initialAnswer.status === 'insufficient_evidence') {
+        return fixedAnswer(
+            input.request.requestId,
+            'insufficient_evidence',
+            INSUFFICIENT_EVIDENCE,
+            finalDiagnostics(diagnostics, null),
+        );
+    }
 
     let initialJudgement: AnswerQualityJudgement;
     try {
@@ -615,7 +639,7 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, errorClass));
     }
-    if (answerQualityPassed(initialJudgement)) {
+    if (answerQualityPassed(initialJudgement, initialAnswer)) {
         diagnostics.attempts = providerCalls;
         return answeredResponse(input.request.requestId, initialAnswer, finalDiagnostics(diagnostics, null));
     }
@@ -644,6 +668,14 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, classifyProviderFailure(error)));
     }
+    if (correctedAnswer.status === 'insufficient_evidence') {
+        return fixedAnswer(
+            input.request.requestId,
+            'insufficient_evidence',
+            INSUFFICIENT_EVIDENCE,
+            finalDiagnostics(diagnostics, null),
+        );
+    }
 
     let correctedJudgement: AnswerQualityJudgement;
     try {
@@ -662,7 +694,7 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, errorClass));
     }
-    if (!answerQualityPassed(correctedJudgement)) {
+    if (!answerQualityPassed(correctedJudgement, correctedAnswer)) {
         diagnostics.generationFailurePhase = 'quality_correction';
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, 'answer_quality_failure'));

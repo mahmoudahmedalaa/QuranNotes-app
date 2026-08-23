@@ -6,6 +6,7 @@ import {
     canonicalSurahByNumber,
     hasEntitySummarySignal,
     resolveQuranSurahEntity,
+    resolveQuranSurahEntities,
     type QuranSurahEntity,
 } from './quranEntities';
 
@@ -14,6 +15,7 @@ const MAX_STORED_EVIDENCE_IDS = 8;
 export const CONVERSATION_STATE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const SAFE_TOKEN = /^[\p{L}\p{N}_'-]{2,48}$/u;
 const SAFE_QUESTION_FINGERPRINT = /^[a-f0-9]{64}$/;
+const SAFE_ENTITY_ID = /^(?:surah:\d{1,3}|subject:[\p{L}\p{N}_'-]+(?:-[\p{L}\p{N}_'-]+){0,2})$/u;
 const STOP_WORDS = new Set([
     'a', 'about', 'an', 'and', 'are', 'can', 'does', 'do', 'for', 'from', 'how',
     'in', 'is', 'it', 'me', 'my', 'of', 'on', 'or', 'that', 'the', 'this', 'to',
@@ -33,6 +35,22 @@ const SUMMARY_TASK_TOKENS = new Set([
     'summary', 'summarise', 'summarize', 'surah', 'theme', 'themes',
 ]);
 
+const ENTITY_PHRASE_NOISE = new Set([
+    'a', 'an', 'and', 'are', 'account', 'accounts', 'compare', 'contrast', 'different', 'difference',
+    'differences', 'how', 'of', 'prophet', 'prophets', 'similar', 'similarities', 'story', 'stories',
+    'the', 'their', 'versus', 'with',
+]);
+
+export type NoorTaskType = 'point_question' | 'entity_summary' | 'multi_entity_comparison' | 'contextual_followup';
+export type NoorRetrievalTask = 'point_question' | 'entity_summary' | 'multi_entity_comparison';
+
+export interface DiscourseEntity {
+    id: string;
+    label: string;
+    kind: 'surah' | 'subject';
+    surahNumber?: number;
+}
+
 export interface ValidatedConversationState {
     subjectTokens: readonly string[];
     evidenceIds: readonly string[];
@@ -40,11 +58,20 @@ export interface ValidatedConversationState {
     expiresAt: string;
     sourceQuestionFingerprint: string;
     entity?: QuranSurahEntity;
+    activeTask: NoorTaskType;
+    primaryEntity: DiscourseEntity | null;
+    entitySet: readonly DiscourseEntity[];
+    comparisonFrame: boolean;
+    referentialRoles: readonly string[];
+    semanticSubject: readonly string[];
+    previousTurnFingerprint: string;
+    validatedEvidenceRefs: readonly string[];
 }
 
 export interface QueryVariant {
-    kind: 'original' | 'context_enriched';
+    kind: 'original' | 'context_enriched' | 'entity_branch';
     query: string;
+    entityId?: string;
 }
 
 export interface ChatQueryPlan {
@@ -52,15 +79,20 @@ export interface ChatQueryPlan {
     contextSelected: boolean;
     conversationState: 'validated_subject_and_evidence' | 'none';
     requiresClarification: boolean;
-    taskType: 'point_question' | 'entity_summary' | 'contextual_followup';
-    retrievalTask: 'point_question' | 'entity_summary';
+    taskType: NoorTaskType;
+    retrievalTask: NoorRetrievalTask;
     entity: QuranSurahEntity | null;
+    entitySet: readonly DiscourseEntity[];
+    primaryEntity: DiscourseEntity | null;
+    explicitEntity: boolean;
 }
 
 export interface CreateValidatedConversationStateInput {
     request: Extract<NoorRequest, { mode: 'chat' }>;
     response: NoorAnswer;
     evidence: readonly RetrievedEvidence[];
+    taskPlan?: ChatQueryPlan;
+    previousState?: ValidatedConversationState | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -93,6 +125,81 @@ function tokenize(value: string): string[] {
 
 export function extractSubjectTokens(question: string): string[] {
     return boundedTokens(tokenize(question));
+}
+
+function normalizeEntityLabel(value: string): string {
+    return tokenize(value)
+        .filter(token => !ENTITY_PHRASE_NOISE.has(token))
+        .slice(0, 3)
+        .join(' ')
+        .trim();
+}
+
+function discourseEntityForSurah(entity: QuranSurahEntity): DiscourseEntity {
+    return {
+        id: `surah:${entity.surahNumber}`,
+        label: `Surah ${entity.canonicalName}`,
+        kind: 'surah',
+        surahNumber: entity.surahNumber,
+    };
+}
+
+function subjectEntity(value: string): DiscourseEntity | null {
+    const label = normalizeEntityLabel(value);
+    if (label.length === 0) return null;
+    const id = `subject:${label.replace(/\s+/gu, '-')}`;
+    return SAFE_ENTITY_ID.test(id) ? { id, label, kind: 'subject' } : null;
+}
+
+function extractComparisonEntitySet(question: string): DiscourseEntity[] {
+    const surahs = resolveQuranSurahEntities(question);
+    if (surahs.length >= 2) return surahs.slice(0, 2).map(discourseEntityForSurah);
+    const patterns = [
+        /\b(?:compare|contrast)\s+(.{1,80}?)\s+(?:and|with|to|versus|vs\.?)\s+(.{1,80}?)(?:[?!.]|$)/iu,
+        /\b(?:differences?|similarities?)\s+between\s+(.{1,80}?)\s+and\s+(.{1,80}?)(?:[?!.]|$)/iu,
+        /\bhow\s+are\s+(.{1,80}?)\s+and\s+(.{1,80}?)\s+(?:different|similar|alike)\b/iu,
+        /\b(?:stories?|accounts?)\s+of\s+(.{1,80}?)\s+and\s+(.{1,80}?)(?:\s+(?:different|similar|alike)|[?!.]|$)/iu,
+    ];
+    for (const pattern of patterns) {
+        const match = pattern.exec(question);
+        if (!match) continue;
+        const left = subjectEntity(match[1] ?? '');
+        const right = subjectEntity(match[2] ?? '');
+        if (left && right && left.id !== right.id) return [left, right];
+    }
+    return [];
+}
+
+function isPluralReference(question: string): boolean {
+    return /\b(?:both|those\s+two|the\s+two|their\s+(?:stories|accounts)|them|they)\b/iu.test(question);
+}
+
+function entityBranchQuery(question: string, entity: DiscourseEntity, entitySet: readonly DiscourseEntity[]): string {
+    const entityTokens = new Set(entitySet.flatMap(item => tokenize(item.label)));
+    const operation = extractSubjectTokens(question)
+        .filter(token => !entityTokens.has(token) && !FOLLOW_UP_TOKENS.has(token))
+        .slice(0, 5);
+    return [entity.label, ...operation].join(' ').trim();
+}
+
+function parseDiscourseEntity(value: unknown): DiscourseEntity | null {
+    if (!isRecord(value)
+        || typeof value.id !== 'string'
+        || !SAFE_ENTITY_ID.test(value.id)
+        || typeof value.label !== 'string'
+        || value.label.trim().length === 0
+        || value.label.length > 96
+        || (value.kind !== 'surah' && value.kind !== 'subject')) {
+        return null;
+    }
+    if (value.kind === 'surah') {
+        if (typeof value.surahNumber !== 'number' || !Number.isInteger(value.surahNumber)) return null;
+        const canonical = canonicalSurahByNumber(value.surahNumber);
+        if (!canonical || value.id !== `surah:${canonical.surahNumber}`) return null;
+        return discourseEntityForSurah(canonical);
+    }
+    if (value.surahNumber !== undefined) return null;
+    return { id: value.id, label: value.label.trim(), kind: 'subject' };
 }
 
 function extractCitedEvidenceTokens(evidence: readonly RetrievedEvidence[]): string[] {
@@ -159,6 +266,49 @@ export function parseValidatedConversationState(value: unknown, nowMs = Date.now
         }
         entity = canonical;
     }
+    const semanticSubject = Array.isArray(value.semanticSubject)
+        ? boundedTokens(value.semanticSubject.filter((item): item is string => typeof item === 'string'))
+        : subjectTokens;
+    if (semanticSubject.length === 0) return null;
+    const rawEntitySet = value.entitySet === undefined
+        ? (entity ? [discourseEntityForSurah(entity)] : [])
+        : value.entitySet;
+    if (!Array.isArray(rawEntitySet) || rawEntitySet.length > 2) return null;
+    const entitySet = rawEntitySet.map(parseDiscourseEntity);
+    if (entitySet.some(item => item === null)) return null;
+    const parsedEntitySet = entitySet as DiscourseEntity[];
+    const primaryEntity = value.primaryEntity === undefined
+        ? parsedEntitySet[0] ?? null
+        : value.primaryEntity === null ? null : parseDiscourseEntity(value.primaryEntity);
+    if (value.primaryEntity !== undefined && value.primaryEntity !== null && primaryEntity === null) return null;
+    const activeTask = value.activeTask === 'entity_summary'
+        || value.activeTask === 'multi_entity_comparison'
+        || value.activeTask === 'contextual_followup'
+        || value.activeTask === 'point_question'
+        ? value.activeTask
+        : parsedEntitySet.length > 1 ? 'multi_entity_comparison' : 'point_question';
+    const comparisonFrame = value.comparisonFrame === undefined
+        ? parsedEntitySet.length > 1
+        : value.comparisonFrame;
+    if (typeof comparisonFrame !== 'boolean' || comparisonFrame !== (parsedEntitySet.length > 1)) return null;
+    const referentialRoles = value.referentialRoles === undefined
+        ? parsedEntitySet.map(item => item.id)
+        : value.referentialRoles;
+    if (!Array.isArray(referentialRoles)
+        || referentialRoles.length > 2
+        || !referentialRoles.every(item => typeof item === 'string' && parsedEntitySet.some(entityItem => entityItem.id === item))) {
+        return null;
+    }
+    const previousTurnFingerprint = value.previousTurnFingerprint === undefined
+        ? sourceQuestionFingerprint
+        : value.previousTurnFingerprint;
+    if (typeof previousTurnFingerprint !== 'string' || !SAFE_QUESTION_FINGERPRINT.test(previousTurnFingerprint)) return null;
+    const validatedEvidenceRefs = value.validatedEvidenceRefs === undefined ? evidenceIds : value.validatedEvidenceRefs;
+    if (!Array.isArray(validatedEvidenceRefs)
+        || validatedEvidenceRefs.length !== evidenceIds.length
+        || !validatedEvidenceRefs.every((item, index) => item === evidenceIds[index])) {
+        return null;
+    }
     return {
         subjectTokens,
         evidenceIds,
@@ -166,6 +316,14 @@ export function parseValidatedConversationState(value: unknown, nowMs = Date.now
         expiresAt: new Date(expiresAtMs).toISOString(),
         sourceQuestionFingerprint,
         ...(entity ? { entity } : {}),
+        activeTask,
+        primaryEntity,
+        entitySet: parsedEntitySet,
+        comparisonFrame,
+        referentialRoles: [...referentialRoles],
+        semanticSubject,
+        previousTurnFingerprint,
+        validatedEvidenceRefs: evidenceIds,
     };
 }
 
@@ -183,23 +341,44 @@ export function createValidatedConversationState(
         if (!item) return null;
         if (citedEvidence.length < MAX_STORED_EVIDENCE_IDS) citedEvidence.push(item);
     }
+    const previousState = input.previousState ? parseValidatedConversationState(input.previousState, nowMs) : null;
+    const taskPlan = input.taskPlan ?? buildChatQueryPlan({
+        request: input.request,
+        validatedConversationState: previousState,
+    });
     const questionTokens = extractSubjectTokens(input.request.question);
-    const subjectTokens = !isStructuralFollowUp(input.request.question) && questionTokens.length > 0
-        ? questionTokens
-        : extractCitedEvidenceTokens(citedEvidence);
+    const preservesFrame = taskPlan.contextSelected && previousState !== null;
+    const subjectTokens = preservesFrame
+        ? [...previousState.semanticSubject]
+        : !isStructuralFollowUp(input.request.question) && questionTokens.length > 0
+            ? questionTokens
+            : extractCitedEvidenceTokens(citedEvidence);
     if (citedEvidence.length === 0 || subjectTokens.length === 0) return null;
-    const resolvedEntity = resolveQuranSurahEntity(input.request.question);
+    const resolvedEntity = taskPlan.entity ?? resolveQuranSurahEntity(input.request.question);
     const entity = resolvedEntity !== null
         && citedEvidence.every(item => item.chunk.surah === resolvedEntity.surahNumber)
         ? resolvedEntity
-        : undefined;
+        : preservesFrame ? previousState.entity : undefined;
+    const entitySet = taskPlan.entitySet.length > 0
+        ? taskPlan.entitySet
+        : preservesFrame ? previousState.entitySet : [];
+    const primaryEntity = taskPlan.primaryEntity ?? (preservesFrame ? previousState.primaryEntity : null);
+    const fingerprint = fingerprintQuestion(input.request.question);
     return parseValidatedConversationState({
         subjectTokens,
         evidenceIds: citedEvidence.map(item => item.chunk.chunkId),
         evidenceCount: citedEvidence.length,
         expiresAt: new Date(nowMs + CONVERSATION_STATE_RETENTION_MS).toISOString(),
-        sourceQuestionFingerprint: fingerprintQuestion(input.request.question),
+        sourceQuestionFingerprint: fingerprint,
         ...(entity ? { entity } : {}),
+        activeTask: taskPlan.taskType,
+        primaryEntity,
+        entitySet,
+        comparisonFrame: entitySet.length > 1,
+        referentialRoles: entitySet.map(item => item.id),
+        semanticSubject: subjectTokens,
+        previousTurnFingerprint: fingerprint,
+        validatedEvidenceRefs: citedEvidence.map(item => item.chunk.chunkId),
     }, nowMs);
 }
 
@@ -207,7 +386,7 @@ function isStructuralFollowUp(question: string): boolean {
     const subjectTokens = extractSubjectTokens(question);
     const hasOnlyFollowUpTokens = subjectTokens.length === 0
         || subjectTokens.every(token => FOLLOW_UP_TOKENS.has(token));
-    const hasReferentialPronoun = /\b(?:its|it|this|that|these|those|his|her|their|them)\b/i.test(question);
+    const hasReferentialPronoun = /\b(?:its|it|this|that|these|those|his|him|her|their|them)\b/i.test(question);
     const hasExplicitSubject = /\b(?:about|regarding)\s+(?!it\b|this\b|that\b|these\b|those\b|him\b|her\b|them\b)[\p{L}\p{N}][\p{L}\p{N}'-]*/iu.test(question)
         || /^\s*(?:what|who)\s+is\s+(?:the\s+)?(?!important\b|special\b|significance\b|meaning\b)[\p{L}\p{N}][\p{L}\p{N}'-]*/iu.test(question);
     if (/^\s*(?:why|how|and\s+then|then\s+what|what\s+next|go\s+on|more)\s*[?!.]?\s*$/i.test(question)) {
@@ -246,25 +425,47 @@ export function buildChatQueryPlan(input: Readonly<{
     const verseReference = input.request.verseContext
         ? ` Regarding Quran ${input.request.verseContext.surah}:${input.request.verseContext.verse}.`
         : '';
-    const structuralFollowUp = isStructuralFollowUp(input.request.question);
     const summarySignal = hasEntitySummarySignal(input.request.question);
     const directEntity = resolveQuranSurahEntity(input.request.question);
+    const directEntitySet = extractComparisonEntitySet(input.request.question);
+    const structuralFollowUp = isStructuralFollowUp(input.request.question)
+        && directEntity === null
+        && directEntitySet.length === 0;
     const priorMatches = state !== null && hasPriorSubjectMatch(input.request, state);
     const contextualSummary = summarySignal && directEntity === null && state?.entity !== undefined && priorMatches;
     const entity = directEntity ?? (contextualSummary ? state?.entity ?? null : null);
-    const retrievalTask = summarySignal && entity !== null ? 'entity_summary' : 'point_question';
+    const contextualMultiEntity = directEntitySet.length === 0
+        && state !== null
+        && state.entitySet.length > 1
+        && isPluralReference(input.request.question)
+        && priorMatches;
+    const entitySet = directEntitySet.length > 1
+        ? directEntitySet
+        : contextualMultiEntity ? [...state!.entitySet]
+            : directEntity ? [discourseEntityForSurah(directEntity)] : [];
+    const retrievalTask: NoorRetrievalTask = directEntitySet.length > 1 || contextualMultiEntity
+        ? 'multi_entity_comparison'
+        : summarySignal && entity !== null ? 'entity_summary' : 'point_question';
     const unresolvedSurahReference = directEntity === null && /\b(?:surah|surat)\b/iu.test(input.request.question);
     const summaryNeedsEntity = summarySignal
         && entity === null
         && (unresolvedSurahReference
             || extractSubjectTokens(input.request.question).every(token => SUMMARY_TASK_TOKENS.has(token)));
     const contextSelected = state !== null
-        && (structuralFollowUp || contextualSummary)
+        && (structuralFollowUp || contextualSummary || contextualMultiEntity)
         && priorMatches;
     const taskType: ChatQueryPlan['taskType'] = contextualSummary
         ? 'contextual_followup'
+        : retrievalTask === 'multi_entity_comparison' ? 'multi_entity_comparison'
         : retrievalTask === 'entity_summary' ? 'entity_summary'
             : contextSelected ? 'contextual_followup' : 'point_question';
+    const primaryEntity = entitySet[0] ?? (entity ? discourseEntityForSurah(entity) : null);
+    const explicitEntity = directEntity !== null || directEntitySet.length > 1;
+    const multiEntityVariants = entitySet.map(item => ({
+        kind: 'entity_branch' as const,
+        query: entityBranchQuery(input.request.question, item, entitySet),
+        entityId: item.id,
+    }));
     if (summaryNeedsEntity) {
         return {
             variants: [],
@@ -274,11 +475,16 @@ export function buildChatQueryPlan(input: Readonly<{
             taskType: 'entity_summary',
             retrievalTask: 'entity_summary',
             entity: null,
+            entitySet: [],
+            primaryEntity: null,
+            explicitEntity: false,
         };
     }
     if (!contextSelected || state === null) {
         return {
-            variants: structuralFollowUp
+            variants: retrievalTask === 'multi_entity_comparison'
+                ? multiEntityVariants
+                : structuralFollowUp
                 ? (input.request.verseContext ? [{ kind: 'original', query: `${original.query}${verseReference}` }] : [])
                 : [{ kind: 'original', query: `${original.query}${verseReference}` }],
             contextSelected: false,
@@ -287,14 +493,17 @@ export function buildChatQueryPlan(input: Readonly<{
             taskType,
             retrievalTask,
             entity,
+            entitySet,
+            primaryEntity,
+            explicitEntity,
         };
     }
     return {
-        variants: [
+        variants: retrievalTask === 'multi_entity_comparison' ? multiEntityVariants : [
             { kind: 'original', query: `${original.query}${verseReference}` },
             {
                 kind: 'context_enriched',
-                query: `${input.request.question} Regarding ${state.subjectTokens.join(' ')}.${verseReference}`,
+                query: `${input.request.question} Regarding ${state.semanticSubject.join(' ')}.${verseReference}`,
             },
         ],
         contextSelected: true,
@@ -303,6 +512,9 @@ export function buildChatQueryPlan(input: Readonly<{
         taskType,
         retrievalTask,
         entity,
+        entitySet: retrievalTask === 'multi_entity_comparison' ? [...state.entitySet] : entitySet,
+        primaryEntity: retrievalTask === 'multi_entity_comparison' ? state.primaryEntity : primaryEntity,
+        explicitEntity,
     };
 }
 
@@ -315,7 +527,7 @@ export function buildControlledRecoveryQuery(input: Readonly<{
         : null;
     if (state !== null) {
         const plan = buildChatQueryPlan({ request: input.request, validatedConversationState: state });
-        if (plan.contextSelected) return state.subjectTokens.join(' ');
+        if (plan.contextSelected) return state.semanticSubject.join(' ');
     }
     if (input.request.verseContext) {
         return `Quran ${input.request.verseContext.surah}:${input.request.verseContext.verse}`;

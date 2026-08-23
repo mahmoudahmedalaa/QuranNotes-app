@@ -79,6 +79,7 @@ describe('NoorRemoteService', () => {
         { result: { ...answer, status: 'made_up' } },
         { result: { ...answer, requestId: '550e8400-e29b-41d4-a716-446655440001' } },
         { result: { ...answer, citations: [] } },
+        { result: { ...answer, status: 'insufficient_evidence' } },
         { result: { ...answer, answer: '' } },
         { result: { ...answer, answer: 'a'.repeat(10_001) } },
         { result: { ...answer, citations: [{ chunkId: '', canonicalUnitId: 'u1', source: 'al_sadi_ar', sourceTitle: 'Al-Sadi', surah: 1, verseStart: 1, verseEnd: 1, corpusVersion: 'v1' }] } },

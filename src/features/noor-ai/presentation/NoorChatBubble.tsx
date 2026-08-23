@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Markdown from 'react-native-markdown-display';
 import { useRouter } from 'expo-router';
 import { NoorMessage } from '../domain/types';
+import { visibleNoorCitations } from '../domain/NoorCitationPolicy';
 import { Spacing } from '../../../core/theme/DesignSystem';
 import NoorCitationList from './NoorCitationList';
 
@@ -157,7 +158,7 @@ export default function NoorChatBubble({ message, isLatest = false }: Props) {
                             {displayContent}
                         </Markdown>
 
-                        <NoorCitationList citations={message.citations ?? []} />
+                        <NoorCitationList citations={[...visibleNoorCitations(message)]} />
 
                         <Text
                             style={[
