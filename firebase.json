@@ -7,9 +7,13 @@
     {
       "source": "functions",
       "codebase": "default",
+      "predeploy": [
+        "node \"$RESOURCE_DIR/../scripts/noor-rag/verify-deployment-package.js\""
+      ],
       "ignore": [
         "node_modules",
         ".git",
+        ".generated",
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"
