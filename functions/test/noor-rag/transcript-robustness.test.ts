@@ -3,7 +3,9 @@ import { describe, it } from 'node:test';
 
 import { classifyPolicy } from '../../src/noor-rag/policy';
 import {
+    applySemanticTaskClassification,
     buildChatQueryPlan,
+    buildSemanticTaskFallbackInput,
     createValidatedConversationState,
     type ChatQueryPlan,
     type ValidatedConversationState,
@@ -136,5 +138,96 @@ describe('Noor mixed-conversation transcript', () => {
         assert.equal(classifyPolicy(unsupportedQuestion), 'allowed');
         assert.ok(state);
         assert.equal((state as ValidatedConversationState).entitySet.length, 0);
+    });
+
+    it('preserves task, entity, context, containment, state, and policy invariants across a noisy phone transcript', () => {
+        const turns = [
+            ['whats surah baqara basically abt', 'entity_summary', 2, 'answered'],
+            ['what abt yusuf', 'point_question', 12, 'answered'],
+            ['tell me main thing in maryam', 'entity_summary', 19, 'answered'],
+            ['what can i learn frm kahf', 'entity_summary', 18, 'answered'],
+            ['summarise al nas plz', 'entity_summary', 114, 'answered'],
+            ['tell me abt nuh', 'point_question', 71, 'answered'],
+            ['why they reject him', 'contextual_followup', 71, 'answered'],
+            ['nuh vs musa whats different', 'multi_entity_comparison', 0, 'answered'],
+            ['and both their stories teach what', 'multi_entity_comparison', 0, 'answered'],
+            ['is riba harram and why', 'point_question', 2, 'answered'],
+            ['arrogance haram?', 'point_question', 7, 'answered'],
+            ['which crypto doing best rn', 'point_question', 0, 'insufficient_evidence'],
+            ['can i pray without wuduu', 'point_question', 5, 'answered'],
+        ] as const;
+        const semanticTasks = new Map<string, ChatQueryPlan['taskType']>([
+            ['whats surah baqara basically abt', 'entity_summary'],
+            ['what abt yusuf', 'point_question'],
+            ['tell me main thing in maryam', 'entity_summary'],
+            ['tell me abt nuh', 'point_question'],
+        ]);
+        let state: ValidatedConversationState | null = null;
+        let priorQuestion: string | null = null;
+        let fallbackInvocations = 0;
+        let stateDrift = 0;
+        let containmentFailures = 0;
+        let policyFailures = 0;
+
+        for (const [question, expectedTask, evidenceSurah, resultType] of turns) {
+            const history = priorQuestion ? [{ role: 'user' as const, content: priorQuestion }] : [];
+            const currentRequest = request(question, history);
+            let taskPlan = buildChatQueryPlan({ request: currentRequest, validatedConversationState: state });
+            const fallbackInput = buildSemanticTaskFallbackInput({
+                request: currentRequest,
+                deterministicPlan: taskPlan,
+                validatedConversationState: state,
+            });
+            if (fallbackInput) {
+                fallbackInvocations += 1;
+                const semanticTask = semanticTasks.get(question);
+                assert.ok(semanticTask, question);
+                taskPlan = applySemanticTaskClassification({
+                    request: currentRequest,
+                    deterministicPlan: taskPlan,
+                    validatedConversationState: state,
+                    taskType: semanticTask,
+                });
+            }
+            assert.equal(taskPlan.taskType, expectedTask, question);
+            assert.equal(taskPlan.requiresClarification, false, question);
+            if (question === 'why they reject him') assert.equal(taskPlan.contextSelected, true);
+            if (question === 'and both their stories teach what') {
+                assert.equal(taskPlan.contextSelected, true);
+                assert.deepEqual(taskPlan.entitySet.map(item => item.id), ['subject:nuh', 'subject:musa']);
+            }
+            if (question === 'nuh vs musa whats different') {
+                assert.deepEqual(taskPlan.entitySet.map(item => item.id), ['subject:nuh', 'subject:musa']);
+            }
+            if (taskPlan.retrievalTask === 'entity_summary') {
+                if (taskPlan.entity?.surahNumber !== evidenceSurah) containmentFailures += 1;
+            }
+            if (classifyPolicy(question) !== 'allowed') policyFailures += 1;
+
+            const stateBefore: ValidatedConversationState | null = state;
+            if (resultType === 'answered') {
+                const items = taskPlan.retrievalTask === 'multi_entity_comparison'
+                    ? [evidence(`${question}-nuh`, 'Nuh grounded evidence', 71), evidence(`${question}-musa`, 'Musa grounded evidence', 20, 2)]
+                    : [evidence(question, `${question} grounded evidence`, evidenceSurah || 2)];
+                const next = createValidatedConversationState({
+                    request: currentRequest,
+                    response: answered(items),
+                    evidence: items,
+                    taskPlan,
+                    previousState: state,
+                });
+                assert.ok(next, question);
+                state = next;
+            } else if (state !== stateBefore) {
+                stateDrift += 1;
+            }
+            priorQuestion = question;
+        }
+
+        assert.equal(turns.length, 13);
+        assert.equal(fallbackInvocations, 4);
+        assert.equal(stateDrift, 0);
+        assert.equal(containmentFailures, 0);
+        assert.equal(policyFailures, 0);
     });
 });

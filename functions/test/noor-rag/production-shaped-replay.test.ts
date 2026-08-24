@@ -107,6 +107,9 @@ function dependencies(overrides: Partial<NoorHandlerDependencies>): NoorHandlerD
         classifyPersonalizedRuling: overrides.classifyPersonalizedRuling ?? (async () => ({
             kind: 'success', classification: 'general_information', reasonCode: 'general_religious_information',
         })),
+        classifySemanticTask: overrides.classifySemanticTask ?? (async () => ({
+            kind: 'success', taskType: 'point_question',
+        })),
     };
 }
 

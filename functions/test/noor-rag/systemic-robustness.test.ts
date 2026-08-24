@@ -264,6 +264,10 @@ describe('Noor systemic robustness invariants', () => {
             selectAnswerableEvidence('Is caldorin haram and why?', [prohibited], CONFIG).map(item => item.chunk.chunkId),
             ['normative-prohibited'],
         );
+        assert.deepEqual(
+            selectAnswerableEvidence('is caldorin harram and why', [prohibited], CONFIG).map(item => item.chunk.chunkId),
+            ['normative-prohibited'],
+        );
         assert.deepEqual(selectAnswerableEvidence('Is caldorin haram?', [unrelated], CONFIG), []);
         assert.deepEqual(
             selectAnswerableEvidence('Is caldorin allowed?', [evidence({ id: 'normative-permitted', text: 'Caldorin is permitted.' }, 1)], CONFIG)

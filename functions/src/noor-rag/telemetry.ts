@@ -138,6 +138,24 @@ function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
         ].includes(trace.personalizedRulingClassifierFailureType ?? '')
             ? trace.personalizedRulingClassifierFailureType
             : null,
+        semanticTaskClassifierInvoked: trace.semanticTaskClassifierInvoked === true,
+        semanticTaskClassification: [
+            'point_question',
+            'entity_summary',
+            'multi_entity_comparison',
+            'contextual_followup',
+        ].includes(trace.semanticTaskClassification)
+            ? trace.semanticTaskClassification
+            : 'not_run',
+        semanticTaskClassifierLatencyMs: boundedStageDuration(trace.semanticTaskClassifierLatencyMs),
+        semanticTaskClassifierFailureType: [
+            'timeout',
+            'malformed_output',
+            'schema_validation_failure',
+            'provider_failure',
+        ].includes(trace.semanticTaskClassifierFailureType ?? '')
+            ? trace.semanticTaskClassifierFailureType
+            : null,
         statePersistence: trace.statePersistence,
         stateFingerprint: safeStateFingerprint(trace.stateFingerprint),
         stageMs: {
@@ -170,6 +188,7 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
         generationMs: boundedStageDuration(input.event.generationMs),
         generationAttemptCount: boundedCount(input.event.generationAttemptCount, 2),
         personalizedRulingClassifierLatencyMs: boundedStageDuration(input.event.personalizedRulingClassifierLatencyMs),
+        semanticTaskClassifierLatencyMs: boundedStageDuration(input.event.semanticTaskClassifierLatencyMs),
         pseudonym,
         pseudonymKeyVersion: input.pseudonymKeyVersion,
         serverTraceId: input.traceId,

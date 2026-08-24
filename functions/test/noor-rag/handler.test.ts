@@ -82,6 +82,10 @@ function harness(overrides: Partial<NoorHandlerDependencies> = {}): Harness {
                 reasonCode: 'general_religious_information',
             };
         },
+        classifySemanticTask: async () => {
+            events.push('semantic-task');
+            return { kind: 'success', taskType: 'point_question' };
+        },
         retrieveSemantic: async () => { events.push('semantic'); return EVIDENCE; },
         retrieveEntitySummary: async () => { events.push('entity-summary'); return { evidence: EVIDENCE, candidateCount: 1, anchorVerses: [153] }; },
         retrieveExact: async () => { events.push('exact'); return EVIDENCE; },
@@ -214,6 +218,77 @@ describe('handleNoorRequest', () => {
         assert.ok(!summary.events.includes('personalized-policy'));
     });
 
+    it('invokes task semantics only for low-confidence planning and applies the bounded result before retrieval', async () => {
+        const ambiguous = harness({
+            classifySemanticTask: async input => {
+                ambiguous.events.push('semantic-task');
+                assert.equal(input.question, 'what surah maryam abt');
+                assert.deepEqual(input.candidateEntityLabels, ['Surah Maryam']);
+                return { kind: 'success', taskType: 'entity_summary' };
+            },
+        });
+        const ambiguousResponse = await run(ambiguous, {
+            ...REQUEST, question: 'what surah maryam abt', history: [],
+        });
+        assert.equal(ambiguousResponse.status, 'insufficient_evidence');
+        assert.equal(ambiguous.events.filter(event => event === 'semantic-task').length, 1);
+        assert.ok(ambiguous.events.indexOf('semantic-task') < ambiguous.events.indexOf('entity-summary'));
+        assert.ok(!ambiguous.events.includes('semantic'));
+
+        for (const question of [
+            'What is Surah Maryam about?',
+            'who is maryam',
+            'is riba harram',
+            'what does 2:275 say',
+        ]) {
+            const highConfidence = harness();
+            await run(highConfidence, { ...REQUEST, question, history: [] });
+            assert.equal(highConfidence.events.filter(event => event === 'semantic-task').length, 0, question);
+        }
+    });
+
+    it('keeps explicit Surah containment across repeated-letter phone spelling', async () => {
+        for (const [question, expectedLabel] of [
+            ['what surah maryyam abt', 'Surah Maryam'],
+            ['summarise surah yusuuf plz', 'Surah Yusuf'],
+            ['tell me main thing in surah kahff', 'Surah Al-Kahf'],
+            ['what surah al kahff abt', 'Surah Al-Kahf'],
+            ['what surah nuhh abt', 'Surah Nuh'],
+            ['what surah baqarrah abt', 'Surah Al-Baqarah'],
+        ] as const) {
+            const value = harness({
+                classifySemanticTask: async input => {
+                    value.events.push('semantic-task');
+                    assert.deepEqual(input.candidateEntityLabels, [expectedLabel]);
+                    return { kind: 'success', taskType: 'entity_summary' };
+                },
+            });
+            await run(value, { ...REQUEST, question, history: [] });
+            assert.ok(value.events.includes('entity-summary'), question);
+            assert.ok(!value.events.includes('semantic'), question);
+        }
+    });
+
+    it('clarifies safely when low-confidence task semantics fail without broadening retrieval scope', async () => {
+        for (const failureType of ['timeout', 'malformed_output', 'schema_validation_failure', 'provider_failure'] as const) {
+            const value = harness({
+                classifySemanticTask: async () => {
+                    value.events.push('semantic-task');
+                    return { kind: 'failure', failureType };
+                },
+            });
+            const response = await run(value, { ...REQUEST, question: 'what surah maryam abt', history: [] });
+            assert.equal(response.status, 'insufficient_evidence');
+            assert.ok(value.events.includes('finalize-non-answer'));
+            assert.ok(!value.events.includes('semantic'));
+            assert.ok(!value.events.includes('entity-summary'));
+            assert.ok(!value.events.includes('model'));
+            assert.equal(value.telemetry[0]?.semanticTaskClassifierInvoked, true);
+            assert.equal(value.telemetry[0]?.semanticTaskClassification, 'not_run');
+            assert.equal(value.telemetry[0]?.semanticTaskClassifierFailureType, failureType);
+        }
+    });
+
     it('refuses the canonical semantic personalized ruling without retrieval, generation, quota count, or state persistence', async () => {
         let stateWrites = 0;
         const value = harness({
@@ -340,6 +415,35 @@ describe('handleNoorRequest', () => {
         assert.ok(!value.events.includes('unexpected-semantic'));
         assert.ok(!value.events.includes('unexpected-model'));
         assert.ok(value.events.includes('finalize-non-answer'));
+    });
+
+    it('clarifies ambiguous natural fragments without validated state and performs no retrieval or generation', async () => {
+        for (const question of ['why tho', 'what happened nxt', 'why didnt they listen', 'what?']) {
+            const value = harness({
+                retrieveSemantic: async () => { value.events.push('unexpected-semantic'); return EVIDENCE; },
+                generateGroundedAnswer: async () => { value.events.push('unexpected-model'); return ANSWERED; },
+            });
+            const response = await run(value, { ...REQUEST, question, history: [] });
+            assert.equal(response.status, 'insufficient_evidence', question);
+            assert.ok(value.events.includes('finalize-non-answer'), question);
+            assert.ok(!value.events.includes('unexpected-semantic'), question);
+            assert.ok(!value.events.includes('unexpected-model'), question);
+            assert.ok(!value.events.includes('semantic-task'), question);
+        }
+    });
+
+    it('retrieves self-contained messy point questions even when they contain pronouns', async () => {
+        for (const question of [
+            'why did nuh ppl reject him',
+            'what did maryam tell them',
+            'why did yusuf forgive them',
+        ]) {
+            const value = harness();
+            await run(value, { ...REQUEST, question, history: [] });
+            assert.ok(value.events.includes('semantic'), question);
+            assert.ok(!value.events.includes('semantic-task'), question);
+            assert.ok(value.events.includes('model'), question);
+        }
     });
 
     it('releases every generated non-answer and handles empty evidence and retrieval exceptions', async () => {
@@ -943,7 +1047,10 @@ describe('handleNoorRequest', () => {
             'personalizedRulingClassification', 'personalizedRulingClassifierFailureType',
             'personalizedRulingClassifierInvoked', 'personalizedRulingClassifierLatencyMs',
             'promptVersion', 'qualityJudgeInvoked',
-            'requestId', 'retrievalMs', 'retrievedChunkIds', 'structuralValidationResult',
+            'requestId', 'retrievalMs', 'retrievedChunkIds',
+            'semanticTaskClassification', 'semanticTaskClassifierFailureType',
+            'semanticTaskClassifierInvoked', 'semanticTaskClassifierLatencyMs',
+            'structuralValidationResult',
         ]);
         const serialized = JSON.stringify(value.telemetry[0]);
         assert.doesNotMatch(serialized, /sensitive|example\.com|Grounded answer|source|provider/i);

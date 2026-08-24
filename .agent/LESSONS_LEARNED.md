@@ -85,6 +85,22 @@ When the Khatma feature had too many bugs, doing a full rewrite with proper stat
 
 ## ➕ Add Your Lessons Here
 
+### 2026-08-24 — Noor Task Confidence and Natural Conversation
+
+**What went wrong**:
+- The planner resolved a Surah correctly but treated an unrecognized operation fragment as a confident point question.
+- Expanding exact colloquial tokens would have moved the bug into an unbounded phrase-maintenance list.
+
+**What went right**:
+- Existing clean/high-confidence routing remained deterministic.
+- Only ambiguous resolved-entity or validated-discourse requests use a strict task-only semantic fallback.
+- Semantic task output cannot invent entities, choose evidence, answer religious questions, or widen scope after failure.
+
+**Rules added**:
+- Represent task uncertainty at the routing boundary instead of silently defaulting ambiguous natural language to a confident task.
+- Keep policy classification isolated from task planning even when both use the same bounded model family.
+- Treat fuzzy entity matches as candidates until request semantics establish safe whole-entity scope.
+
 ### 2026-02-15 — Khatma, Audio, Mood Fixes
 
 **What went wrong**:

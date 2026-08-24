@@ -125,6 +125,7 @@ describe('riba follow-up sanitized trace', () => {
             classifyPersonalizedRuling: async () => ({
                 kind: 'success', classification: 'general_information', reasonCode: 'general_religious_information',
             }),
+            classifySemanticTask: async () => ({ kind: 'success', taskType: 'point_question' }),
             retrieveSemantic: async ({ query }) => {
                 queries.push(query);
                 return { evidence: firstEvidence, vectorHitCount: 4, lexicalHitCount: 2, lexicalSearchStatus: 'available' as const };
@@ -202,6 +203,10 @@ describe('riba follow-up sanitized trace', () => {
             personalizedRulingClassification: 'general_information',
             personalizedRulingClassifierLatencyMs: 0,
             personalizedRulingClassifierFailureType: null,
+            semanticTaskClassifierInvoked: false,
+            semanticTaskClassification: 'not_run',
+            semanticTaskClassifierLatencyMs: 0,
+            semanticTaskClassifierFailureType: null,
             statePersistence: 'persisted',
             stateFingerprint: trace.stateFingerprint,
             stageMs: { policy: 0, context: 0, retrieval: 0, generation: 0, citationValidation: 0 },

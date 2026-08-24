@@ -17,13 +17,20 @@ import type {
 } from './personalizedRulingClassifier';
 import { CANONICAL_INSUFFICIENT_EVIDENCE, normalizeNoorOutcome, type OutcomeNormalizationReason } from './outcome';
 import {
+    applySemanticTaskClassification,
     buildChatQueryPlan,
     buildControlledRecoveryQuery,
+    buildSemanticTaskFallbackInput,
     createValidatedConversationState,
     type ChatQueryPlan,
     type DiscourseEntity,
     type ValidatedConversationState,
 } from './queryRewrite';
+import type {
+    SemanticTaskClassifierFailureType,
+    SemanticTaskClassifierInput,
+    SemanticTaskClassifierOutcome,
+} from './semanticTaskClassifier';
 import type { ClaimResult, FinalizeResult, NoorEntitlementClass } from './usage';
 import type { NoorAnswer, NoorRequest, RetrievedEvidence } from './types';
 import { parseNoorAnswer } from './validation';
@@ -85,6 +92,10 @@ export interface NoorHandlerTelemetryEvent {
     personalizedRulingClassification: PersonalizedRulingClassification | 'not_run';
     personalizedRulingClassifierLatencyMs: number;
     personalizedRulingClassifierFailureType: PersonalizedRulingClassifierFailureType | null;
+    semanticTaskClassifierInvoked: boolean;
+    semanticTaskClassification: ChatQueryPlan['taskType'] | 'not_run';
+    semanticTaskClassifierLatencyMs: number;
+    semanticTaskClassifierFailureType: SemanticTaskClassifierFailureType | null;
 }
 
 export interface NoorSanitizedTrace {
@@ -127,6 +138,10 @@ export interface NoorSanitizedTrace {
     personalizedRulingClassification: PersonalizedRulingClassification | 'not_run';
     personalizedRulingClassifierLatencyMs: number;
     personalizedRulingClassifierFailureType: PersonalizedRulingClassifierFailureType | null;
+    semanticTaskClassifierInvoked: boolean;
+    semanticTaskClassification: ChatQueryPlan['taskType'] | 'not_run';
+    semanticTaskClassifierLatencyMs: number;
+    semanticTaskClassifierFailureType: SemanticTaskClassifierFailureType | null;
     statePersistence: 'persisted' | 'not_persisted' | 'not_expected';
     stateFingerprint: string | null;
     stageMs: {
@@ -170,6 +185,7 @@ export interface NoorHandlerDependencies {
     claimUsage(input: NoorHandlerUsageInput): Promise<ClaimResult>;
     classifyPolicy(request: NoorRequest): NoorPolicyCategory;
     classifyPersonalizedRuling(request: PersonalizedRulingClassifierRequest): Promise<PersonalizedRulingClassifierOutcome>;
+    classifySemanticTask(input: SemanticTaskClassifierInput): Promise<SemanticTaskClassifierOutcome>;
     retrieveSemantic(input: Readonly<{
         request: Extract<NoorRequest, { mode: 'chat' }>;
         config: NoorRuntimeConfig;
@@ -467,6 +483,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let personalizedRulingClassification: PersonalizedRulingClassification | 'not_run' = 'not_run';
     let personalizedRulingClassifierLatencyMs = 0;
     let personalizedRulingClassifierFailureType: PersonalizedRulingClassifierFailureType | null = null;
+    let semanticTaskClassifierInvoked = false;
+    let semanticTaskClassification: ChatQueryPlan['taskType'] | 'not_run' = 'not_run';
+    let semanticTaskClassifierLatencyMs = 0;
+    let semanticTaskClassifierFailureType: SemanticTaskClassifierFailureType | null = null;
     let queryPlan: ChatQueryPlan = request.mode === 'chat'
         ? buildChatQueryPlan({ request, validatedConversationState: null })
         : {
@@ -527,6 +547,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             personalizedRulingClassification,
             personalizedRulingClassifierLatencyMs,
             personalizedRulingClassifierFailureType,
+            semanticTaskClassifierInvoked,
+            semanticTaskClassification,
+            semanticTaskClassifierLatencyMs,
+            semanticTaskClassifierFailureType,
         };
         try {
             Promise.resolve(dependencies.emitTelemetry(event)).catch(() => undefined);
@@ -576,6 +600,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 personalizedRulingClassification,
                 personalizedRulingClassifierLatencyMs,
                 personalizedRulingClassifierFailureType,
+                semanticTaskClassifierInvoked,
+                semanticTaskClassification,
+                semanticTaskClassifierLatencyMs,
+                semanticTaskClassifierFailureType,
                 statePersistence,
                 stateFingerprint,
                 stageMs: { ...stageMs },
@@ -710,6 +738,39 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         }
         if (request.mode === 'chat') {
             queryPlan = buildChatQueryPlan({ request, validatedConversationState });
+            const taskFallbackInput = buildSemanticTaskFallbackInput({
+                request,
+                deterministicPlan: queryPlan,
+                validatedConversationState,
+            });
+            if (taskFallbackInput) {
+                semanticTaskClassifierInvoked = true;
+                const classifierStartedAt = safeNow(dependencies);
+                let outcome: SemanticTaskClassifierOutcome;
+                try {
+                    outcome = await dependencies.classifySemanticTask(taskFallbackInput);
+                } catch {
+                    outcome = { kind: 'failure', failureType: 'provider_failure' };
+                } finally {
+                    semanticTaskClassifierLatencyMs = duration(classifierStartedAt, safeNow(dependencies));
+                }
+                if (outcome.kind === 'failure') {
+                    semanticTaskClassifierFailureType = outcome.failureType;
+                    queryPlan = {
+                        ...queryPlan,
+                        variants: [],
+                        requiresClarification: true,
+                    };
+                } else {
+                    semanticTaskClassification = outcome.taskType;
+                    queryPlan = applySemanticTaskClassification({
+                        request,
+                        deterministicPlan: queryPlan,
+                        validatedConversationState,
+                        taskType: outcome.taskType,
+                    });
+                }
+            }
         }
         stageMs.context = duration(contextStartedAt, safeNow(dependencies));
 

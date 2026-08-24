@@ -59,6 +59,7 @@ function lifecycleHarness(generate: (request: NoorChatRequest, evidence: readonl
         classifyPersonalizedRuling: async () => ({
             kind: 'success', classification: 'general_information', reasonCode: 'general_religious_information',
         }),
+        classifySemanticTask: async () => ({ kind: 'success', taskType: 'point_question' }),
         retrieveSemantic: async input => {
             queries.push(input.query);
             return {

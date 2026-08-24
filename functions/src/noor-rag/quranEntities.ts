@@ -27,18 +27,27 @@ const BROAD_SCOPE_TOKENS = new Set([
     'central', 'core', 'fundamentally', 'key', 'main', 'mainly', 'major', 'overall', 'whole',
 ]);
 const SPECIFIC_FOCUS_TOKENS = new Set([
-    'ayah', 'event', 'incident', 'mention', 'mentions', 'name', 'passage', 'people', 'person',
-    'phrase', 'say', 'says', 'teach', 'teaches', 'verse', 'word',
+    'ayah', 'cause', 'character', 'event', 'incident', 'mention', 'mentions', 'name', 'passage', 'people', 'person',
+    'phrase', 'reason', 'say', 'says', 'teach', 'teaches', 'verse', 'word',
 ]);
 const LOCAL_EXPLANATION_TOKENS = new Set(['happen', 'happened', 'happens', 'how', 'when', 'where', 'who', 'why']);
-const POLAR_QUESTION_TOKENS = new Set(['can', 'could', 'did', 'does', 'has', 'have', 'is']);
+const POLAR_QUESTION_TOKENS = new Set([
+    'are', 'can', 'could', 'did', 'do', 'does', 'has', 'have', 'is', 'should', 'was', 'were', 'will', 'would',
+]);
 const REFERENTIAL_TOKENS = new Set(['her', 'him', 'it', 'them', 'that', 'these', 'this', 'those']);
+const COURTESY_FRAME_TOKENS = new Set(['me', 'please', 'pls', 'tell']);
 
 export interface QuranSurahEntity {
     entityType: 'surah';
     surahNumber: number;
     canonicalName: string;
     verseCount: number;
+}
+
+export interface QuranSurahEntityCandidate {
+    entity: QuranSurahEntity;
+    matchKind: 'strict' | 'exact_alias' | 'fuzzy_transliteration';
+    explicitSurahMarker: boolean;
 }
 
 interface SurahMatch {
@@ -60,6 +69,69 @@ function normalizeName(value: string): string {
 
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function collapseRepeatedCharacters(value: string): string {
+    return value.replace(/([\p{L}\p{N}])\1+/gu, '$1');
+}
+
+function editDistance(left: string, right: string): number {
+    const previous = Array.from({ length: right.length + 1 }, (_value, index) => index);
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+        const current = [leftIndex];
+        for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+            const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+            current[rightIndex] = Math.min(
+                (previous[rightIndex] ?? 0) + 1,
+                (current[rightIndex - 1] ?? 0) + 1,
+                (previous[rightIndex - 1] ?? 0) + substitutionCost,
+            );
+        }
+        previous.splice(0, previous.length, ...current);
+    }
+    return previous[right.length] ?? Math.max(left.length, right.length);
+}
+
+const TRANSLITERATION_VOWELS = new Set(['a', 'e', 'i', 'o', 'u', 'y']);
+
+function isSafeTransliterationEdit(left: string, right: string): boolean {
+    if (left.length === right.length) {
+        const mismatchIndex = [...left].findIndex((character, index) => character !== right[index]);
+        if (mismatchIndex < 0) return false;
+        if ([...left].filter((character, index) => character !== right[index]).length !== 1) return false;
+        return TRANSLITERATION_VOWELS.has(left[mismatchIndex] ?? '')
+            && TRANSLITERATION_VOWELS.has(right[mismatchIndex] ?? '');
+    }
+    const longer = left.length > right.length ? left : right;
+    const shorter = left.length > right.length ? right : left;
+    let shortIndex = 0;
+    let inserted = '';
+    let insertionIndex = -1;
+    for (let longIndex = 0; longIndex < longer.length; longIndex += 1) {
+        if (longer[longIndex] === shorter[shortIndex]) shortIndex += 1;
+        else if (inserted.length === 0) {
+            inserted = longer[longIndex] ?? '';
+            insertionIndex = longIndex;
+        } else return false;
+    }
+    if (inserted.length === 0) {
+        inserted = longer.at(-1) ?? '';
+        insertionIndex = longer.length - 1;
+    }
+    const trailingEnglishE = inserted === 'e' && insertionIndex === longer.length - 1;
+    const terminalH = inserted === 'h' && insertionIndex === longer.length - 1;
+    return terminalH || (TRANSLITERATION_VOWELS.has(inserted) && !trailingEnglishE);
+}
+
+function candidateSegments(value: string): string[] {
+    const tokens = normalizeName(value).split(/\s+/u).filter(Boolean);
+    const segments: string[] = [];
+    for (let start = 0; start < tokens.length; start += 1) {
+        for (let length = 1; length <= 3 && start + length <= tokens.length; length += 1) {
+            segments.push(tokens.slice(start, start + length).join(' '));
+        }
+    }
+    return segments;
 }
 
 export const QURAN_SURAHS: readonly QuranSurahEntity[] = CANONICAL_SURAH_NAMES.map((canonicalName, index) => {
@@ -109,24 +181,127 @@ export function resolveQuranSurahEntities(value: string): QuranSurahEntity[] {
     return resolved;
 }
 
+/**
+ * Finds a conservative canonical Surah candidate for ambiguous task planning.
+ * Unlike the strict resolver, this may recognize an unmarked canonical name or
+ * one single-edit spelling variation. Callers must not treat the candidate as
+ * an explicit Surah scope until the request semantics establish whole-Surah intent.
+ */
+export function resolveQuranSurahEntityCandidateMatch(value: string): QuranSurahEntityCandidate | null {
+    const strict = resolveQuranSurahEntity(value);
+    const normalized = normalizeName(value);
+    const markerGovernsAlias = (alias: string): boolean => (
+        new RegExp(`\\b(?:surah|surat)\\s+(?:(?:ad|adh|al|an|ar|as|ash|at|az)\\s+)?${escapeRegExp(alias)}\\b`, 'u').test(normalized)
+    );
+    if (strict) {
+        const explicitSurahMarker = SURAH_MATCHES.some(match => (
+            match.entity.surahNumber === strict.surahNumber && markerGovernsAlias(match.alias)
+        ));
+        return { entity: strict, matchKind: 'strict', explicitSurahMarker };
+    }
+    const segments = candidateSegments(value);
+    for (const match of SURAH_MATCHES) {
+        if (segments.includes(match.alias)) {
+            return {
+                entity: match.entity,
+                matchKind: 'exact_alias',
+                explicitSurahMarker: markerGovernsAlias(match.alias),
+            };
+        }
+    }
+    const matches: Array<{
+        entity: QuranSurahEntity;
+        distance: number;
+        aliasLength: number;
+        explicitSurahMarker: boolean;
+    }> = [];
+    for (const segment of segments) {
+        const collapsedSegment = collapseRepeatedCharacters(segment);
+        if (segment.length < 4 || collapsedSegment.includes(' ')) continue;
+        const explicitSurahMarker = markerGovernsAlias(segment);
+        for (const match of SURAH_MATCHES) {
+            if (match.alias.includes(' ')) continue;
+            // Short one-edit matches are too collision-prone without an explicit
+            // Surah marker (for example room/Rum, milk/Mulk, and faith/Fath).
+            if (!explicitSurahMarker && (segment.length < 5 || match.alias.length < 5)) continue;
+            const collapsedAlias = collapseRepeatedCharacters(match.alias);
+            if (Math.abs(collapsedSegment.length - collapsedAlias.length) > 1) continue;
+            const distance = editDistance(collapsedSegment, collapsedAlias);
+            if (distance <= 1 && (distance === 0 || isSafeTransliterationEdit(collapsedSegment, collapsedAlias))) {
+                matches.push({ entity: match.entity, distance, aliasLength: match.alias.length, explicitSurahMarker });
+            }
+        }
+    }
+    matches.sort((left, right) => left.distance - right.distance || right.aliasLength - left.aliasLength);
+    const best = matches[0];
+    if (!best) return null;
+    const equallyGood = matches.filter(match => (
+        match.distance === best.distance && match.aliasLength === best.aliasLength
+    ));
+    return equallyGood.every(match => match.entity.surahNumber === best.entity.surahNumber)
+        ? {
+            entity: best.entity,
+            matchKind: 'fuzzy_transliteration',
+            explicitSurahMarker: equallyGood.some(match => match.explicitSurahMarker),
+        }
+        : null;
+}
+
+export function resolveQuranSurahEntityCandidate(value: string): QuranSurahEntity | null {
+    return resolveQuranSurahEntityCandidateMatch(value)?.entity ?? null;
+}
+
+function hasPolarQuestionFrame(tokens: readonly string[]): boolean {
+    const subordinateIndex = tokens.findIndex(token => token === 'if' || token === 'whether');
+    if (subordinateIndex >= 0
+        && tokens.slice(subordinateIndex + 1).some(token => POLAR_QUESTION_TOKENS.has(token))) return true;
+    let index = 0;
+    while (COURTESY_FRAME_TOKENS.has(tokens[index] ?? '')) index += 1;
+    const first = tokens[index] ?? '';
+    const second = tokens[index + 1] ?? '';
+    if (['can', 'could', 'will', 'would'].includes(first) && second === 'you') {
+        let nestedIndex = index + 2;
+        while (COURTESY_FRAME_TOKENS.has(tokens[nestedIndex] ?? '')) nestedIndex += 1;
+        return POLAR_QUESTION_TOKENS.has(tokens[nestedIndex] ?? '');
+    }
+    return POLAR_QUESTION_TOKENS.has(first);
+}
+
+export function hasPolarQuestionSignal(question: string): boolean {
+    return hasPolarQuestionFrame(normalizeName(question).split(/\s+/u).filter(Boolean));
+}
+
 export function hasEntitySummarySignal(question: string): boolean {
     const normalized = normalizeName(question);
     const tokens = normalized.split(/\s+/u).filter(Boolean);
     const tokenSet = new Set(tokens);
     if (tokens.some(token => SPECIFIC_FOCUS_TOKENS.has(token)) || /\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return false;
-    const polarQuestion = POLAR_QUESTION_TOKENS.has(tokens[0] ?? '');
-    if (polarQuestion && (tokenSet.has('theme') || tokenSet.has('themes'))) return false;
+    const polarQuestion = hasPolarQuestionFrame(tokens);
+    if (polarQuestion) return false;
     const hasBroadOperation = tokens.some(token => BROAD_OPERATION_TOKENS.has(token));
     const hasBroadScope = tokens.some(token => BROAD_SCOPE_TOKENS.has(token));
-    const wholeEntityAboutQuestion = tokens[0] === 'what'
-        && tokenSet.has('about')
+    const wholeEntityAboutQuestion = SURAH_MATCHES.some(match => (
+        new RegExp(`^what\\s+(?:(?:is|s)\\s+)?(?:the\\s+)?(?:surah|surat)\\s+${escapeRegExp(match.alias)}\\s+about$`, 'u')
+            .test(normalized)
+    ))
         && !tokenSet.has('say')
         && !tokens.some(token => REFERENTIAL_TOKENS.has(token));
+    const explicitWholeSurahAboutRequest = /\babout\s+(?:the\s+)?(?:surah|surat)\b/u.test(normalized)
+        && !tokens.some(token => LOCAL_EXPLANATION_TOKENS.has(token));
     const explanatoryOperation = tokenSet.has('explain') || tokenSet.has('describe');
     const localExplanation = explanatoryOperation && tokens.some(token => LOCAL_EXPLANATION_TOKENS.has(token));
     if (localExplanation) return false;
     const broadExplanation = explanatoryOperation;
     return wholeEntityAboutQuestion
+        || explicitWholeSurahAboutRequest
         || broadExplanation
         || (hasBroadOperation && (hasBroadScope || !polarQuestion));
+}
+
+export function hasWholeEntityScopeSignal(question: string): boolean {
+    const normalized = normalizeName(question);
+    const tokens = normalized.split(/\s+/u).filter(Boolean);
+    if (tokens.some(token => SPECIFIC_FOCUS_TOKENS.has(token)) || /\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return false;
+    if (hasPolarQuestionFrame(tokens)) return false;
+    return tokens.some(token => BROAD_SCOPE_TOKENS.has(token));
 }
