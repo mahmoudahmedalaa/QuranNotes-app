@@ -27,9 +27,21 @@ const BROAD_SCOPE_TOKENS = new Set([
     'central', 'core', 'fundamentally', 'key', 'main', 'mainly', 'major', 'overall', 'whole',
 ]);
 const SPECIFIC_FOCUS_TOKENS = new Set([
-    'ayah', 'cause', 'character', 'event', 'incident', 'mention', 'mentions', 'name', 'passage', 'people', 'person',
-    'phrase', 'reason', 'say', 'says', 'teach', 'teaches', 'verse', 'word',
+    'ayah', 'beginning', 'cause', 'character', 'ending', 'event', 'incident', 'mention', 'mentions', 'name',
+    'passage', 'people', 'person', 'phrase', 'prison', 'reason', 'say', 'says', 'teach', 'teaches', 'verse', 'word',
 ]);
+const POSITIVE_FOCUS_CUE_TOKENS = new Set(['especially', 'focus', 'focusing', 'specifically']);
+const FOCUS_EXCLUSION_CUES: readonly (readonly string[])[] = [
+    ['not'],
+    ['without'],
+    ['rather', 'than'],
+    ['instead', 'of'],
+];
+const FOCUS_EXCLUSION_BOUNDARIES = new Set(['but', 'however', 'yet']);
+const FOCUS_CLAUSE_BOUNDARY = '|';
+const FOCUS_COMMA_BOUNDARY = '/';
+const WHOLE_RANGE_START_TOKENS = new Set(['beginning', 'start']);
+const WHOLE_RANGE_END_TOKENS = new Set(['end', 'ending', 'finish']);
 const LOCAL_EXPLANATION_TOKENS = new Set(['happen', 'happened', 'happens', 'how', 'when', 'where', 'who', 'why']);
 const POLAR_QUESTION_TOKENS = new Set([
     'are', 'can', 'could', 'did', 'do', 'does', 'has', 'have', 'is', 'should', 'was', 'were', 'will', 'would',
@@ -271,18 +283,128 @@ export function hasPolarQuestionSignal(question: string): boolean {
     return hasPolarQuestionFrame(normalizeName(question).split(/\s+/u).filter(Boolean));
 }
 
+export type PointFocusPolarity = 'none' | 'positive' | 'excluded' | 'mixed';
+
+function cueMatchesAt(tokens: readonly string[], cue: readonly string[], start: number): boolean {
+    return cue.every((token, offset) => tokens[start + offset] === token);
+}
+
+function firstFocusExclusionCueIndex(tokens: readonly string[]): number {
+    return tokens.findIndex((_token, index) => FOCUS_EXCLUSION_CUES.some(cue => cueMatchesAt(tokens, cue, index)));
+}
+
+function focusScopeTokens(question: string): string[] {
+    return question
+        .normalize('NFKD')
+        .replace(/\p{M}+/gu, '')
+        .toLocaleLowerCase()
+        .replace(/\bdon[’']t\b/gu, 'do not')
+        .replace(/[.!?;:]+/gu, ` ${FOCUS_CLAUSE_BOUNDARY} `)
+        .replace(/,+/gu, ` ${FOCUS_COMMA_BOUNDARY} `)
+        .replace(/[’'`-]+/gu, ' ')
+        .replace(/[^\p{L}\p{N}|/]+/gu, ' ')
+        .trim()
+        .split(/\s+/u)
+        .filter(Boolean);
+}
+
+function wholeRangeFocusIndexes(tokens: readonly string[]): Set<number> {
+    const indexes = new Set<number>();
+    for (let index = 0; index < tokens.length; index += 1) {
+        if (tokens[index] !== 'from') continue;
+        let cursor = index + 1;
+        if (tokens[cursor] === 'the') cursor += 1;
+        if (!WHOLE_RANGE_START_TOKENS.has(tokens[cursor] ?? '')) continue;
+        const startIndex = cursor;
+        cursor += 1;
+        if (tokens[cursor] !== 'to') continue;
+        cursor += 1;
+        if (tokens[cursor] === 'the') cursor += 1;
+        if (!WHOLE_RANGE_END_TOKENS.has(tokens[cursor] ?? '')) continue;
+        indexes.add(startIndex);
+        indexes.add(cursor);
+    }
+    return indexes;
+}
+
+/**
+ * Classifies bounded point-focus expressions by whether the user requests or excludes them.
+ * Excluded focus must not veto an otherwise explicit whole-entity request.
+ */
+export function pointFocusPolarity(question: string): PointFocusPolarity {
+    const tokens = focusScopeTokens(question);
+    const wholeRangeIndexes = wholeRangeFocusIndexes(tokens);
+    let positive = false;
+    let excluded = false;
+    let exclusionActive = false;
+    let excludedFocusSeen = false;
+    let positiveFocusMayFollowComma = false;
+    for (let index = 0; index < tokens.length; index += 1) {
+        const token = tokens[index] ?? '';
+        if (token === FOCUS_CLAUSE_BOUNDARY || FOCUS_EXCLUSION_BOUNDARIES.has(token)) {
+            exclusionActive = false;
+            excludedFocusSeen = false;
+            positiveFocusMayFollowComma = false;
+            continue;
+        }
+        if (token === FOCUS_COMMA_BOUNDARY) {
+            positiveFocusMayFollowComma = exclusionActive && excludedFocusSeen;
+            if (exclusionActive && !excludedFocusSeen) exclusionActive = false;
+            continue;
+        }
+        if (positiveFocusMayFollowComma && POSITIVE_FOCUS_CUE_TOKENS.has(token)) {
+            exclusionActive = false;
+            excludedFocusSeen = false;
+        }
+        positiveFocusMayFollowComma = false;
+        const exclusionCue = FOCUS_EXCLUSION_CUES.find(cue => cueMatchesAt(tokens, cue, index));
+        if (exclusionCue) {
+            exclusionActive = true;
+            excludedFocusSeen = false;
+            index += exclusionCue.length - 1;
+            continue;
+        }
+        if (token === 'and' && POSITIVE_FOCUS_CUE_TOKENS.has(tokens[index + 1] ?? '')) {
+            exclusionActive = false;
+            excludedFocusSeen = false;
+            continue;
+        }
+        if (!SPECIFIC_FOCUS_TOKENS.has(token) && !POSITIVE_FOCUS_CUE_TOKENS.has(token)) continue;
+        if (wholeRangeIndexes.has(index)) continue;
+        if (exclusionActive) {
+            excluded = true;
+            excludedFocusSeen = true;
+        }
+        else positive = true;
+    }
+    if (positive && excluded) return 'mixed';
+    if (positive) return 'positive';
+    if (excluded) return 'excluded';
+    return 'none';
+}
+
 export function hasEntitySummarySignal(question: string): boolean {
     const normalized = normalizeName(question);
     const tokens = normalized.split(/\s+/u).filter(Boolean);
     const tokenSet = new Set(tokens);
-    if (tokens.some(token => SPECIFIC_FOCUS_TOKENS.has(token)) || /\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return false;
+    const focusPolarity = pointFocusPolarity(question);
+    let semanticFrameStart = 0;
+    while (COURTESY_FRAME_TOKENS.has(tokens[semanticFrameStart] ?? '')) semanticFrameStart += 1;
+    const exclusionCueIndex = focusPolarity === 'excluded' ? firstFocusExclusionCueIndex(tokens) : -1;
+    const semanticFrameEnd = exclusionCueIndex >= semanticFrameStart ? exclusionCueIndex : tokens.length;
+    const semanticFrame = tokens.slice(semanticFrameStart, semanticFrameEnd).join(' ');
+    if (focusPolarity === 'positive' || focusPolarity === 'mixed'
+        || /\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return false;
     const polarQuestion = hasPolarQuestionFrame(tokens);
     if (polarQuestion) return false;
     const hasBroadOperation = tokens.some(token => BROAD_OPERATION_TOKENS.has(token));
     const hasBroadScope = tokens.some(token => BROAD_SCOPE_TOKENS.has(token));
     const wholeEntityAboutQuestion = SURAH_MATCHES.some(match => (
-        new RegExp(`^what\\s+(?:(?:is|s)\\s+)?(?:the\\s+)?(?:surah|surat)\\s+${escapeRegExp(match.alias)}\\s+about$`, 'u')
-            .test(normalized)
+        new RegExp(
+            `^what\\s+(?:(?:is|s)\\s+(?:the\\s+)?(?:surah|surat)\\s+${escapeRegExp(match.alias)}`
+                + `|(?:the\\s+)?(?:surah|surat)\\s+${escapeRegExp(match.alias)}\\s+(?:is|s))\\s+about$`,
+            'u',
+        ).test(semanticFrame)
     ))
         && !tokenSet.has('say')
         && !tokens.some(token => REFERENTIAL_TOKENS.has(token));
@@ -301,7 +423,9 @@ export function hasEntitySummarySignal(question: string): boolean {
 export function hasWholeEntityScopeSignal(question: string): boolean {
     const normalized = normalizeName(question);
     const tokens = normalized.split(/\s+/u).filter(Boolean);
-    if (tokens.some(token => SPECIFIC_FOCUS_TOKENS.has(token)) || /\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return false;
+    const focusPolarity = pointFocusPolarity(question);
+    if (focusPolarity === 'positive' || focusPolarity === 'mixed'
+        || /\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return false;
     if (hasPolarQuestionFrame(tokens)) return false;
     return tokens.some(token => BROAD_SCOPE_TOKENS.has(token));
 }

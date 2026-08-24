@@ -1,0 +1,218 @@
+[
+    {
+        "id": "yusuf-broad-control",
+        "category": "broad_control",
+        "input": "Give me an overview of Surah Yusuf.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-whole-range-control",
+        "category": "broad_control",
+        "input": "Summarize Surah Yusuf from beginning to end.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-without-revealing-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf without revealing one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-without-just-revealing-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf without just revealing one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-without-focusing-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf without focusing on one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-not-just-event",
+        "category": "excluded_focus",
+        "input": "Give me the overall story of Surah Yusuf, not just one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-rather-than-event",
+        "category": "excluded_focus",
+        "input": "Give me the main ideas of Surah Yusuf rather than one specific event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-instead-of-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf instead of focusing on one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-summarize-instead-of-event",
+        "category": "excluded_focus",
+        "input": "Summarize Surah Yusuf instead of focusing on one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-dont-focus-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf, but don't focus on one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-do-not-focus-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf; do not focus on one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-long-excluded-event",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf without spending too much time discussing the story of one specific event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-excluded-focus-list",
+        "category": "excluded_focus",
+        "input": "Give me an overview of Surah Yusuf without focusing on one event, one person, or one passage.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-positive-event",
+        "category": "positive_focus",
+        "input": "Tell me about one event in Surah Yusuf.",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-positive-prison-story",
+        "category": "positive_focus",
+        "input": "What happened in the prison story in Surah Yusuf?",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-positive-well-event",
+        "category": "positive_focus",
+        "input": "Explain the event where Yusuf was thrown into the well.",
+        "expectedTask": "point_question",
+        "expectedSurah": null,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-positive-patience-event",
+        "category": "positive_focus",
+        "input": "Which event in Surah Yusuf shows patience?",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-positive-prison",
+        "category": "positive_focus",
+        "input": "Tell me specifically about Yusuf in prison.",
+        "expectedTask": "point_question",
+        "expectedSurah": null,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-mixed-especially-prison",
+        "category": "mixed_intent",
+        "input": "Give me an overview of Surah Yusuf, especially the prison episode.",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-mixed-focus-ending",
+        "category": "mixed_intent",
+        "input": "Give me the main themes of Surah Yusuf but focus on the ending.",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-mixed-excluded-event-then-ending",
+        "category": "mixed_intent",
+        "input": "Give me an overview of Surah Yusuf without focusing on one event, and focus on the ending.",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-mixed-excluded-event-comma-focus-ending",
+        "category": "mixed_intent",
+        "input": "Give me an overview of Surah Yusuf rather than one event, focus on the ending.",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "yusuf-mixed-beginning-rather-than-ending",
+        "category": "mixed_intent",
+        "input": "Give me an overview of Surah Yusuf, the beginning rather than the ending.",
+        "expectedTask": "point_question",
+        "expectedSurah": 12,
+        "expectedFallback": false
+    },
+    {
+        "id": "maryam-excluded-event",
+        "category": "cross_surah",
+        "input": "Give me an overview of Surah Maryam, not just the story of one event.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 19,
+        "expectedFallback": false
+    },
+    {
+        "id": "kahf-excluded-incident",
+        "category": "cross_surah",
+        "input": "Explain Al-Kahf overall rather than focusing on one incident.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 18,
+        "expectedFallback": false
+    },
+    {
+        "id": "baqarah-excluded-verse",
+        "category": "cross_surah",
+        "input": "Summarize Al-Baqarah without going into one specific verse.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 2,
+        "expectedFallback": false
+    },
+    {
+        "id": "mulk-excluded-passage",
+        "category": "cross_surah",
+        "input": "Tell me what Surah Al-Mulk is about instead of focusing on a single passage.",
+        "expectedTask": "entity_summary",
+        "expectedSurah": 67,
+        "expectedFallback": false
+    }
+]

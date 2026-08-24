@@ -7,6 +7,7 @@ import {
     hasEntitySummarySignal,
     hasPolarQuestionSignal,
     hasWholeEntityScopeSignal,
+    pointFocusPolarity,
     resolveQuranSurahEntity,
     resolveQuranSurahEntityCandidate,
     resolveQuranSurahEntityCandidateMatch,
@@ -470,7 +471,8 @@ function hasClearPointFocus(question: string): boolean {
     const tokens = tokenize(question);
     if (hasPolarQuestionSignal(question)) return true;
     if (/\b\d{1,3}\s*:\s*\d{1,3}\b/u.test(question)) return true;
-    if (tokens.some(token => ['ayah', 'verse', 'word', 'phrase', 'incident', 'event', 'prison'].includes(token))) return true;
+    const focusPolarity = pointFocusPolarity(question);
+    if (focusPolarity === 'positive' || focusPolarity === 'mixed') return true;
     const first = tokens[0] ?? '';
     const second = tokens[1] ?? '';
     if (first === 'who' || first === 'when' || first === 'where') return true;
