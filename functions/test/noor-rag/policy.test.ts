@@ -4,8 +4,14 @@ import { describe, it } from 'node:test';
 import { classifyPolicy } from '../../src/noor-rag/policy';
 
 describe('Noor policy', () => {
-    it('refuses personal fatwa and ruling requests', () => {
-        assert.equal(classifyPolicy('Is crypto halal for me?'), 'personal_ruling');
+    it('keeps only unmistakable explicit personalized-fatwa commands on the deterministic fast path', () => {
+        assert.equal(
+            classifyPolicy('Issue a personal fasting ruling tailored to my circumstances.'),
+            'personal_ruling',
+        );
+        assert.equal(classifyPolicy('Is crypto halal for me?'), 'allowed');
+        assert.equal(classifyPolicy('Is this loan halal for my personal financial situation?'), 'allowed');
+        assert.equal(classifyPolicy('Should I reset my password given my situation?'), 'allowed');
     });
 
     it('refuses standalone hadith requests', () => {

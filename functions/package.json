@@ -13,6 +13,7 @@
         "noor:eval": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluate-retrieval.js",
         "noor:eval:golden": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluate-golden.js",
         "noor:verify:retrieval": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-retrieval.js",
+        "noor:verify:policy-classifier": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-personalized-ruling-classifier.js",
         "noor:verify:live": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-live.js",
         "noor:live-smoke": "npm run build:scripts && node lib-scripts/scripts/noor-rag/live-smoke.js",
         "noor:eval:validate-cases": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluation-cases.js --input=evals/noor-evaluation-cases.json",

@@ -267,7 +267,12 @@ describe('Noor grounded generation', () => {
 
     it('returns fixed no-model responses for policy refusal and missing evidence', async () => {
         const provider = new SequenceProvider([]);
-        const refused = await generateGroundedAnswer({ request: { ...REQUEST, question: 'Is crypto halal for me?' }, evidence: EVIDENCE, maxEvidenceCharacters: 1000, provider });
+        const refused = await generateGroundedAnswer({
+            request: { ...REQUEST, question: 'Issue a personal ruling tailored to my circumstances.' },
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+        });
         assert.equal(refused.status, 'policy_refusal');
         assert.deepEqual(refused.citations, []);
         const missing = await generateGroundedAnswer({ request: REQUEST, evidence: [], maxEvidenceCharacters: 1000, provider });

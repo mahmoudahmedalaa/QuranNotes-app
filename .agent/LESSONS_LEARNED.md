@@ -125,3 +125,14 @@ When the Khatma feature had too many bugs, doing a full rewrite with proper stat
 - Test semantic classes with paraphrases, narrow counterexamples, and mixed transcripts rather than one canonical sentence.
 - Preserve requested entities and branch provenance through final evidence and citations; incidental retrieval text must not rewrite discourse roles.
 - Treat non-answer status, zero citations, zero answered usage, and zero state persistence as one server-owned invariant.
+
+### 2026-08-24 — Noor Personalized-Ruling Policy Boundary
+
+**What went wrong**:
+- Deterministic circumstance and normative grammar alternated between missing natural personalized-ruling requests and falsely refusing unrelated password, admin, and gaming decisions.
+
+**Rules added**:
+- Keep deterministic policy checks only where the intent is unambiguous; use a strict semantic intent classifier for the open-ended personalized-ruling boundary.
+- First-person grammar alone is not personal circumstance, and circumstance alone is not a request for a religious ruling.
+- Fail classifier infrastructure errors as temporary non-answers; never fabricate a religious policy decision, answered quota, or conversation state.
+- Evaluate the semantic boundary with noisy paraphrases, non-topic-specific personalized cases, nonreligious lookalikes, and bounded multi-turn context.

@@ -104,6 +104,9 @@ function dependencies(overrides: Partial<NoorHandlerDependencies>): NoorHandlerD
         emitTelemetry: () => undefined,
         nowMs: () => 100,
         ...overrides,
+        classifyPersonalizedRuling: overrides.classifyPersonalizedRuling ?? (async () => ({
+            kind: 'success', classification: 'general_information', reasonCode: 'general_religious_information',
+        })),
     };
 }
 

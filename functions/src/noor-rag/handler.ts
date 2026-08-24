@@ -9,6 +9,12 @@ import {
 } from './generation';
 import { isEntitySummaryEvidenceSufficient, selectAnswerableEvidence } from './answerability';
 import type { NoorPolicyCategory } from './policy';
+import type {
+    PersonalizedRulingClassification,
+    PersonalizedRulingClassifierFailureType,
+    PersonalizedRulingClassifierOutcome,
+    PersonalizedRulingClassifierRequest,
+} from './personalizedRulingClassifier';
 import { CANONICAL_INSUFFICIENT_EVIDENCE, normalizeNoorOutcome, type OutcomeNormalizationReason } from './outcome';
 import {
     buildChatQueryPlan,
@@ -43,6 +49,7 @@ export type NoorHandlerErrorClass =
     | 'quota_exceeded'
     | 'request_busy'
     | 'policy_refusal'
+    | 'policy_classifier_unavailable'
     | 'insufficient_evidence'
     | 'retrieval_unavailable'
     | 'generation_unavailable'
@@ -74,6 +81,10 @@ export interface NoorHandlerTelemetryEvent {
     generationRetryInvoked: boolean;
     correctionInvoked: boolean;
     finalGenerationErrorClass: NoorGenerationErrorClass;
+    personalizedRulingClassifierInvoked: boolean;
+    personalizedRulingClassification: PersonalizedRulingClassification | 'not_run';
+    personalizedRulingClassifierLatencyMs: number;
+    personalizedRulingClassifierFailureType: PersonalizedRulingClassifierFailureType | null;
 }
 
 export interface NoorSanitizedTrace {
@@ -112,6 +123,10 @@ export interface NoorSanitizedTrace {
     generationRetryInvoked: boolean;
     correctionInvoked: boolean;
     finalGenerationErrorClass: NoorGenerationErrorClass;
+    personalizedRulingClassifierInvoked: boolean;
+    personalizedRulingClassification: PersonalizedRulingClassification | 'not_run';
+    personalizedRulingClassifierLatencyMs: number;
+    personalizedRulingClassifierFailureType: PersonalizedRulingClassifierFailureType | null;
     statePersistence: 'persisted' | 'not_persisted' | 'not_expected';
     stateFingerprint: string | null;
     stageMs: {
@@ -154,6 +169,7 @@ export interface NoorHandlerDependencies {
     resolveEntitlement(input: Readonly<{ uid: string }>): Promise<EntitlementDecision>;
     claimUsage(input: NoorHandlerUsageInput): Promise<ClaimResult>;
     classifyPolicy(request: NoorRequest): NoorPolicyCategory;
+    classifyPersonalizedRuling(request: PersonalizedRulingClassifierRequest): Promise<PersonalizedRulingClassifierOutcome>;
     retrieveSemantic(input: Readonly<{
         request: Extract<NoorRequest, { mode: 'chat' }>;
         config: NoorRuntimeConfig;
@@ -447,6 +463,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let retrievalMs = 0;
     let generationMs = 0;
     let policy: NoorPolicyCategory = 'out_of_scope';
+    let personalizedRulingClassifierInvoked = false;
+    let personalizedRulingClassification: PersonalizedRulingClassification | 'not_run' = 'not_run';
+    let personalizedRulingClassifierLatencyMs = 0;
+    let personalizedRulingClassifierFailureType: PersonalizedRulingClassifierFailureType | null = null;
     let queryPlan: ChatQueryPlan = request.mode === 'chat'
         ? buildChatQueryPlan({ request, validatedConversationState: null })
         : {
@@ -503,6 +523,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             generationRetryInvoked: generationDiagnostics?.generationRetryInvoked ?? false,
             correctionInvoked: generationDiagnostics?.correctionInvoked ?? false,
             finalGenerationErrorClass: generationDiagnostics?.finalGenerationErrorClass ?? null,
+            personalizedRulingClassifierInvoked,
+            personalizedRulingClassification,
+            personalizedRulingClassifierLatencyMs,
+            personalizedRulingClassifierFailureType,
         };
         try {
             Promise.resolve(dependencies.emitTelemetry(event)).catch(() => undefined);
@@ -548,6 +572,10 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 generationRetryInvoked: generationDiagnostics?.generationRetryInvoked ?? false,
                 correctionInvoked: generationDiagnostics?.correctionInvoked ?? false,
                 finalGenerationErrorClass: generationDiagnostics?.finalGenerationErrorClass ?? null,
+                personalizedRulingClassifierInvoked,
+                personalizedRulingClassification,
+                personalizedRulingClassifierLatencyMs,
+                personalizedRulingClassifierFailureType,
                 statePersistence,
                 stateFingerprint,
                 stageMs: { ...stageMs },
@@ -645,6 +673,25 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     try {
         const policyStartedAt = safeNow(dependencies);
         policy = dependencies.classifyPolicy(request);
+        if (policy === 'allowed' && request.mode !== 'verse_summary') {
+            personalizedRulingClassifierInvoked = true;
+            const classifierStartedAt = safeNow(dependencies);
+            let outcome: PersonalizedRulingClassifierOutcome;
+            try {
+                outcome = await dependencies.classifyPersonalizedRuling(request);
+            } catch {
+                outcome = { kind: 'failure', failureType: 'provider_failure' };
+            } finally {
+                personalizedRulingClassifierLatencyMs = duration(classifierStartedAt, safeNow(dependencies));
+            }
+            if (outcome.kind === 'failure') {
+                personalizedRulingClassifierFailureType = outcome.failureType;
+                stageMs.policy = duration(policyStartedAt, safeNow(dependencies));
+                throw new HandlerFailure('policy_classifier_unavailable');
+            }
+            personalizedRulingClassification = outcome.classification;
+            if (outcome.classification === 'personalized_ruling') policy = 'personal_ruling';
+        }
         stageMs.policy = duration(policyStartedAt, safeNow(dependencies));
         if (policy !== 'allowed') {
             const response = nonQuotaAnswer(request.requestId, 'policy_refusal', policy === 'out_of_scope' ? SCOPE_REFUSAL : POLICY_REFUSAL);

@@ -92,6 +92,10 @@ const TRACE_GENERATION_FAILURE_PHASES = new Set([
 ]);
 const TRACE_VALIDATION_RESULTS = new Set(['not_run', 'passed_first_attempt', 'passed_after_retry', 'failed']);
 const TRACE_STATE_PERSISTENCE = new Set(['persisted', 'not_persisted', 'not_expected']);
+const TRACE_PERSONALIZED_RULING_CLASSIFICATIONS = new Set(['not_run', 'general_information', 'personalized_ruling']);
+const TRACE_PERSONALIZED_RULING_FAILURES = new Set([
+    'timeout', 'malformed_output', 'schema_validation_failure', 'provider_failure',
+]);
 const MAX_TRACE_EVIDENCE = 8;
 const MAX_TRACE_VARIANTS = 2;
 const MAX_TRACE_DURATION_MS = 120_000;
@@ -158,6 +162,13 @@ function isSanitizedTrace(value: unknown): value is NoorSanitizedTrace {
         || typeof value.generationRetryInvoked !== 'boolean'
         || typeof value.correctionInvoked !== 'boolean'
         || (value.finalGenerationErrorClass !== null && typeof value.finalGenerationErrorClass !== 'string')
+        || typeof value.personalizedRulingClassifierInvoked !== 'boolean'
+        || typeof value.personalizedRulingClassification !== 'string'
+        || !TRACE_PERSONALIZED_RULING_CLASSIFICATIONS.has(value.personalizedRulingClassification)
+        || !isBoundedInteger(value.personalizedRulingClassifierLatencyMs, MAX_TRACE_DURATION_MS)
+        || (value.personalizedRulingClassifierFailureType !== null
+            && (typeof value.personalizedRulingClassifierFailureType !== 'string'
+                || !TRACE_PERSONALIZED_RULING_FAILURES.has(value.personalizedRulingClassifierFailureType)))
         || typeof value.statePersistence !== 'string' || !TRACE_STATE_PERSISTENCE.has(value.statePersistence)
         || (value.stateFingerprint !== null && (typeof value.stateFingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(value.stateFingerprint)))
         || !isStageMs(value.stageMs)

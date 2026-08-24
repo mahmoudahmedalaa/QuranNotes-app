@@ -74,7 +74,11 @@ describe('riba follow-up sanitized trace', () => {
     it('keeps doctrinal riba questions general and emits only aggregate safe trace fields', async () => {
         assert.equal(classifyPolicy('Is riba haram'), 'allowed');
         assert.equal(classifyPolicy('Is riba haram?'), 'allowed');
-        assert.equal(classifyPolicy('Should I take this loan for my situation?'), 'personal_ruling');
+        assert.equal(classifyPolicy('Should I take this loan for my situation?'), 'allowed');
+        assert.equal(
+            classifyPolicy('Issue a personal ruling tailored to my circumstances.'),
+            'personal_ruling',
+        );
 
         const firstQuestion: NoorRequest = {
             mode: 'chat',
@@ -118,6 +122,9 @@ describe('riba follow-up sanitized trace', () => {
             resolveEntitlement: async () => ({ class: 'paid', expiresAt: null, source: 'revenuecat' }),
             claimUsage: async () => ({ kind: 'claimed', leaseOwnerId: 'lease', leaseExpiresAt: '2026-08-15T00:00:00.000Z' }),
             classifyPolicy: () => 'allowed',
+            classifyPersonalizedRuling: async () => ({
+                kind: 'success', classification: 'general_information', reasonCode: 'general_religious_information',
+            }),
             retrieveSemantic: async ({ query }) => {
                 queries.push(query);
                 return { evidence: firstEvidence, vectorHitCount: 4, lexicalHitCount: 2, lexicalSearchStatus: 'available' as const };
@@ -191,6 +198,10 @@ describe('riba follow-up sanitized trace', () => {
             generationRetryInvoked: false,
             correctionInvoked: false,
             finalGenerationErrorClass: null,
+            personalizedRulingClassifierInvoked: true,
+            personalizedRulingClassification: 'general_information',
+            personalizedRulingClassifierLatencyMs: 0,
+            personalizedRulingClassifierFailureType: null,
             statePersistence: 'persisted',
             stateFingerprint: trace.stateFingerprint,
             stageMs: { policy: 0, context: 0, retrieval: 0, generation: 0, citationValidation: 0 },

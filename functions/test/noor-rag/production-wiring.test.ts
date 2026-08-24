@@ -77,6 +77,10 @@ describe('Noor telemetry', () => {
             generationRetryInvoked: false,
             correctionInvoked: false,
             finalGenerationErrorClass: null,
+            personalizedRulingClassifierInvoked: true,
+            personalizedRulingClassification: 'general_information',
+            personalizedRulingClassifierLatencyMs: 12,
+            personalizedRulingClassifierFailureType: null,
             statePersistence: 'persisted',
             stateFingerprint: 'a'.repeat(64),
             stageMs: { policy: 1, context: 2, retrieval: 3, generation: 4, citationValidation: 5 },
@@ -126,6 +130,8 @@ describe('Noor telemetry', () => {
             structuralValidationResult: 'not_run', citationValidationResult: 'not_run',
             citationValidationFailureSubtype: null, qualityJudgeInvoked: false,
             generationRetryInvoked: false, correctionInvoked: false, finalGenerationErrorClass: null,
+            personalizedRulingClassifierInvoked: true, personalizedRulingClassification: 'general_information',
+            personalizedRulingClassifierLatencyMs: 12, personalizedRulingClassifierFailureType: null,
             statePersistence: 'not_persisted', stateFingerprint: null,
             stageMs: { policy: 1, context: 1, retrieval: 1, generation: 0, citationValidation: 0 },
             finalCopy: 'I could not find enough reliable tafsir evidence to answer that safely.',
@@ -148,6 +154,8 @@ describe('Noor telemetry', () => {
                 structuralValidationResult: 'passed_first_attempt', citationValidationResult: 'passed_first_attempt',
                 citationValidationFailureSubtype: null, qualityJudgeInvoked: true,
                 generationRetryInvoked: false, correctionInvoked: false, finalGenerationErrorClass: null,
+                personalizedRulingClassifierInvoked: true, personalizedRulingClassification: 'general_information',
+                personalizedRulingClassifierLatencyMs: 4, personalizedRulingClassifierFailureType: null,
             } });
         const serialized = JSON.stringify(documents.get('noorTelemetry/trace-1'));
         for (const forbidden of ['user-1', 'raw question text', 'raw answer text', 'person@example.com', 'provider response body']) {

@@ -46,9 +46,13 @@ describe('Noor external evaluation cases', () => {
             'general-worship-pronoun-paraphrases',
             'unsupported-current-world',
             'personalized-condition-control',
+            'nonreligious-personal-lookalikes',
         ]) {
             assert.ok(manifest.cases.some(item => item.id === id), `missing ${id}`);
         }
+        assert.ok((manifest.cases.find(item => item.id === 'general-worship-pronoun-paraphrases')?.variants.length ?? 0) >= 8);
+        assert.ok((manifest.cases.find(item => item.id === 'personal-ruling-control')?.variants.length ?? 0) >= 8);
+        assert.equal(manifest.cases.find(item => item.id === 'nonreligious-personal-lookalikes')?.variants.length, 3);
         assert.equal(Object.keys(buildNoorEvaluationExpectations(manifest)).length, manifest.cases.length);
     });
 

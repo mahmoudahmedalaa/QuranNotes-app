@@ -17,6 +17,10 @@ import {
 import { createVertexGenerationProvider, generateGroundedAnswer, type VertexGenerationClient } from './generation';
 import { handleNoorRequest, type NoorSanitizedTrace } from './handler';
 import { classifyRequestPolicy } from './policy';
+import {
+    createVertexPersonalizedRulingClassifier,
+    type VertexPersonalizedRulingClassifierClient,
+} from './personalizedRulingClassifier';
 import { parseValidatedConversationState } from './queryRewrite';
 import {
     createFirestoreRetrievalRepository,
@@ -96,6 +100,9 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
         project,
         () => vertex as unknown as VertexGenerationClient,
     );
+    const personalizedRulingClassifier = createVertexPersonalizedRulingClassifier(
+        vertex as unknown as VertexPersonalizedRulingClassifierClient,
+    );
     const revenueCatSecret = REVENUECAT_SECRET_API_KEY.value();
     const telemetrySecret = NOOR_TELEMETRY_HMAC_KEY.value();
     let telemetryKeyVersion = 'unavailable';
@@ -123,6 +130,7 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
             }),
             claimUsage: input => claimRequest({ ...input, repository: usageRepository }),
             classifyPolicy: classifyRequestPolicy,
+            classifyPersonalizedRuling: request => personalizedRulingClassifier.classify(request),
             retrieveSemantic: input => retrieveSemanticWithStats({
                 content: input.query,
                 config: input.config,

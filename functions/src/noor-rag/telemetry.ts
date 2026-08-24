@@ -124,6 +124,20 @@ function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
         generationRetryInvoked: trace.generationRetryInvoked === true,
         correctionInvoked: trace.correctionInvoked === true,
         finalGenerationErrorClass: trace.finalGenerationErrorClass,
+        personalizedRulingClassifierInvoked: trace.personalizedRulingClassifierInvoked === true,
+        personalizedRulingClassification: trace.personalizedRulingClassification === 'general_information'
+            || trace.personalizedRulingClassification === 'personalized_ruling'
+            ? trace.personalizedRulingClassification
+            : 'not_run',
+        personalizedRulingClassifierLatencyMs: boundedStageDuration(trace.personalizedRulingClassifierLatencyMs),
+        personalizedRulingClassifierFailureType: [
+            'timeout',
+            'malformed_output',
+            'schema_validation_failure',
+            'provider_failure',
+        ].includes(trace.personalizedRulingClassifierFailureType ?? '')
+            ? trace.personalizedRulingClassifierFailureType
+            : null,
         statePersistence: trace.statePersistence,
         stateFingerprint: safeStateFingerprint(trace.stateFingerprint),
         stageMs: {
@@ -155,6 +169,7 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
         retrievalMs: boundedStageDuration(input.event.retrievalMs),
         generationMs: boundedStageDuration(input.event.generationMs),
         generationAttemptCount: boundedCount(input.event.generationAttemptCount, 2),
+        personalizedRulingClassifierLatencyMs: boundedStageDuration(input.event.personalizedRulingClassifierLatencyMs),
         pseudonym,
         pseudonymKeyVersion: input.pseudonymKeyVersion,
         serverTraceId: input.traceId,

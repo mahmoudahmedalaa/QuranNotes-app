@@ -74,6 +74,14 @@ function harness(overrides: Partial<NoorHandlerDependencies> = {}): Harness {
         resolveEntitlement: async () => { events.push('entitlement'); return { class: 'paid', expiresAt: null, source: 'revenuecat' }; },
         claimUsage: async () => { events.push('claim'); return { kind: 'claimed', leaseOwnerId: INVOCATION_ID, leaseExpiresAt: '2026-08-11T12:02:00.000Z' }; },
         classifyPolicy: () => { events.push('policy'); return 'allowed'; },
+        classifyPersonalizedRuling: async () => {
+            events.push('personalized-policy');
+            return {
+                kind: 'success',
+                classification: 'general_information',
+                reasonCode: 'general_religious_information',
+            };
+        },
         retrieveSemantic: async () => { events.push('semantic'); return EVIDENCE; },
         retrieveEntitySummary: async () => { events.push('entity-summary'); return { evidence: EVIDENCE, candidateCount: 1, anchorVerses: [153] }; },
         retrieveExact: async () => { events.push('exact'); return EVIDENCE; },
@@ -182,6 +190,80 @@ describe('handleNoorRequest', () => {
         assert.deepEqual(value.events.slice(0, 7), ['config', 'corpus', 'pre-replay', 'entitlement', 'claim', 'policy', 'finalize-non-answer']);
         assert.ok(!value.events.includes('semantic'));
         assert.ok(!value.events.includes('model'));
+        assert.ok(!value.events.includes('personalized-policy'));
+    });
+
+    it('runs one semantic classifier for every otherwise-allowed free-form request before retrieval', async () => {
+        const chat = harness();
+        assert.equal((await run(chat)).status, 'answered');
+        assert.equal(chat.events.filter(event => event === 'personalized-policy').length, 1);
+        assert.ok(chat.events.indexOf('personalized-policy') < chat.events.indexOf('semantic'));
+
+        const verseQuestion = harness();
+        assert.equal((await run(verseQuestion, {
+            mode: 'verse_question', requestId: REQUEST_ID, source: 'ibn_kathir_en_abridged',
+            surah: 2, verse: 255, question: 'Does this ruling apply to my personal circumstances?',
+        })).status, 'answered');
+        assert.equal(verseQuestion.events.filter(event => event === 'personalized-policy').length, 1);
+        assert.ok(verseQuestion.events.indexOf('personalized-policy') < verseQuestion.events.indexOf('exact'));
+
+        const summary = harness();
+        assert.equal((await run(summary, {
+            mode: 'verse_summary', requestId: REQUEST_ID, source: 'al_sadi_ar', surah: 2, verse: 255,
+        })).status, 'answered');
+        assert.ok(!summary.events.includes('personalized-policy'));
+    });
+
+    it('refuses the canonical semantic personalized ruling without retrieval, generation, quota count, or state persistence', async () => {
+        let stateWrites = 0;
+        const value = harness({
+            classifyPersonalizedRuling: async request => {
+                value.events.push('personalized-policy');
+                assert.equal(request.question, 'Is this loan halal for my personal financial situation?');
+                return {
+                    kind: 'success',
+                    classification: 'personalized_ruling',
+                    reasonCode: 'personal_circumstances_applied_to_religious_ruling',
+                };
+            },
+            writeValidatedConversationState: async () => { stateWrites += 1; },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'Is this loan halal for my personal financial situation?',
+            history: [],
+        });
+
+        assert.equal(response.status, 'policy_refusal');
+        assert.deepEqual(response.citations, []);
+        assert.ok(value.events.includes('finalize-non-answer'));
+        assert.ok(!value.events.includes('finalize-answered'));
+        assert.ok(!value.events.includes('semantic'));
+        assert.ok(!value.events.includes('model'));
+        assert.equal(stateWrites, 0);
+        assert.equal(value.telemetry[0]?.personalizedRulingClassifierInvoked, true);
+        assert.equal(value.telemetry[0]?.personalizedRulingClassification, 'personalized_ruling');
+        assert.equal(value.telemetry[0]?.personalizedRulingClassifierFailureType, null);
+    });
+
+    it('maps every classifier infrastructure failure to a released temporary non-answer', async () => {
+        for (const failureType of ['timeout', 'malformed_output', 'schema_validation_failure', 'provider_failure'] as const) {
+            let stateWrites = 0;
+            const value = harness({
+                classifyPersonalizedRuling: async () => ({ kind: 'failure', failureType }),
+                writeValidatedConversationState: async () => { stateWrites += 1; },
+            });
+            const response = await run(value);
+            assert.equal(response.status, 'temporarily_unavailable');
+            assert.ok(value.events.includes('finalize-non-answer'));
+            assert.ok(!value.events.includes('semantic'));
+            assert.ok(!value.events.includes('model'));
+            assert.equal(stateWrites, 0);
+            assert.equal(value.telemetry[0]?.errorClass, 'policy_classifier_unavailable');
+            assert.equal(value.telemetry[0]?.personalizedRulingClassifierFailureType, failureType);
+            assert.equal(value.telemetry[0]?.personalizedRulingClassification, 'not_run');
+        }
     });
 
     it('uses semantic retrieval once for chat and exact retrieval once for both verse modes', async () => {
@@ -857,7 +939,10 @@ describe('handleNoorRequest', () => {
             'citationCount', 'citationValidationFailureSubtype', 'citationValidationResult', 'corpusVersion',
             'correctionInvoked', 'durationMs', 'entitlementClass', 'errorClass', 'finalGenerationErrorClass',
             'generationAttemptCount', 'generationFailurePhase', 'generationModel', 'generationMs',
-            'generationRetryInvoked', 'mode', 'outcome', 'promptVersion', 'qualityJudgeInvoked',
+            'generationRetryInvoked', 'mode', 'outcome',
+            'personalizedRulingClassification', 'personalizedRulingClassifierFailureType',
+            'personalizedRulingClassifierInvoked', 'personalizedRulingClassifierLatencyMs',
+            'promptVersion', 'qualityJudgeInvoked',
             'requestId', 'retrievalMs', 'retrievedChunkIds', 'structuralValidationResult',
         ]);
         const serialized = JSON.stringify(value.telemetry[0]);
@@ -866,6 +951,9 @@ describe('handleNoorRequest', () => {
         assert.equal(Number.isInteger(value.telemetry[0]?.durationMs), true);
         assert.equal(Number.isInteger(value.telemetry[0]?.retrievalMs), true);
         assert.equal(Number.isInteger(value.telemetry[0]?.generationMs), true);
+        assert.equal(value.telemetry[0]?.personalizedRulingClassifierInvoked, true);
+        assert.equal(value.telemetry[0]?.personalizedRulingClassification, 'general_information');
+        assert.equal(Number.isInteger(value.telemetry[0]?.personalizedRulingClassifierLatencyMs), true);
         const telemetryFailure = harness({ emitTelemetry: async () => { throw new Error('telemetry down'); } });
         assert.equal((await run(telemetryFailure)).status, 'answered');
     });

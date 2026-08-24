@@ -56,6 +56,9 @@ function lifecycleHarness(generate: (request: NoorChatRequest, evidence: readonl
         resolveEntitlement: async () => ({ class: 'paid', expiresAt: null, source: 'revenuecat' }),
         claimUsage: async () => ({ kind: 'claimed', leaseOwnerId: 'lease', leaseExpiresAt: '2026-08-18T12:00:00.000Z' }),
         classifyPolicy: () => 'allowed',
+        classifyPersonalizedRuling: async () => ({
+            kind: 'success', classification: 'general_information', reasonCode: 'general_religious_information',
+        }),
         retrieveSemantic: async input => {
             queries.push(input.query);
             return {
