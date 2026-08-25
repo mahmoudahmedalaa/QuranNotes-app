@@ -47,9 +47,12 @@ interface LiveCaseResult {
 
 interface LiveTurnTrace {
     requestId: string;
+    generationStatus: string;
     generationFailurePhase: string;
+    finalGenerationErrorClass: string | null;
     citationValidation: string;
     qualityJudgeInvoked: boolean;
+    answerabilityReason: string;
     statePersistence: string;
     stateFingerprint: string | null;
     conversationState: string;
@@ -63,6 +66,7 @@ interface LiveTurnResult {
     question: string;
     responseStatus: NoorAnswer['status'];
     generationFailurePhase: string;
+    failureSubtype: LiveFailureSubtype | null;
     citationValidation: string;
     qualityJudgeInvoked: boolean;
     stateExpected: boolean;
@@ -73,7 +77,21 @@ interface LiveTurnResult {
     contextualQueryProduced: boolean;
     passed: boolean;
     latencyMs: number;
+    providerReplayUsed: boolean;
 }
+
+export type LiveFailureSubtype =
+    | 'provider_transient_failure'
+    | 'provider_timeout'
+    | 'structured_generation_failure'
+    | 'citation_validation_failure'
+    | 'answer_quality_failure'
+    | 'policy_failure'
+    | 'state_failure'
+    | 'retrieval_failure'
+    | 'schema_outcome_contract_failure';
+
+export interface LiveProviderReplayBudget { availabilityFailures: number }
 
 interface SequentialLiveTurnsInput {
     questions: readonly string[];
@@ -81,6 +99,8 @@ interface SequentialLiveTurnsInput {
     call(request: NoorRequest): Promise<{ answer: NoorAnswer; latencyMs: number }>;
     readTrace(requestId: string): Promise<unknown>;
     validateAnsweredCitations(answer: NoorAnswer): boolean;
+    providerReplayBudget?: LiveProviderReplayBudget;
+    sleep?: (milliseconds: number) => Promise<void>;
 }
 
 interface SequentialLiveTurnsResult {
@@ -113,6 +133,7 @@ const LIVE_CASE_IDS = [
 ] as const;
 const MAX_HISTORY_ANSWER_CHARACTERS = 1_000;
 const DEFAULT_REQUEST_INTERVAL_MS = 15_000;
+const PROVIDER_REPLAY_DELAY_MS = 10_000;
 
 export interface LiveRequestPacerOptions {
     intervalMs?: number;
@@ -186,9 +207,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | null {
     if (!isRecord(value)
         || value.requestId !== requestId
+        || typeof value.generationStatus !== 'string'
         || typeof value.generationFailurePhase !== 'string'
+        || (value.finalGenerationErrorClass !== null && typeof value.finalGenerationErrorClass !== 'string')
         || typeof value.citationValidation !== 'string'
         || typeof value.qualityJudgeInvoked !== 'boolean'
+        || typeof value.answerabilityReason !== 'string'
         || typeof value.statePersistence !== 'string'
         || (value.stateFingerprint !== null && typeof value.stateFingerprint !== 'string')
         || typeof value.conversationState !== 'string'
@@ -199,9 +223,12 @@ function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | 
     }
     return {
         requestId,
+        generationStatus: value.generationStatus,
         generationFailurePhase: value.generationFailurePhase,
+        finalGenerationErrorClass: value.finalGenerationErrorClass,
         citationValidation: value.citationValidation,
         qualityJudgeInvoked: value.qualityJudgeInvoked,
+        answerabilityReason: value.answerabilityReason,
         statePersistence: value.statePersistence,
         stateFingerprint: value.stateFingerprint,
         conversationState: value.conversationState,
@@ -210,19 +237,69 @@ function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | 
     };
 }
 
+export function classifyLiveFailureSubtype(
+    expectedStatus: NoorAnswer['status'],
+    answer: NoorAnswer,
+    trace: LiveTurnTrace | null,
+): LiveFailureSubtype | null {
+    if (answer.status === 'answered' && trace?.citationValidation !== 'passed') return 'citation_validation_failure';
+    if (answer.status === expectedStatus) {
+        if (answer.status === 'answered' && trace?.statePersistence === 'not_persisted') return 'state_failure';
+        return null;
+    }
+    if (trace?.finalGenerationErrorClass === 'provider_transient_failure') return 'provider_transient_failure';
+    if (trace?.finalGenerationErrorClass === 'provider_timeout') return 'provider_timeout';
+    if (trace?.finalGenerationErrorClass === 'malformed_json'
+        || trace?.finalGenerationErrorClass === 'answer_validation_failure') return 'structured_generation_failure';
+    if (trace?.finalGenerationErrorClass === 'citation_validation_failure'
+        || trace?.citationValidation === 'failed') return 'citation_validation_failure';
+    if (trace?.finalGenerationErrorClass === 'answer_quality_failure'
+        || trace?.finalGenerationErrorClass === 'answer_quality_judgement_failure'
+        || trace?.generationFailurePhase === 'quality_correction'
+        || trace?.generationFailurePhase === 'quality_judgement') return 'answer_quality_failure';
+    if (answer.status === 'policy_refusal') return 'policy_failure';
+    if (trace?.generationFailurePhase === 'not_run'
+        && trace.finalGenerationErrorClass === null
+        && trace.answerabilityReason !== 'sufficient') return 'retrieval_failure';
+    return 'schema_outcome_contract_failure';
+}
+
+function replayableProviderFailure(subtype: LiveFailureSubtype | null): boolean {
+    return subtype === 'provider_transient_failure' || subtype === 'provider_timeout';
+}
+
 export async function executeSequentialLiveTurns(
     input: SequentialLiveTurnsInput,
 ): Promise<SequentialLiveTurnsResult> {
     const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
     const turns: LiveTurnResult[] = [];
     let finalAnswer: NoorAnswer | null = null;
+    let requestCount = 0;
+    const replayBudget = input.providerReplayBudget ?? { availabilityFailures: 0 };
+    const sleep = input.sleep ?? (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
     for (let index = 0; index < input.questions.length; index += 1) {
         const question = input.questions[index]!;
-        const request: NoorRequest = { mode: 'chat', requestId: randomUUID(), question, history: [...history] };
-        const called = await input.call(request);
-        finalAnswer = called.answer;
-        const trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
         const expectedStatus = index < input.questions.length - 1 ? 'answered' : input.expectedFinalStatus;
+        let request: NoorRequest = { mode: 'chat', requestId: randomUUID(), question, history: [...history] };
+        let called = await input.call(request);
+        requestCount += 1;
+        let trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
+        let failureSubtype = classifyLiveFailureSubtype(expectedStatus, called.answer, trace);
+        let providerReplayUsed = false;
+        if (replayableProviderFailure(failureSubtype)) {
+            replayBudget.availabilityFailures += 1;
+            if (replayBudget.availabilityFailures === 1) {
+                await sleep(PROVIDER_REPLAY_DELAY_MS);
+                providerReplayUsed = true;
+                request = { mode: 'chat', requestId: randomUUID(), question, history: [...history] };
+                called = await input.call(request);
+                requestCount += 1;
+                trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
+                failureSubtype = classifyLiveFailureSubtype(expectedStatus, called.answer, trace);
+                if (replayableProviderFailure(failureSubtype)) replayBudget.availabilityFailures += 1;
+            }
+        }
+        finalAnswer = called.answer;
         const stateExpected = expectedStatus === 'answered';
         const stateFound = trace?.conversationState === 'validated_subject_and_evidence';
         const statePersisted = trace?.statePersistence === 'persisted';
@@ -248,6 +325,7 @@ export async function executeSequentialLiveTurns(
             question,
             responseStatus: called.answer.status,
             generationFailurePhase: trace?.generationFailurePhase ?? 'trace_unavailable',
+            failureSubtype,
             citationValidation: trace?.citationValidation ?? 'trace_unavailable',
             qualityJudgeInvoked: trace?.qualityJudgeInvoked ?? false,
             stateExpected,
@@ -258,12 +336,13 @@ export async function executeSequentialLiveTurns(
             contextualQueryProduced,
             passed,
             latencyMs: called.latencyMs,
+            providerReplayUsed,
         });
-        if (!passed) return { requestCount: turns.length, completed: false, turns, finalAnswer };
+        if (!passed) return { requestCount, completed: false, turns, finalAnswer };
         history.push({ role: 'user', content: question });
         history.push({ role: 'assistant', content: boundedLiveHistoryAnswer(called.answer.answer) });
     }
-    return { requestCount: turns.length, completed: true, turns, finalAnswer };
+    return { requestCount, completed: true, turns, finalAnswer };
 }
 
 function answerFromResponse(status: number, body: unknown, expectedRequestId: string): NoorAnswer {
@@ -373,6 +452,7 @@ async function runCase(
     artifacts: ReturnType<typeof readCorpusArtifacts>,
     paceRequest: () => Promise<void>,
     readTrace: (requestId: string) => Promise<unknown>,
+    providerReplayBudget: LiveProviderReplayBudget,
 ): Promise<LiveCaseResult> {
     const startedAt = Date.now();
     let answer: NoorAnswer;
@@ -380,23 +460,39 @@ async function runCase(
     let turns: LiveTurnResult[] = [];
     try {
         if (goldenCase.exact) {
-            const request = {
+            let request = {
                 mode: 'verse_summary' as const,
                 requestId: randomUUID(),
                 source: goldenCase.exact.source,
                 surah: goldenCase.exact.surah,
                 verse: goldenCase.exact.verse,
             };
-            const called = await callNoor(request, credentials, paceRequest);
-            answer = called.answer;
+            let called = await callNoor(request, credentials, paceRequest);
             requestCount = 1;
-            const trace = parseLiveTurnTrace(await readTrace(request.requestId), request.requestId);
+            let trace = parseLiveTurnTrace(await readTrace(request.requestId), request.requestId);
+            let failureSubtype = classifyLiveFailureSubtype(goldenCase.expectedStatus, called.answer, trace);
+            let providerReplayUsed = false;
+            if (replayableProviderFailure(failureSubtype)) {
+                providerReplayBudget.availabilityFailures += 1;
+                if (providerReplayBudget.availabilityFailures === 1) {
+                    await new Promise(resolve => setTimeout(resolve, PROVIDER_REPLAY_DELAY_MS));
+                    providerReplayUsed = true;
+                    request = { ...request, requestId: randomUUID() };
+                    called = await callNoor(request, credentials, paceRequest);
+                    requestCount += 1;
+                    trace = parseLiveTurnTrace(await readTrace(request.requestId), request.requestId);
+                    failureSubtype = classifyLiveFailureSubtype(goldenCase.expectedStatus, called.answer, trace);
+                    if (replayableProviderFailure(failureSubtype)) providerReplayBudget.availabilityFailures += 1;
+                }
+            }
+            answer = called.answer;
             turns = [{
                 turnNumber: 1,
                 requestId: request.requestId,
                 question: `${goldenCase.exact.source}:${goldenCase.exact.surah}:${goldenCase.exact.verse}`,
                 responseStatus: answer.status,
                 generationFailurePhase: trace?.generationFailurePhase ?? 'trace_unavailable',
+                failureSubtype,
                 citationValidation: trace?.citationValidation ?? 'trace_unavailable',
                 qualityJudgeInvoked: trace?.qualityJudgeInvoked ?? false,
                 stateExpected: false,
@@ -409,6 +505,7 @@ async function runCase(
                     && answer.status === goldenCase.expectedStatus
                     && (answer.status !== 'answered' || (trace.citationValidation === 'passed' && trace.qualityJudgeInvoked)),
                 latencyMs: called.latencyMs,
+                providerReplayUsed,
             }];
         } else {
             const executed = await executeSequentialLiveTurns({
@@ -419,6 +516,7 @@ async function runCase(
                 validateAnsweredCitations: current => liveCitationsResolve(
                     citationSnapshot(current), corpusVersion, artifacts,
                 ),
+                providerReplayBudget,
             });
             requestCount = executed.requestCount;
             turns = executed.turns;
@@ -448,6 +546,7 @@ async function runCase(
     const activeVersions = [...new Set(citations.map(citation => citation.corpusVersion))];
     const activeCorpusVersion = activeVersions.length === 1 ? activeVersions[0]! : null;
     const validation = validateResult(goldenCase, finalAnswer, citations, corpusVersion, artifacts);
+    const turnFailureSubtype = turns.find(turn => !turn.passed)?.failureSubtype ?? null;
     return {
         id: goldenCase.id,
         requestCount,
@@ -463,7 +562,7 @@ async function runCase(
         latencyMs: Math.max(0, Date.now() - startedAt),
         errorClass: validation.passed && turns.length > 0 && turns.every(turn => turn.passed)
             ? null
-            : validation.errorClass ?? 'turn_validation_failure',
+            : turnFailureSubtype ?? validation.errorClass ?? 'schema_outcome_contract_failure',
         turns,
     };
 }
@@ -505,11 +604,20 @@ async function main(): Promise<void> {
     await credential.getAccessToken();
     const app = initializeApp({ credential, projectId: LOCKED_PROJECT }, `noor-live-verify-${Date.now()}`);
     const results: LiveCaseResult[] = [];
+    const providerReplayBudget: LiveProviderReplayBudget = { availabilityFailures: 0 };
     try {
         const readTrace = createLiveTraceReader(getFirestore(app));
         const paceRequest = createLiveRequestPacer();
         for (const id of LIVE_CASE_IDS) {
-            results.push(await runCase(caseById(manifest, id), credentials, version, artifacts, paceRequest, readTrace));
+            results.push(await runCase(
+                caseById(manifest, id),
+                credentials,
+                version,
+                artifacts,
+                paceRequest,
+                readTrace,
+                providerReplayBudget,
+            ));
         }
     } finally {
         await deleteApp(app);

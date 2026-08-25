@@ -1,4 +1,5 @@
 import * as assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 import type { NoorRuntimeConfig } from '../../src/noor-rag/config';
@@ -11,12 +12,32 @@ import {
     type ValidatedConversationState,
 } from '../../src/noor-rag/queryRewrite';
 import * as retrievalModule from '../../src/noor-rag/retrieval';
+import { buildSynthesisCoverageRequirement } from '../../src/noor-rag/synthesisCoverage';
 import type { RetrievalRepository, StoredDocument } from '../../src/noor-rag/retrieval';
 import type { NoorAnswer, NoorChatRequest, NoorSource, RetrievedEvidence, TafsirChunk, TafsirUnit } from '../../src/noor-rag/types';
 
 const VERSION = '2026-08-10-v1';
 const REQUEST_ID = '70000000-0000-4000-8000-000000000001';
 const SOURCES: readonly NoorSource[] = ['ibn_kathir_en_abridged', 'al_sadi_ar'];
+const QUALITY_PASS = JSON.stringify({
+    grounded: true,
+    answersQuestion: true,
+    preservesMaterialQualifications: true,
+    materiallyMisleading: false,
+    clear: true,
+    citationConsistent: true,
+});
+
+class SequenceProvider implements GenerationProvider {
+    readonly requests: Array<Parameters<GenerationProvider['generate']>[0]> = [];
+    constructor(private readonly results: string[]) {}
+    async generate(input: Parameters<GenerationProvider['generate']>[0]): Promise<string> {
+        this.requests.push(input);
+        const result = this.results.shift();
+        if (result === undefined) throw new Error('fixture exhausted');
+        return result;
+    }
+}
 
 interface QuranSurahEntity {
     entityType: 'surah';
@@ -77,6 +98,25 @@ function chunk(source: NoorSource, surah: number, verse: number, suffix = ''): T
 
 function evidence(source: NoorSource, surah: number, verse: number, index = 1): RetrievedEvidence {
     return { kind: 'exact', promptSourceId: `S${index}`, chunk: chunk(source, surah, verse) };
+}
+
+function rangedEvidence(
+    source: NoorSource,
+    surah: number,
+    verseStart: number,
+    verseEnd: number,
+    index: number,
+): RetrievedEvidence {
+    const item = evidence(source, surah, verseStart, index);
+    return {
+        ...item,
+        chunk: {
+            ...item.chunk,
+            chunkId: `${item.chunk.chunkId}-${verseEnd}`,
+            canonicalUnitId: `${item.chunk.canonicalUnitId}-${verseEnd}`,
+            verseEnd,
+        },
+    };
 }
 
 function answered(requestId: string, item: RetrievedEvidence): NoorAnswer {
@@ -344,7 +384,214 @@ describe('Noor synthesis generation contract', () => {
         assert.match(prompt, /<taskType>entity_summary<\/taskType>/);
         assert.match(prompt, /same entity or topic.*not.*fulfill/iu);
         assert.match(prompt, /one narrow property.*not.*summary/iu);
-        assert.match(prompt, /individual \[S#\].*immediately after.*summary point/iu);
+        assert.match(prompt, /\[S#\].*immediately after.*summary point/iu);
+        assert.match(prompt, /grouped marker.*same summary point/iu);
+        assert.match(prompt, /every non-empty paragraph.*citation marker/iu);
+        assert.match(prompt, /do not emit.*uncited.*introduct/iu);
+    });
+
+    it('derives an overlap-aware short-entity requirement from achievable selected evidence', () => {
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 114, 1, 6, 1),
+            rangedEvidence('al_sadi_ar', 114, 2, 5, 2),
+            rangedEvidence('ibn_kathir_en_abridged', 114, 6, 6, 3),
+            rangedEvidence('al_sadi_ar', 114, 1, 1, 4),
+        ];
+        const prompt = buildGroundedPrompt(
+            request('Summarize Surah Al-Nas.'),
+            selected,
+            50_000,
+            taskPlan('Summarize Surah Al-Nas.'),
+        ).prompt;
+
+        assert.match(prompt, /<synthesisCoverageRequirement>/u);
+        assert.match(prompt, /<minimumSubstantiveCitationUnits>2<\/minimumSubstantiveCitationUnits>/u);
+        assert.match(prompt, /<minimumSubstantiveSummaryPoints>2<\/minimumSubstantiveSummaryPoints>/u);
+        assert.match(prompt, /<minimumCoveredRegions>1<\/minimumCoveredRegions>/u);
+        assert.match(prompt, /<minimumCoveredVerses>5<\/minimumCoveredVerses>/u);
+        assert.match(prompt, /<availableCanonicalEvidenceUnits>4<\/availableCanonicalEvidenceUnits>/u);
+        assert.match(prompt, /<availableCoveredRegions>1<\/availableCoveredRegions>/u);
+        assert.match(prompt, /<coveredEntityVerses>6<\/coveredEntityVerses>/u);
+        assert.match(prompt, /<coveredRegion id="R1" verseStart="1" verseEnd="6" evidenceIds="S1,S2,S3,S4"\/>/u);
+    });
+
+    it('does not mistake adjacent large-entity intervals for overlapping capacity', () => {
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 2, 1, 100, 1),
+            rangedEvidence('al_sadi_ar', 2, 101, 200, 2),
+            rangedEvidence('ibn_kathir_en_abridged', 2, 201, 286, 3),
+        ];
+        const prompt = buildGroundedPrompt(
+            request('What are the main themes of Surah Al-Baqarah?'),
+            selected,
+            50_000,
+            taskPlan('What are the main themes of Surah Al-Baqarah?'),
+        ).prompt;
+
+        assert.match(prompt, /<minimumSubstantiveCitationUnits>3<\/minimumSubstantiveCitationUnits>/u);
+        assert.match(prompt, /<minimumSubstantiveSummaryPoints>3<\/minimumSubstantiveSummaryPoints>/u);
+        assert.match(prompt, /<minimumCoveredRegions>3<\/minimumCoveredRegions>/u);
+        assert.match(prompt, /<overlapVerseCount>0<\/overlapVerseCount>/u);
+    });
+
+    it('bounds short-entity summary points by genuinely distinct conceptual support', () => {
+        const duplicateText = 'The same complete entity explanation repeated in both selected units.';
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 114, 1, 6, 1),
+            rangedEvidence('al_sadi_ar', 114, 1, 6, 2),
+        ].map(item => ({
+            ...item,
+            chunk: { ...item.chunk, originalText: duplicateText, retrievalText: duplicateText },
+        }));
+        const prompt = buildGroundedPrompt(
+            request('Summarize Surah Al-Nas.'),
+            selected,
+            50_000,
+            taskPlan('Summarize Surah Al-Nas.'),
+        ).prompt;
+
+        assert.match(prompt, /<availableConceptClusters>1<\/availableConceptClusters>/u);
+        assert.match(prompt, /<minimumSubstantiveCitationUnits>1<\/minimumSubstantiveCitationUnits>/u);
+        assert.match(prompt, /<minimumSubstantiveSummaryPoints>1<\/minimumSubstantiveSummaryPoints>/u);
+    });
+
+    it('keeps the clean compiled deployment artifact in parity with the adaptive coverage source', () => {
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 114, 1, 6, 1),
+            rangedEvidence('al_sadi_ar', 114, 2, 5, 2),
+            rangedEvidence('ibn_kathir_en_abridged', 114, 6, 6, 3),
+            rangedEvidence('al_sadi_ar', 114, 1, 1, 4),
+        ];
+        const entity = taskPlan('Summarize Surah Al-Nas.').entity;
+        assert.ok(entity);
+        const compiled = require(resolve(process.cwd(), 'lib/noor-rag/synthesisCoverage.js')) as {
+            buildSynthesisCoverageRequirement: typeof buildSynthesisCoverageRequirement;
+        };
+
+        assert.deepEqual(
+            compiled.buildSynthesisCoverageRequirement(entity, selected),
+            buildSynthesisCoverageRequirement(entity, selected),
+        );
+    });
+
+    it('accepts two substantive supports when overlapping evidence covers the complete short entity', async () => {
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 114, 1, 6, 1),
+            rangedEvidence('al_sadi_ar', 114, 2, 5, 2),
+            rangedEvidence('ibn_kathir_en_abridged', 114, 6, 6, 3),
+            rangedEvidence('al_sadi_ar', 114, 1, 1, 4),
+        ];
+        const provider = new SequenceProvider([
+            JSON.stringify({
+                answer: 'The passage teaches seeking refuge in Allah from evil. [S1] It identifies stealthy whispering as a danger to people. [S2]',
+                citationIds: ['S1', 'S2'],
+            }),
+            QUALITY_PASS,
+        ]);
+
+        const response = await generateGroundedAnswer({
+            request: request('Summarize Surah Al-Nas.'),
+            evidence: selected,
+            maxEvidenceCharacters: 50_000,
+            provider,
+            taskPlan: taskPlan('Summarize Surah Al-Nas.'),
+        });
+
+        assert.equal(response.status, 'answered');
+        assert.equal(provider.requests.length, 2);
+        assert.deepEqual(response.citations.map(citation => citation.verseStart), [1, 2]);
+    });
+
+    it('credits structurally equivalent grouped citations without mistaking one group for several summary points', async () => {
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 114, 1, 6, 1),
+            rangedEvidence('al_sadi_ar', 114, 2, 5, 2),
+            rangedEvidence('ibn_kathir_en_abridged', 114, 6, 6, 3),
+            rangedEvidence('al_sadi_ar', 114, 1, 1, 4),
+        ];
+        const provider = new SequenceProvider([
+            JSON.stringify({
+                answer: 'The passage teaches seeking refuge in Allah from evil. [S1, S2] It identifies stealthy whispering as a danger to people. [S1, S2]',
+                citationIds: ['S1', 'S2'],
+            }),
+            QUALITY_PASS,
+        ]);
+
+        const response = await generateGroundedAnswer({
+            request: request('Summarize Surah Al-Nas.'),
+            evidence: selected,
+            maxEvidenceCharacters: 50_000,
+            provider,
+            taskPlan: taskPlan('Summarize Surah Al-Nas.'),
+        });
+
+        assert.equal(response.status, 'answered');
+        assert.equal(provider.requests.length, 2);
+    });
+
+    it('rejects narrow endpoint citations that game an overlap-collapsed short-entity region', async () => {
+        const selected = [
+            rangedEvidence('ibn_kathir_en_abridged', 114, 1, 6, 1),
+            rangedEvidence('al_sadi_ar', 114, 2, 5, 2),
+            rangedEvidence('ibn_kathir_en_abridged', 114, 6, 6, 3),
+            rangedEvidence('al_sadi_ar', 114, 1, 1, 4),
+        ];
+        const endpointOnly = JSON.stringify({
+            answer: 'One point cites only the final endpoint. [S3] Another point cites only the opening endpoint. [S4]',
+            citationIds: ['S3', 'S4'],
+        });
+        const provider = new SequenceProvider([endpointOnly, QUALITY_PASS, endpointOnly, QUALITY_PASS]);
+
+        const response = await generateGroundedAnswer({
+            request: request('Summarize Surah Al-Nas.'),
+            evidence: selected,
+            maxEvidenceCharacters: 50_000,
+            provider,
+            taskPlan: taskPlan('Summarize Surah Al-Nas.'),
+        });
+
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.deepEqual(response.citations, []);
+    });
+
+    it('applies the same distributed synthesis contract across representative long entities', async () => {
+        const cases = [
+            ['What are the main themes of Surah Al-Baqarah?', 2, [1, 140, 280]],
+            ['Give me an overview of Surah Yusuf.', 12, [1, 55, 110]],
+            ['What is Surah Maryam about?', 19, [1, 49, 98]],
+            ['Give me an overview of Surah Al-Kahf.', 18, [1, 55, 110]],
+            ['Summarize Surah Al-Mulk.', 67, [1, 15, 30]],
+        ] as const;
+
+        for (const [question, surah, verses] of cases) {
+            const selected = verses.map((verse, index) => evidence(
+                index % 2 === 0 ? 'ibn_kathir_en_abridged' : 'al_sadi_ar',
+                surah,
+                verse,
+                index + 1,
+            ));
+            const provider = new SequenceProvider([
+                JSON.stringify({
+                    answer: 'An opening region supports the first summary point. [S1] A middle region supports the second point. [S2] A later region supports the third point. [S3]',
+                    citationIds: ['S1', 'S2', 'S3'],
+                }),
+                QUALITY_PASS,
+            ]);
+
+            const response = await generateGroundedAnswer({
+                request: request(question),
+                evidence: selected,
+                maxEvidenceCharacters: 50_000,
+                provider,
+                taskPlan: taskPlan(question),
+            });
+
+            assert.equal(response.status, 'answered', question);
+            assert.equal(provider.requests.length, 2, question);
+            assert.match(provider.requests[0]?.contents ?? '', /<minimumSubstantiveCitationUnits>3<\/minimumSubstantiveCitationUnits>/u, question);
+            assert.match(provider.requests[0]?.contents ?? '', /<minimumSubstantiveSummaryPoints>3<\/minimumSubstantiveSummaryPoints>/u, question);
+            assert.match(provider.requests[0]?.contents ?? '', /<minimumCoveredRegions>3<\/minimumCoveredRegions>/u, question);
+        }
     });
 
     it('strengthens the generic quality rubric for task fulfillment without adding a model call', async () => {
@@ -450,7 +697,33 @@ describe('Noor synthesis generation contract', () => {
         assert.equal(response.status, 'answered');
         assert.equal(calls.length, 4);
         assert.match(calls[2]!, /multiple distinct sections/iu);
+        const initialRequirement = calls[0]!.match(/<synthesisCoverageRequirement>[\s\S]*?<\/synthesisCoverageRequirement>/u)?.[0];
+        const correctionRequirement = calls[2]!.match(/<synthesisCoverageRequirement>[\s\S]*?<\/synthesisCoverageRequirement>/u)?.[0];
+        assert.ok(initialRequirement);
+        assert.equal(correctionRequirement, initialRequirement);
         assert.deepEqual(response.citations.map(citation => citation.verseStart), [1, 100, 200]);
+    });
+
+    it('rejects a Yusuf overview supported only by a local prison-region cluster', async () => {
+        const selected = [16, 26, 50, 52, 67, 83, 100].map((verse, index) => (
+            evidence(index % 2 === 0 ? 'ibn_kathir_en_abridged' : 'al_sadi_ar', 12, verse, index + 1)
+        ));
+        const prisonOnly = JSON.stringify({
+            answer: 'The overview is reduced to one local prison episode. [S3] Another detail stays in that same local episode. [S4]',
+            citationIds: ['S3', 'S4'],
+        });
+        const provider = new SequenceProvider([prisonOnly, QUALITY_PASS, prisonOnly, QUALITY_PASS]);
+
+        const response = await generateGroundedAnswer({
+            request: request('Give me an overview of Surah Yusuf.'),
+            evidence: selected,
+            maxEvidenceCharacters: 50_000,
+            provider,
+            taskPlan: taskPlan('Give me an overview of Surah Yusuf.'),
+        });
+
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.deepEqual(response.citations, []);
     });
 
     it('fails closed when a one-theme answer pads its citation list with unrelated sections', async () => {
@@ -477,6 +750,36 @@ describe('Noor synthesis generation contract', () => {
                 return output;
             },
         };
+
+        const response = await generateGroundedAnswer({
+            request: request('What are the main themes of Surah Al-Baqarah?'),
+            evidence: selected,
+            maxEvidenceCharacters: 50_000,
+            provider,
+            taskPlan: taskPlan('What are the main themes of Surah Al-Baqarah?'),
+        });
+
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.deepEqual(response.citations, []);
+    });
+
+    it('fails closed when one substantive point groups unrelated long-entity regions', async () => {
+        const selected = [1, 50, 100, 150, 200, 250].map((verse, index) => (
+            evidence(index % 2 === 0 ? 'ibn_kathir_en_abridged' : 'al_sadi_ar', 2, verse, index + 1)
+        ));
+        const qualityPass = JSON.stringify({
+            grounded: true,
+            answersQuestion: true,
+            preservesMaterialQualifications: true,
+            materiallyMisleading: false,
+            clear: true,
+            citationConsistent: true,
+        });
+        const groupedPadding = JSON.stringify({
+            answer: 'One narrow virtue is presented as the whole summary. [S1, S3, S5]',
+            citationIds: ['S1', 'S3', 'S5'],
+        });
+        const provider = new SequenceProvider([groupedPadding, qualityPass, groupedPadding, qualityPass]);
 
         const response = await generateGroundedAnswer({
             request: request('What are the main themes of Surah Al-Baqarah?'),

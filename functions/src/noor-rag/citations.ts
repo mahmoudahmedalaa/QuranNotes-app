@@ -4,6 +4,8 @@ import type { RetrievedEvidence } from './types';
 const MAX_ANSWER_CHARACTERS = 8000;
 const CITATION_MARKER = /\[S\d+(?:\s*,\s*S\d+)*\]/g;
 const PARAGRAPH_CITATION_MARKER = /\[S\d+(?:\s*,\s*S\d+)*\]/;
+const COMPLETE_CITATION_MARKER = /^\[S\d+(?:\s*,\s*S\d+)*\]$/;
+const CITATION_LIKE_BRACKET = /\[[^\]\n]{1,64}\]/g;
 const SOURCE_ID = /^S[1-9]\d*$/;
 
 export interface ValidatedGeneratedAnswer {
@@ -24,6 +26,10 @@ export type GeneratedAnswerValidationFailure = Readonly<
     | { phase: 'structural_validation'; errorClass: 'answer_validation_failure'; citationSubtype: null }
     | { phase: 'citation_validation'; errorClass: 'citation_validation_failure'; citationSubtype: CitationValidationFailureSubtype }
 >;
+
+export interface GeneratedAnswerValidationOptions {
+    requireInlineCitations?: boolean;
+}
 
 function invalidGeneratedAnswer(): never {
     throw new Error('Invalid generated answer');
@@ -50,6 +56,7 @@ function citationFor(evidence: RetrievedEvidence): NoorCitation {
 export function diagnoseGeneratedAnswer(
     value: unknown,
     evidence: readonly RetrievedEvidence[],
+    options: GeneratedAnswerValidationOptions = {},
 ): GeneratedAnswerValidationFailure | null {
     const keys = isRecord(value) ? Object.keys(value).sort().join('|') : '';
     if (!isRecord(value)
@@ -93,6 +100,13 @@ export function diagnoseGeneratedAnswer(
     }
 
     const markers = value.answer.match(CITATION_MARKER) ?? [];
+    const citationLikeBrackets = value.answer.match(CITATION_LIKE_BRACKET) ?? [];
+    if (citationLikeBrackets.some(marker => /S\s*\d/iu.test(marker) && !COMPLETE_CITATION_MARKER.test(marker))) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'malformed_citation' };
+    }
+    if (options.requireInlineCitations === true && markers.length === 0) {
+        return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'missing_required_citation' };
+    }
     const usedIds = markers.flatMap(marker => marker
         .slice(1, -1)
         .split(',')
@@ -120,8 +134,12 @@ export function diagnoseGeneratedAnswer(
     return null;
 }
 
-export function validateGeneratedAnswer(value: unknown, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
-    if (diagnoseGeneratedAnswer(value, evidence) !== null) return invalidGeneratedAnswer();
+export function validateGeneratedAnswer(
+    value: unknown,
+    evidence: readonly RetrievedEvidence[],
+    options: GeneratedAnswerValidationOptions = {},
+): ValidatedGeneratedAnswer {
+    if (diagnoseGeneratedAnswer(value, evidence, options) !== null) return invalidGeneratedAnswer();
 
     const generated = value as { status?: 'answered' | 'insufficient_evidence'; answer: string; citationIds: string[] };
     const citationIds = generated.citationIds;
@@ -135,12 +153,16 @@ export function validateGeneratedAnswer(value: unknown, evidence: readonly Retri
     };
 }
 
-export function parseAndValidateGeneratedAnswer(text: string, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
+export function parseAndValidateGeneratedAnswer(
+    text: string,
+    evidence: readonly RetrievedEvidence[],
+    options: GeneratedAnswerValidationOptions = {},
+): ValidatedGeneratedAnswer {
     let value: unknown;
     try {
         value = JSON.parse(text) as unknown;
     } catch {
         return invalidGeneratedAnswer();
     }
-    return validateGeneratedAnswer(value, evidence);
+    return validateGeneratedAnswer(value, evidence, options);
 }

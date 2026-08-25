@@ -12,6 +12,12 @@ import { classifyRequestPolicy } from './policy';
 import { CANONICAL_INSUFFICIENT_EVIDENCE, containsAbstentionLanguage } from './outcome';
 import type { RetrievedEvidence } from './types';
 import type { ChatQueryPlan } from './queryRewrite';
+import {
+    buildSynthesisCoverageRequirement,
+    synthesisCoveragePassed,
+    synthesisCoverageRequirementXml,
+    type SynthesisCoverageRequirement,
+} from './synthesisCoverage';
 
 export const GENERATION_MODEL = 'gemini-3.5-flash-lite' as const;
 export const VERTEX_GENERATION_LOCATION = 'global' as const;
@@ -98,19 +104,29 @@ export function getGenerationDiagnostics(value: unknown): GenerationDiagnostics 
     return GENERATION_DIAGNOSTICS.get(value) ?? null;
 }
 
-function responseSchema(evidence: readonly RetrievedEvidence[]): Readonly<Record<string, unknown>> {
+function responseSchema(
+    evidence: readonly RetrievedEvidence[],
+    taskPlan?: ChatQueryPlan,
+): Readonly<Record<string, unknown>> {
     const allowedCitationIds = evidence.map(item => item.promptSourceId);
+    const synthesis = taskPlan?.retrievalTask === 'entity_summary' && taskPlan.entity !== null;
     return {
         type: 'object',
         additionalProperties: false,
         required: ['status', 'answer', 'citationIds'],
         properties: {
             status: { type: 'string', enum: ['answered', 'insufficient_evidence'] },
-            answer: { type: 'string' },
+            answer: {
+                type: 'string',
+                description: synthesis
+                    ? 'A grounded synthesis in which every non-empty paragraph contains inline [S#] or [S#, S#] markers and no uncited standalone heading or lead-in.'
+                    : 'A grounded answer using only the selected evidence.',
+            },
             citationIds: {
                 type: 'array',
                 minItems: 0,
                 maxItems: allowedCitationIds.length,
+                description: 'The unique selected evidence IDs used by the answer. When inline markers appear, this array must exactly equal their unique IDs.',
                 items: { type: 'string', enum: allowedCitationIds },
             },
         },
@@ -180,7 +196,10 @@ function boundedEvidence(evidence: readonly RetrievedEvidence[], maximumCharacte
     return selected;
 }
 
-function taskInstructions(taskPlan?: ChatQueryPlan): string {
+function taskInstructions(
+    taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
+): string {
     if (taskPlan?.retrievalTask === 'multi_entity_comparison') {
         const entities = taskPlan.entitySet
             .map(entity => `<entity><id>${escapeXml(entity.id)}</id><label>${escapeXml(entity.label)}</label></entity>`)
@@ -198,12 +217,20 @@ function taskInstructions(taskPlan?: ChatQueryPlan): string {
         `<entity><type>surah</type><number>${taskPlan.entity.surahNumber}</number><canonicalName>${escapeXml(taskPlan.entity.canonicalName)}</canonicalName></entity>`,
         'Synthesize representative evidence from across the requested entity. Being about the same entity or topic does not by itself fulfill a synthesis task.',
         'One narrow property or one local passage is not an entity-wide summary. Include only themes or summary points supported by the selected evidence and use citations from multiple distinct entity sections.',
-        'For an entity summary, place an individual [S#] citation marker immediately after every substantive summary point; do not group several citation IDs into one marker.',
+        'For an entity summary, place a [S#] citation marker immediately after every substantive summary point. A grouped marker such as [S1, S2] is allowed only when every listed source supports that same summary point.',
+        'Every non-empty paragraph must contain at least one inline citation marker. Do not emit an uncited standalone heading, title, introduction, label, or lead-in; combine introductory wording with cited supported content.',
+        'The citationIds array must exactly equal the unique inline citation marker IDs and may contain only selected evidence IDs.',
+        coverageRequirement === null || coverageRequirement === undefined
+            ? ''
+            : synthesisCoverageRequirementXml(coverageRequirement),
     ].join('\n');
 }
 
-function systemInstructions(taskPlan?: ChatQueryPlan): string {
-    return [BASE_SYSTEM_INSTRUCTIONS.join('\n'), taskInstructions(taskPlan)].filter(Boolean).join('\n');
+function systemInstructions(
+    taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
+): string {
+    return [BASE_SYSTEM_INSTRUCTIONS.join('\n'), taskInstructions(taskPlan, coverageRequirement)].filter(Boolean).join('\n');
 }
 
 function evidenceBlocks(evidence: readonly RetrievedEvidence[]): string {
@@ -236,9 +263,12 @@ export function buildGroundedPrompt(
     taskPlan?: ChatQueryPlan,
 ): GroundedPrompt {
     const selected = boundedEvidence(evidence, maxEvidenceCharacters);
+    const coverageRequirement = taskPlan?.retrievalTask === 'entity_summary' && taskPlan.entity !== null
+        ? buildSynthesisCoverageRequirement(taskPlan.entity, selected)
+        : null;
     return {
         evidence: selected,
-        prompt: `${systemInstructions(taskPlan)}\n<evidence>${evidenceBlocks(selected)}</evidence>\n${requestData(request)}`,
+        prompt: `${systemInstructions(taskPlan, coverageRequirement)}\n<evidence>${evidenceBlocks(selected)}</evidence>\n${requestData(request)}`,
     };
 }
 
@@ -247,9 +277,10 @@ function correctivePrompt(
     evidence: readonly RetrievedEvidence[],
     critique: string,
     taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
 ): string {
     return [
-        systemInstructions(taskPlan),
+        systemInstructions(taskPlan, coverageRequirement),
         'Rewrite the answer exactly once using the same question, conversation context, and evidence. Address only the generic quality critique below. Do not add outside facts or alter the evidence.',
         `<qualityCritique>${escapeXml(critique)}</qualityCritique>`,
         `<evidence>${evidenceBlocks(evidence)}</evidence>`,
@@ -266,8 +297,8 @@ function generationRetryPrompt(
         const allowedIds = evidence.map(item => item.promptSourceId).join(', ');
         const subtypeCorrection: Record<CitationValidationFailureSubtype, string> = {
             unknown_citation_id: 'Replace every unknown citation ID with an identifier from the allowed list.',
-            malformed_citation: 'Use citation identifiers exactly in the S<number> format shown in the allowed list.',
-            missing_required_citation: 'Include at least one supporting citation ID. If inline markers are used, cite every substantive paragraph and include every marker in citationIds.',
+            malformed_citation: 'Use citation identifiers exactly in the S<number> format shown in the allowed list. Every non-empty answer paragraph must contain a valid inline [S#] or [S#, S#] marker, with no spaces between S and its number.',
+            missing_required_citation: 'Include at least one supporting citation ID. Every non-empty answer paragraph must contain an inline [S#] or [S#, S#] marker. Do not emit an uncited standalone heading, title, introduction, label, or lead-in. Make citationIds exactly equal the unique inline marker IDs.',
             unused_citation: 'Make citationIds and any inline citation markers name the same supporting evidence; remove unused IDs.',
             duplicate_citation: 'List each citation identifier at most once; remove duplicate citation IDs.',
         };
@@ -291,6 +322,7 @@ function answerQualityPrompt(
     evidence: readonly RetrievedEvidence[],
     answer: ValidatedGeneratedAnswer,
     taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
 ): string {
     const citationIds = answer.citationIds.map(id => `<citationId>${escapeXml(id)}</citationId>`).join('');
     return [
@@ -305,7 +337,7 @@ function answerQualityPrompt(
         'Set clear true only when technical or source wording is explained sufficiently for a normal user.',
         'Set citationConsistent true only when claims and citations correspond to the selected evidence.',
         'Return only the required JSON booleans. Do not state or infer the correct religious answer.',
-        taskInstructions(taskPlan),
+        taskInstructions(taskPlan, coverageRequirement),
         `<evidence>${evidenceBlocks(evidence)}</evidence>`,
         requestData(request),
         `<candidate><generatedAnswer>${escapeXml(answer.answer)}</generatedAnswer><citations>${citationIds}</citations></candidate>`,
@@ -376,7 +408,11 @@ class GeneratedOutputError extends Error {
     }
 }
 
-function parseGeneratedOutput(text: string, evidence: readonly RetrievedEvidence[]): ValidatedGeneratedAnswer {
+function parseGeneratedOutput(
+    text: string,
+    evidence: readonly RetrievedEvidence[],
+    requireInlineCitations: boolean,
+): ValidatedGeneratedAnswer {
     let value: unknown;
     try {
         value = JSON.parse(text) as unknown;
@@ -387,9 +423,9 @@ function parseGeneratedOutput(text: string, evidence: readonly RetrievedEvidence
             citationSubtype: null,
         });
     }
-    const failure = diagnoseGeneratedAnswer(value, evidence);
+    const failure = diagnoseGeneratedAnswer(value, evidence, { requireInlineCitations });
     if (failure !== null) throw new GeneratedOutputError(failure);
-    return validateGeneratedAnswer(value, evidence);
+    return validateGeneratedAnswer(value, evidence, { requireInlineCitations });
 }
 
 function parseAnswerQualityJudgement(text: string): AnswerQualityJudgement {
@@ -436,33 +472,12 @@ function synthesisCitationCoveragePassed(
     answer: ValidatedGeneratedAnswer,
     evidence: readonly RetrievedEvidence[],
     taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
 ): boolean {
     if (taskPlan?.retrievalTask !== 'entity_summary' || taskPlan.entity === null) return true;
-    const evidenceById = new Map(evidence.map(item => [item.promptSourceId, item]));
-    const substantivelyCited: RetrievedEvidence[] = [];
-    const marker = /\[(S[1-9][0-9]*)\]/gu;
-    let previousMarkerEnd = 0;
-    for (const match of answer.answer.matchAll(marker)) {
-        const segment = answer.answer.slice(previousMarkerEnd, match.index)
-            .normalize('NFKC')
-            .replace(/[^\p{L}\p{N}'-]+/gu, ' ')
-            .trim()
-            .split(/\s+/u)
-            .filter(token => token.length >= 2);
-        const item = evidenceById.get(match[1]!);
-        if (item && segment.length >= 3) substantivelyCited.push(item);
-        previousMarkerEnd = (match.index ?? 0) + match[0].length;
-    }
-    const availableUnits = new Set(evidence.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`)).size;
-    const citedUnits = new Set(substantivelyCited.map(item => `${item.chunk.source}:${item.chunk.canonicalUnitId}`)).size;
-    const sectionFor = (item: RetrievedEvidence): number => Math.min(
-        5,
-        Math.floor((item.chunk.verseStart - 1) * 6 / taskPlan.entity!.verseCount),
-    );
-    const availableSections = new Set(evidence.map(sectionFor)).size;
-    const citedSections = new Set(substantivelyCited.map(sectionFor)).size;
-    return citedUnits >= Math.min(3, availableUnits)
-        && citedSections >= Math.min(3, availableSections);
+    const requirement = coverageRequirement
+        ?? buildSynthesisCoverageRequirement(taskPlan.entity, evidence);
+    return synthesisCoveragePassed(answer.answer, evidence, requirement);
 }
 
 function enforceDeterministicTaskFulfillment(
@@ -470,8 +485,9 @@ function enforceDeterministicTaskFulfillment(
     answer: ValidatedGeneratedAnswer,
     evidence: readonly RetrievedEvidence[],
     taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
 ): AnswerQualityJudgement {
-    return synthesisCitationCoveragePassed(answer, evidence, taskPlan)
+    return synthesisCitationCoveragePassed(answer, evidence, taskPlan, coverageRequirement)
         ? judgement
         : { ...judgement, answersQuestion: false };
 }
@@ -481,6 +497,7 @@ function genericQualityCritique(
     answer: ValidatedGeneratedAnswer,
     evidence: readonly RetrievedEvidence[],
     taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
 ): string {
     const findings: string[] = [];
     if (!judgement.grounded) findings.push('The answer includes substantive claims not supported by the supplied evidence.');
@@ -491,8 +508,8 @@ function genericQualityCritique(
     if (judgement.materiallyMisleading) findings.push('The wording could mislead the user in normal language.');
     if (!judgement.clear) findings.push('Technical or source wording is not explained clearly enough for a normal user.');
     if (!judgement.citationConsistent) findings.push('The claims and citations do not correspond to the selected evidence.');
-    if (!synthesisCitationCoveragePassed(answer, evidence, taskPlan)) {
-        findings.push('An entity-wide synthesis must use supporting citations from multiple distinct sections and canonical units.');
+    if (!synthesisCitationCoveragePassed(answer, evidence, taskPlan, coverageRequirement)) {
+        findings.push('The entity-wide synthesis does not satisfy the supplied synthesisCoverageRequirement for substantive summary points, citation units, and multiple distinct sections or covered regions.');
     }
     return findings.join(' ');
 }
@@ -558,7 +575,11 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
     if (built.evidence.length === 0) {
         return fixedAnswer(input.request.requestId, 'insufficient_evidence', INSUFFICIENT_EVIDENCE);
     }
-    const schema = responseSchema(built.evidence);
+    const coverageRequirement = input.taskPlan?.retrievalTask === 'entity_summary' && input.taskPlan.entity !== null
+        ? buildSynthesisCoverageRequirement(input.taskPlan.entity, built.evidence)
+        : null;
+    const requireInlineCitations = coverageRequirement !== null;
+    const schema = responseSchema(built.evidence, input.taskPlan);
     let request = providerRequest(built.prompt, schema);
     let providerCalls = 0;
     const diagnostics = initialDiagnostics();
@@ -583,7 +604,7 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
                 finalDiagnostics(diagnostics, errorClass));
         }
         try {
-            initialAnswer = parseGeneratedOutput(text, built.evidence);
+            initialAnswer = parseGeneratedOutput(text, built.evidence, requireInlineCitations);
             diagnostics.structuralValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
             diagnostics.citationValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
             break;
@@ -627,10 +648,10 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         diagnostics.attempts = providerCalls;
         diagnostics.qualityJudgeInvoked = true;
         initialJudgement = enforceDeterministicTaskFulfillment(parseAnswerQualityJudgement(await input.provider.generate(providerRequest(
-            answerQualityPrompt(input.request, built.evidence, initialAnswer, input.taskPlan),
+            answerQualityPrompt(input.request, built.evidence, initialAnswer, input.taskPlan, coverageRequirement),
             ANSWER_QUALITY_SCHEMA,
             QUALITY_MAX_OUTPUT_TOKENS,
-        ))), initialAnswer, built.evidence, input.taskPlan);
+        ))), initialAnswer, built.evidence, input.taskPlan, coverageRequirement);
     } catch (error: unknown) {
         const errorClass = error instanceof Error && error.message === 'answer_quality_judgement_failure'
             ? 'answer_quality_judgement_failure'
@@ -652,10 +673,11 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         const correctedText = await input.provider.generate(providerRequest(correctivePrompt(
             input.request,
             built.evidence,
-            genericQualityCritique(initialJudgement, initialAnswer, built.evidence, input.taskPlan),
+            genericQualityCritique(initialJudgement, initialAnswer, built.evidence, input.taskPlan, coverageRequirement),
             input.taskPlan,
+            coverageRequirement,
         ), schema));
-        correctedAnswer = parseGeneratedOutput(correctedText, built.evidence);
+        correctedAnswer = parseGeneratedOutput(correctedText, built.evidence, requireInlineCitations);
     } catch (error: unknown) {
         diagnostics.generationFailurePhase = 'quality_correction';
         if (error instanceof GeneratedOutputError) {
@@ -682,10 +704,10 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         providerCalls += 1;
         diagnostics.attempts = providerCalls;
         correctedJudgement = enforceDeterministicTaskFulfillment(parseAnswerQualityJudgement(await input.provider.generate(providerRequest(
-            answerQualityPrompt(input.request, built.evidence, correctedAnswer, input.taskPlan),
+            answerQualityPrompt(input.request, built.evidence, correctedAnswer, input.taskPlan, coverageRequirement),
             ANSWER_QUALITY_SCHEMA,
             QUALITY_MAX_OUTPUT_TOKENS,
-        ))), correctedAnswer, built.evidence, input.taskPlan);
+        ))), correctedAnswer, built.evidence, input.taskPlan, coverageRequirement);
     } catch (error: unknown) {
         const errorClass = error instanceof Error && error.message === 'answer_quality_judgement_failure'
             ? 'answer_quality_judgement_failure'

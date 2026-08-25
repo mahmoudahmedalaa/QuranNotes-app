@@ -40,6 +40,8 @@ interface SequentialRunnerInput {
     call(request: NoorRequest): Promise<{ answer: NoorAnswer; latencyMs: number }>;
     readTrace(requestId: string): Promise<unknown>;
     validateAnsweredCitations(answer: NoorAnswer): boolean;
+    providerReplayBudget?: { availabilityFailures: number };
+    sleep?: (milliseconds: number) => Promise<void>;
 }
 
 type SequentialRunner = (input: SequentialRunnerInput) => Promise<{
@@ -49,6 +51,7 @@ type SequentialRunner = (input: SequentialRunnerInput) => Promise<{
         turnNumber: number;
         requestId: string;
         responseStatus: NoorAnswer['status'];
+        failureSubtype: string | null;
         citationValidation: string;
         qualityJudgeInvoked: boolean;
         stateExpected: boolean;
@@ -56,6 +59,7 @@ type SequentialRunner = (input: SequentialRunnerInput) => Promise<{
         contextSelected: boolean;
         contextualQueryProduced: boolean;
         passed: boolean;
+        providerReplayUsed: boolean;
     }>;
 }>;
 
@@ -73,9 +77,12 @@ const ANSWERED = (requestId: string): NoorAnswer => ({
 function answeredTrace(requestId: string, followUp: boolean): object {
     return {
         requestId,
+        generationStatus: 'answered',
         generationFailurePhase: 'none',
+        finalGenerationErrorClass: null,
         citationValidation: 'passed',
         qualityJudgeInvoked: true,
+        answerabilityReason: 'sufficient',
         statePersistence: 'persisted',
         stateFingerprint: 'a'.repeat(64),
         conversationState: followUp ? 'validated_subject_and_evidence' : 'none',
@@ -167,7 +174,9 @@ describe('Noor authenticated live verifier', () => {
             },
             readTrace: async requestId => ({
                 ...answeredTrace(requestId, false),
+                generationStatus: 'temporarily_unavailable',
                 generationFailurePhase: 'citation_validation',
+                finalGenerationErrorClass: 'citation_validation_failure',
                 citationValidation: 'failed',
                 qualityJudgeInvoked: false,
                 statePersistence: 'not_persisted',
@@ -182,6 +191,93 @@ describe('Noor authenticated live verifier', () => {
         assert.equal(result.turns.length, 1);
         assert.equal(result.turns[0]?.passed, false);
         assert.equal(result.turns[0]?.responseStatus, 'temporarily_unavailable');
+        assert.equal(result.turns[0]?.failureSubtype, 'citation_validation_failure');
+    });
+
+    it('replays one provider availability failure after ten seconds with a fresh request ID', async () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        const runTurns = module.executeSequentialLiveTurns as SequentialRunner;
+        const requests: NoorRequest[] = [];
+        const delays: number[] = [];
+        const traces = new Map<string, object>();
+        const result = await runTurns({
+            questions: ['What does the Quran say about patience?'],
+            expectedFinalStatus: 'answered',
+            providerReplayBudget: { availabilityFailures: 0 },
+            credentials: { endpoint: 'https://example.com', firebaseIdToken: 'token', appCheckToken: 'app-check' },
+            paceRequest: async () => undefined,
+            sleep: async milliseconds => { delays.push(milliseconds); },
+            call: async request => {
+                requests.push(request);
+                const first = requests.length === 1;
+                traces.set(request.requestId, first ? {
+                    ...answeredTrace(request.requestId, false),
+                    generationStatus: 'temporarily_unavailable',
+                    generationFailurePhase: 'provider',
+                    finalGenerationErrorClass: 'provider_transient_failure',
+                    citationValidation: 'not_run',
+                    qualityJudgeInvoked: false,
+                    statePersistence: 'not_persisted',
+                    stateFingerprint: null,
+                } : answeredTrace(request.requestId, false));
+                return {
+                    answer: first
+                        ? { requestId: request.requestId, status: 'temporarily_unavailable', answer: 'safe', citations: [] }
+                        : ANSWERED(request.requestId),
+                    latencyMs: 10,
+                };
+            },
+            readTrace: async requestId => traces.get(requestId) ?? null,
+            validateAnsweredCitations: () => true,
+        });
+
+        assert.equal(result.completed, true);
+        assert.equal(result.requestCount, 2);
+        assert.deepEqual(delays, [10_000]);
+        assert.notEqual(requests[0]?.requestId, requests[1]?.requestId);
+        assert.equal(requests[0]?.mode === 'chat' ? requests[0].question : '', requests[1]?.mode === 'chat' ? requests[1].question : '');
+        assert.equal(result.turns[0]?.providerReplayUsed, true);
+        assert.equal(result.turns[0]?.failureSubtype, null);
+    });
+
+    it('blocks after a replayed provider failure and never performs a third attempt', async () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        const runTurns = module.executeSequentialLiveTurns as SequentialRunner;
+        let calls = 0;
+        const traces = new Map<string, object>();
+        const budget = { availabilityFailures: 0 };
+        const result = await runTurns({
+            questions: ['What does the Quran say about patience?'],
+            expectedFinalStatus: 'answered',
+            providerReplayBudget: budget,
+            credentials: { endpoint: 'https://example.com', firebaseIdToken: 'token', appCheckToken: 'app-check' },
+            paceRequest: async () => undefined,
+            sleep: async () => undefined,
+            call: async request => {
+                calls += 1;
+                traces.set(request.requestId, {
+                    ...answeredTrace(request.requestId, false),
+                    generationStatus: 'temporarily_unavailable',
+                    generationFailurePhase: 'provider',
+                    finalGenerationErrorClass: 'provider_timeout',
+                    citationValidation: 'not_run',
+                    qualityJudgeInvoked: false,
+                    statePersistence: 'not_persisted',
+                    stateFingerprint: null,
+                });
+                return {
+                    answer: { requestId: request.requestId, status: 'temporarily_unavailable', answer: 'safe', citations: [] },
+                    latencyMs: 10,
+                };
+            },
+            readTrace: async requestId => traces.get(requestId) ?? null,
+            validateAnsweredCitations: () => true,
+        });
+
+        assert.equal(result.completed, false);
+        assert.equal(calls, 2);
+        assert.equal(budget.availabilityFailures, 2);
+        assert.equal(result.turns[0]?.failureSubtype, 'provider_timeout');
     });
 
     it('reports and asserts state before sending turn two, then verifies contextual selection', async () => {

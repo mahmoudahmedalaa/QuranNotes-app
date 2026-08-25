@@ -9,11 +9,13 @@ import {
     buildGroundedPrompt,
     createVertexGenerationProvider,
     generateGroundedAnswer,
+    getGenerationDiagnostics,
     type GenerationProvider,
     type VertexGenerationClient,
     type VertexGenerationClientFactory,
     type VertexGenerationRequest,
 } from '../../src/noor-rag/generation';
+import { buildChatQueryPlan } from '../../src/noor-rag/queryRewrite';
 import type { NoorRequest, RetrievedEvidence } from '../../src/noor-rag/types';
 
 const REQUEST_ID = '6ba7b810-9dad-41d1-80b4-00c04fd430c8';
@@ -396,6 +398,39 @@ describe('Noor grounded generation', () => {
         assert.equal(provider.requests.length, 3);
         assert.match(provider.requests[1]?.contents ?? '', /list each citation identifier at most once|remove duplicate citation IDs/i);
         assert.match(provider.requests[1]?.contents ?? '', /only these allowed evidence identifiers:\s*S1, S2/i);
+    });
+
+    it('routes missing and malformed synthesis markers through the bounded citation retry', async () => {
+        const summaryRequest: NoorRequest = {
+            mode: 'chat', requestId: REQUEST_ID, question: 'Summarize Surah Al-Baqarah.', history: [],
+        };
+        const taskPlan = buildChatQueryPlan({ request: summaryRequest, validatedConversationState: null });
+        for (const invalid of [
+            '{"answer":"A grounded summary without an inline marker.","citationIds":["S1"]}',
+            '{"answer":"A grounded summary with malformed marker syntax. [S 1]","citationIds":["S1"]}',
+        ]) {
+            const provider = new SequenceProvider([
+                invalid,
+                '{"answer":"The first supported summary point is grounded. [S1] A second supported point is grounded. [S2]","citationIds":["S1","S2"]}',
+                QUALITY_PASS,
+            ]);
+
+            const answer = await generateGroundedAnswer({
+                request: summaryRequest,
+                evidence: EVIDENCE,
+                maxEvidenceCharacters: 1000,
+                provider,
+                taskPlan,
+            });
+
+            assert.equal(answer.status, 'answered');
+            assert.equal(provider.requests.length, 3);
+            assert.match(provider.requests[1]?.contents ?? '', /every non-empty answer paragraph.*inline/iu);
+            assert.equal(getGenerationDiagnostics(answer)?.generationRetryInvoked, true);
+            assert.ok(['missing_required_citation', 'malformed_citation'].includes(
+                getGenerationDiagnostics(answer)?.citationValidationFailureSubtype ?? '',
+            ));
+        }
     });
 
     it('accepts valid grouped citations on the first attempt without generation retry', async () => {

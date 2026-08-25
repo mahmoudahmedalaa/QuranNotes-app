@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { parseAndValidateGeneratedAnswer, validateGeneratedAnswer } from '../../src/noor-rag/citations';
+import { diagnoseGeneratedAnswer, parseAndValidateGeneratedAnswer, validateGeneratedAnswer } from '../../src/noor-rag/citations';
 import type { RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
 
 function evidence(promptSourceId: string, overrides: Partial<TafsirChunk> = {}): RetrievedEvidence {
@@ -69,5 +69,18 @@ describe('Noor generated citation validation', () => {
         assert.throws(() => validateGeneratedAnswer({ answer: 'Claim. [S1]', citationIds: ['S1', 'S2'] }, EVIDENCE), /invalid generated answer/i);
         assert.throws(() => validateGeneratedAnswer({ answer: 'Claim. [S1]', citationIds: ['S1', 'S1'] }, EVIDENCE), /invalid generated answer/i);
         assert.throws(() => validateGeneratedAnswer({ answer: 'Supported. [S1]\n\nSubstantive uncited claim.', citationIds: ['S1'] }, EVIDENCE), /invalid generated answer/i);
+    });
+
+    it('classifies absent and malformed inline markers when synthesis requires claim-local citations', () => {
+        assert.equal(diagnoseGeneratedAnswer(
+            { answer: 'Grounded synthesis without markers.', citationIds: ['S1'] },
+            EVIDENCE,
+            { requireInlineCitations: true },
+        )?.citationSubtype, 'missing_required_citation');
+        assert.equal(diagnoseGeneratedAnswer(
+            { answer: 'Grounded synthesis with malformed marker. [S 1]', citationIds: ['S1'] },
+            EVIDENCE,
+            { requireInlineCitations: true },
+        )?.citationSubtype, 'malformed_citation');
     });
 });
