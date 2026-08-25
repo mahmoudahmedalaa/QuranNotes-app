@@ -24,10 +24,11 @@ const EXPECTED_BAQARAH_CHUNK = 'c_4bf4f3f0cf5d6a2c2b05debd600e5533150ce9f4aa8540
 const FORBIDDEN_BAQARAH_CHUNK = 'c_0c5c342e9579326bbc457839c78ef9603ecd8c7de87c9c8b26e6a0757503a299_000_12f0dac8ffdc';
 
 interface RetrievalPreflightCase {
-    id: 'Noah' | 'Riba' | 'AlBaqarah' | 'Football';
+    id: 'Noah' | 'Riba' | 'RibaHaram' | 'ArroganceHaram' | 'ArroganceDescription' | 'ArroganceCondemnation' | 'AlBaqarah' | 'Football';
     query: string;
     expectAnswerable: boolean;
     matchesExpectedEvidence(evidence: RetrievedEvidence): boolean;
+    requiresRelevantRetrieval?: boolean;
     forbiddenAnswerableIds?: readonly string[];
 }
 
@@ -37,6 +38,7 @@ interface RetrievalPreflightCaseResult {
     candidateIds: string[];
     answerableIds: string[];
     passed: boolean;
+    retrievedRelevant: boolean;
     retrievalPath: 'point_question';
     retrievalMs: number;
     evidenceCount: number;
@@ -141,6 +143,35 @@ function preflightCases(): readonly RetrievalPreflightCase[] {
             matchesExpectedEvidence: evidence => evidence.chunk.canonicalUnitId === EXPECTED_RIBA_UNIT,
         },
         {
+            id: 'RibaHaram',
+            query: 'Is riba haram?',
+            expectAnswerable: true,
+            matchesExpectedEvidence: evidence => /\briba\b|\binterest\b/iu.test(`${evidence.chunk.retrievalText} ${evidence.chunk.originalText}`)
+                && /\bprohibit|\bforbid|\bharam\b/iu.test(`${evidence.chunk.retrievalText} ${evidence.chunk.originalText}`),
+            requiresRelevantRetrieval: true,
+        },
+        {
+            id: 'ArroganceHaram',
+            query: 'Is arrogance haram?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: evidence => /arrog|pride|proud|haught|boast|conceit/iu.test(`${evidence.chunk.retrievalText} ${evidence.chunk.originalText}`),
+            requiresRelevantRetrieval: true,
+        },
+        {
+            id: 'ArroganceDescription',
+            query: 'What does the Quran say about arrogance?',
+            expectAnswerable: true,
+            matchesExpectedEvidence: evidence => /arrog|pride|proud|haught|boast|conceit/iu.test(`${evidence.chunk.retrievalText} ${evidence.chunk.originalText}`),
+            requiresRelevantRetrieval: true,
+        },
+        {
+            id: 'ArroganceCondemnation',
+            query: 'Why is arrogance condemned?',
+            expectAnswerable: true,
+            matchesExpectedEvidence: evidence => /arrog|pride|proud|haught|boast|conceit|condemn/iu.test(`${evidence.chunk.retrievalText} ${evidence.chunk.originalText}`),
+            requiresRelevantRetrieval: true,
+        },
+        {
             id: 'AlBaqarah',
             query: baqarahContextQuery(),
             expectAnswerable: true,
@@ -187,6 +218,7 @@ async function main(): Promise<void> {
             repository,
         });
         const answerable = selectAnswerableEvidence(testCase.query, retrieval.evidence, config);
+        const retrievedRelevant = retrieval.evidence.some(testCase.matchesExpectedEvidence);
         const hasExpectedEvidence = testCase.expectAnswerable
             ? answerable.some(testCase.matchesExpectedEvidence)
             : answerable.length === 0;
@@ -197,8 +229,11 @@ async function main(): Promise<void> {
             query: testCase.query,
             candidateIds: retrieval.evidence.map(item => item.chunk.chunkId),
             answerableIds: answerable.map(item => item.chunk.chunkId),
-            passed: hasExpectedEvidence && !hasForbiddenEvidence,
+            passed: hasExpectedEvidence
+                && !hasForbiddenEvidence
+                && (!testCase.requiresRelevantRetrieval || retrievedRelevant),
             retrievalPath: 'point_question',
+            retrievedRelevant,
             retrievalMs: Math.max(0, Date.now() - startedAt),
             evidenceCount: answerable.length,
             evidenceTokenCount: answerable.reduce((total, item) => total + item.chunk.tokenCount, 0),

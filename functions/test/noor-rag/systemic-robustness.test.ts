@@ -256,7 +256,7 @@ describe('Noor systemic robustness invariants', () => {
         assert.equal(sufficient(longEntity, sparseLongEvidence, { canonicalUnits: 8, sections: 6, span: 285 }), false);
     });
 
-    it('normalizes bounded normative relation terms without inventing the relation', () => {
+    it('normalizes generic prohibition relation terms only when evidence states the relation', () => {
         const prohibited = evidence({ id: 'normative-prohibited', text: 'Caldorin is prohibited because it causes harm.' }, 1);
         const unrelated = evidence({ id: 'normative-unrelated', text: 'Caldorin is described as a historical practice.' }, 1);
 

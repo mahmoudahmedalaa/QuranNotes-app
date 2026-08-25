@@ -12,7 +12,7 @@
         "noor:index:verify": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-index.js",
         "noor:eval": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluate-retrieval.js",
         "noor:eval:golden": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluate-golden.js",
-        "noor:verify:retrieval": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-retrieval.js",
+        "noor:verify:retrieval": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-retrieval.js && node lib-scripts/scripts/noor-rag/verify-normative.js",
         "noor:verify:generation": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-generation.js",
         "noor:verify:policy-classifier": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-personalized-ruling-classifier.js",
         "noor:verify:task-classifier": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-semantic-task-classifier.js",

@@ -31,6 +31,7 @@ type CitationEvidenceValidator = (
 
 type TransportErrorClassifier = (error: unknown) => string;
 type HistoryAnswerBounder = (answer: string) => string;
+type SafeAbstentionValidator = (answer: NoorAnswer, trace: Record<string, unknown> | null) => boolean;
 
 interface SequentialRunnerInput {
     questions: readonly string[];
@@ -92,6 +93,30 @@ function answeredTrace(requestId: string, followUp: boolean): object {
 }
 
 describe('Noor authenticated live verifier', () => {
+    it('accepts only a grounded safe abstention for an insufficient-evidence gate', () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        assert.equal(typeof module.safeAbstentionSatisfied, 'function');
+        const validate = module.safeAbstentionSatisfied as SafeAbstentionValidator;
+        const trace = {
+            taskType: 'point_question',
+            contextSelected: false,
+            preAnswerabilityEvidenceIds: ['E1'],
+            postAnswerabilityEvidenceIds: [],
+            answerabilityReason: 'insufficient',
+            generationStatus: 'not_run',
+            generationFailurePhase: 'not_run',
+            citationValidation: 'not_run',
+            qualityJudgeInvoked: false,
+            statePersistence: 'not_persisted',
+        };
+        assert.equal(validate({ requestId: 'id', status: 'insufficient_evidence', answer: 'safe', citations: [] }, trace), true);
+        assert.equal(validate({ requestId: 'id', status: 'answered', answer: 'unsafe', citations: [] }, trace), false);
+        assert.equal(validate({ requestId: 'id', status: 'insufficient_evidence', answer: 'safe', citations: [] }, {
+            ...trace,
+            postAnswerabilityEvidenceIds: ['E1'],
+        }), false);
+    });
+
     it('paces requests to respect the production rolling-minute limit', async () => {
         const module = verifyLiveModule as unknown as Record<string, unknown>;
         assert.equal(typeof module.createLiveRequestPacer, 'function');

@@ -98,7 +98,7 @@ export function parseGoldenManifest(value: unknown): GoldenManifest {
         || value.schemaVersion !== 1
         || typeof value.corpusVersion !== 'string' || !VERSION_PATTERN.test(value.corpusVersion)
         || typeof value.topK !== 'number' || !Number.isSafeInteger(value.topK) || value.topK < 1 || value.topK > 20
-        || !Array.isArray(value.cases) || value.cases.length < 1 || value.cases.length > 15) {
+        || !Array.isArray(value.cases) || value.cases.length < 1 || value.cases.length > 20) {
         throw new Error('Invalid Noor golden manifest schema');
     }
     const seen = new Set<string>();

@@ -57,11 +57,18 @@
       "variants": [
         { "turns": ["Is riba haram and why?"] },
         { "turns": ["Is riba prohibited and why?"] },
-        { "turns": ["Is riba forbidden and why?"] },
+        { "turns": ["Is riba forbidden and why?"] }
+      ],
+      "expected": { "allowedStatuses": ["answered"], "minimumEvidenceFound": 1, "minimumCitationValidationPassed": 1 }
+    },
+    {
+      "id": "normative-relation-boundary",
+      "family": "normative-relation-boundary",
+      "variants": [
         { "turns": ["Is arrogance haram?"] },
         { "turns": ["Is arrogance prohibited?"] }
       ],
-      "expected": { "allowedStatuses": ["answered"], "minimumEvidenceFound": 1, "minimumCitationValidationPassed": 1 }
+      "expected": { "allowedStatuses": ["insufficient_evidence"], "minimumEvidenceFound": 1, "minimumCitationValidationPassed": 0 }
     },
     {
       "id": "general-worship-pronoun-paraphrases",

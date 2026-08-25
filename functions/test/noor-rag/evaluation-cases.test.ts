@@ -43,6 +43,7 @@ describe('Noor external evaluation cases', () => {
             'regression-policy-refusal',
             'multi-entity-discourse',
             'normative-relation-paraphrases',
+            'normative-relation-boundary',
             'general-worship-pronoun-paraphrases',
             'unsupported-current-world',
             'personalized-condition-control',

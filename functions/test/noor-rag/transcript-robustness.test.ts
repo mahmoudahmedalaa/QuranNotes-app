@@ -100,7 +100,15 @@ describe('Noor mixed-conversation transcript', () => {
             evidence('pair-lesson-b', 'The two accounts contain grounded lessons', 20, 2),
         ]);
         const normative = runAnswered('Is lending at interest prohibited and why?', [evidence('normative-a', 'Interest is prohibited with a stated reason', 2)]);
-        const anotherNormative = runAnswered('Is pride forbidden?', [evidence('normative-b', 'Pride is forbidden in this passage', 7)]);
+        const stateBeforeNormativeAbstention = state;
+        const anotherNormative = buildChatQueryPlan({
+            request: request('Is pride forbidden?', [{ role: 'user', content: priorUserQuestion! }]),
+            validatedConversationState: state,
+        });
+        plans.push(anotherNormative);
+        assert.equal(anotherNormative.contextSelected, false);
+        assert.equal(state, stateBeforeNormativeAbstention);
+        priorUserQuestion = 'Is pride forbidden?';
 
         const stateBeforeNonAnswer = state;
         const unsupportedQuestion = 'Which current digital asset is doing well now?';
@@ -121,7 +129,7 @@ describe('Noor mixed-conversation transcript', () => {
         plans.push(worshipPlan);
 
         assert.equal(plans.length, 11);
-        assert.equal(persistedTurns, 9);
+        assert.equal(persistedTurns, 8);
         assert.equal(maryam.taskType, 'entity_summary');
         assert.equal(kahf.taskType, 'entity_summary');
         assert.equal(nas.taskType, 'entity_summary');
@@ -152,7 +160,7 @@ describe('Noor mixed-conversation transcript', () => {
             ['nuh vs musa whats different', 'multi_entity_comparison', 0, 'answered'],
             ['and both their stories teach what', 'multi_entity_comparison', 0, 'answered'],
             ['is riba harram and why', 'point_question', 2, 'answered'],
-            ['arrogance haram?', 'point_question', 7, 'answered'],
+            ['arrogance haram?', 'point_question', 7, 'insufficient_evidence'],
             ['which crypto doing best rn', 'point_question', 0, 'insufficient_evidence'],
             ['can i pray without wuduu', 'point_question', 5, 'answered'],
         ] as const;
@@ -218,6 +226,15 @@ describe('Noor mixed-conversation transcript', () => {
                 });
                 assert.ok(next, question);
                 state = next;
+            } else if (resultType === 'insufficient_evidence') {
+                assert.equal(state, stateBefore);
+                const safeResponse = {
+                    status: 'insufficient_evidence',
+                    citations: [],
+                } as const;
+                assert.equal(safeResponse.status, 'insufficient_evidence');
+                assert.deepEqual(safeResponse.citations, []);
+                if (question === 'arrogance haram?') assert.equal(taskPlan.contextSelected, false);
             } else if (state !== stateBefore) {
                 stateDrift += 1;
             }

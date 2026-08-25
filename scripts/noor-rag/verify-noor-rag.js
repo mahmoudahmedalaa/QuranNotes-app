@@ -69,9 +69,9 @@ function main() {
         if (golden) {
             const result = lastJson(golden);
             process.stdout.write(`GOLDEN exact=${result.executedExactCases} passRate=${result.casePassRate} evidenceHitRate=${result.expectedEvidenceHitRate} semanticDeferred=${result.deferredSemanticCases} failed=${result.failedCaseIds.length}\n`);
-            if (result.cases.length < 12 || result.cases.length > 15) {
+            if (result.cases.length < 12 || result.cases.length > 20) {
                 summary.push({ label: 'golden case count', ok: false });
-                process.stderr.write(`FAIL golden case count expected 12-15 actual=${result.cases.length}\n`);
+                process.stderr.write(`FAIL golden case count expected 12-20 actual=${result.cases.length}\n`);
             }
         }
 

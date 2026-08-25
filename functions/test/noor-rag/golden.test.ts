@@ -42,7 +42,7 @@ describe('Noor golden manifest', () => {
         const path = resolve(__dirname, '../../../evals/noor-golden-cases.json');
         const manifest = parseGoldenManifest(JSON.parse(readFileSync(path, 'utf8')) as unknown);
         assert.ok(manifest.cases.length >= 12);
-        assert.ok(manifest.cases.length <= 15);
+        assert.ok(manifest.cases.length <= 20);
         assert.equal(manifest.cases.every(item => item.expectedStatus), true);
     });
 });

@@ -47,12 +47,15 @@ interface LiveCaseResult {
 
 interface LiveTurnTrace {
     requestId: string;
+    taskType: string;
     generationStatus: string;
     generationFailurePhase: string;
     finalGenerationErrorClass: string | null;
     citationValidation: string;
     qualityJudgeInvoked: boolean;
     answerabilityReason: string;
+    preAnswerabilityEvidenceIds: readonly string[];
+    postAnswerabilityEvidenceIds: readonly string[];
     statePersistence: string;
     stateFingerprint: string | null;
     conversationState: string;
@@ -125,6 +128,7 @@ interface LiveVerificationReport {
 const LIVE_CASE_IDS = [
     'riba-direct-01',
     'riba-followup-01',
+    'arrogance-haram-01',
     'patience-direct-01',
     'noah-story-01',
     'exact-verse-2-153',
@@ -223,12 +227,19 @@ function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | 
     }
     return {
         requestId,
+        taskType: typeof value.taskType === 'string' ? value.taskType : 'unknown',
         generationStatus: value.generationStatus,
         generationFailurePhase: value.generationFailurePhase,
         finalGenerationErrorClass: value.finalGenerationErrorClass,
         citationValidation: value.citationValidation,
         qualityJudgeInvoked: value.qualityJudgeInvoked,
         answerabilityReason: value.answerabilityReason,
+        preAnswerabilityEvidenceIds: Array.isArray(value.preAnswerabilityEvidenceIds)
+            ? value.preAnswerabilityEvidenceIds.filter((item): item is string => typeof item === 'string')
+            : [],
+        postAnswerabilityEvidenceIds: Array.isArray(value.postAnswerabilityEvidenceIds)
+            ? value.postAnswerabilityEvidenceIds.filter((item): item is string => typeof item === 'string')
+            : [],
         statePersistence: value.statePersistence,
         stateFingerprint: value.stateFingerprint,
         conversationState: value.conversationState,
@@ -262,6 +273,27 @@ export function classifyLiveFailureSubtype(
         && trace.finalGenerationErrorClass === null
         && trace.answerabilityReason !== 'sufficient') return 'retrieval_failure';
     return 'schema_outcome_contract_failure';
+}
+
+export function safeAbstentionSatisfied(answer: NoorAnswer, trace: unknown): boolean {
+    if (!isRecord(trace)
+        || answer.status !== 'insufficient_evidence'
+        || answer.citations.length !== 0
+        || trace.taskType !== 'point_question'
+        || trace.contextSelected !== false
+        || !Array.isArray(trace.preAnswerabilityEvidenceIds)
+        || trace.preAnswerabilityEvidenceIds.length === 0
+        || !Array.isArray(trace.postAnswerabilityEvidenceIds)
+        || trace.postAnswerabilityEvidenceIds.length !== 0
+        || trace.answerabilityReason !== 'insufficient'
+        || trace.generationStatus !== 'not_run'
+        || trace.generationFailurePhase !== 'not_run'
+        || trace.citationValidation !== 'not_run'
+        || trace.qualityJudgeInvoked !== false
+        || trace.statePersistence !== 'not_persisted') {
+        return false;
+    }
+    return true;
 }
 
 function replayableProviderFailure(subtype: LiveFailureSubtype | null): boolean {
@@ -307,6 +339,7 @@ export async function executeSequentialLiveTurns(
         const contextualQueryProduced = trace?.queryVariantKinds.includes('context_enriched') === true;
         const passed = called.answer.status === expectedStatus
             && trace !== null
+            && (expectedStatus !== 'insufficient_evidence' || safeAbstentionSatisfied(called.answer, trace))
             && (expectedStatus !== 'answered' || (
                 called.answer.citations.length > 0
                 && input.validateAnsweredCitations(called.answer)
