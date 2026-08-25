@@ -5,6 +5,7 @@ import { applicationDefault, deleteApp, initializeApp } from 'firebase-admin/app
 import { getFirestore } from 'firebase-admin/firestore';
 
 import type { NoorAnswer, NoorRequest } from '../../src/noor-rag/types';
+import { CANONICAL_INSUFFICIENT_EVIDENCE } from '../../src/noor-rag/outcome';
 import { parseNoorAnswer } from '../../src/noor-rag/validation';
 import {
     buildCallableRequest,
@@ -51,12 +52,17 @@ interface LiveTurnTrace {
     generationStatus: string;
     generationFailurePhase: string;
     finalGenerationErrorClass: string | null;
+    backendFailureSubtype: string | null;
     citationValidation: string;
+    structuralValidationResult: string;
+    citationValidationResult: string;
     qualityJudgeInvoked: boolean;
     answerabilityReason: string;
     preAnswerabilityEvidenceIds: readonly string[];
     postAnswerabilityEvidenceIds: readonly string[];
     statePersistence: string;
+    stateAction: string;
+    answeredUsageIncrement: number | null;
     stateFingerprint: string | null;
     conversationState: string;
     contextSelected: boolean;
@@ -70,6 +76,7 @@ interface LiveTurnResult {
     responseStatus: NoorAnswer['status'];
     generationFailurePhase: string;
     failureSubtype: LiveFailureSubtype | null;
+    verifierFailureReason: string | null;
     citationValidation: string;
     qualityJudgeInvoked: boolean;
     stateExpected: boolean;
@@ -231,7 +238,14 @@ function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | 
         generationStatus: value.generationStatus,
         generationFailurePhase: value.generationFailurePhase,
         finalGenerationErrorClass: value.finalGenerationErrorClass,
+        backendFailureSubtype: typeof value.backendFailureSubtype === 'string' ? value.backendFailureSubtype : null,
         citationValidation: value.citationValidation,
+        structuralValidationResult: typeof value.structuralValidationResult === 'string'
+            ? value.structuralValidationResult
+            : 'not_run',
+        citationValidationResult: typeof value.citationValidationResult === 'string'
+            ? value.citationValidationResult
+            : 'not_run',
         qualityJudgeInvoked: value.qualityJudgeInvoked,
         answerabilityReason: value.answerabilityReason,
         preAnswerabilityEvidenceIds: Array.isArray(value.preAnswerabilityEvidenceIds)
@@ -241,6 +255,10 @@ function parseLiveTurnTrace(value: unknown, requestId: string): LiveTurnTrace | 
             ? value.postAnswerabilityEvidenceIds.filter((item): item is string => typeof item === 'string')
             : [],
         statePersistence: value.statePersistence,
+        stateAction: typeof value.stateAction === 'string' ? value.stateAction : 'unknown',
+        answeredUsageIncrement: typeof value.answeredUsageIncrement === 'number'
+            ? value.answeredUsageIncrement
+            : null,
         stateFingerprint: value.stateFingerprint,
         conversationState: value.conversationState,
         contextSelected: value.contextSelected,
@@ -253,19 +271,28 @@ export function classifyLiveFailureSubtype(
     answer: NoorAnswer,
     trace: LiveTurnTrace | null,
 ): LiveFailureSubtype | null {
+    const reportedFailure = trace?.backendFailureSubtype ?? trace?.finalGenerationErrorClass;
+    if (reportedFailure === 'provider_transient_failure') return 'provider_transient_failure';
+    if (reportedFailure === 'provider_timeout') return 'provider_timeout';
+    if (reportedFailure === 'malformed_json' || reportedFailure === 'answer_validation_failure') {
+        return 'structured_generation_failure';
+    }
+    if (reportedFailure === 'citation_validation_failure') return 'citation_validation_failure';
+    if (reportedFailure === 'answer_quality_failure' || reportedFailure === 'answer_quality_judgement_failure') {
+        return 'answer_quality_failure';
+    }
+    if (reportedFailure === 'policy_failure') return 'policy_failure';
+    if (reportedFailure === 'state_failure') return 'state_failure';
+    if (reportedFailure === 'retrieval_failure') return 'retrieval_failure';
+    if (reportedFailure === 'schema_outcome_contract_failure') return 'schema_outcome_contract_failure';
     if (answer.status === 'answered' && trace?.citationValidation !== 'passed') return 'citation_validation_failure';
     if (answer.status === expectedStatus) {
         if (answer.status === 'answered' && trace?.statePersistence === 'not_persisted') return 'state_failure';
         return null;
     }
-    if (trace?.finalGenerationErrorClass === 'provider_transient_failure') return 'provider_transient_failure';
-    if (trace?.finalGenerationErrorClass === 'provider_timeout') return 'provider_timeout';
-    if (trace?.finalGenerationErrorClass === 'malformed_json'
-        || trace?.finalGenerationErrorClass === 'answer_validation_failure') return 'structured_generation_failure';
-    if (trace?.finalGenerationErrorClass === 'citation_validation_failure'
-        || trace?.citationValidation === 'failed') return 'citation_validation_failure';
-    if (trace?.finalGenerationErrorClass === 'answer_quality_failure'
-        || trace?.finalGenerationErrorClass === 'answer_quality_judgement_failure'
+    if (trace?.citationValidation === 'failed') return 'citation_validation_failure';
+    if (reportedFailure === 'answer_quality_failure'
+        || reportedFailure === 'answer_quality_judgement_failure'
         || trace?.generationFailurePhase === 'quality_correction'
         || trace?.generationFailurePhase === 'quality_judgement') return 'answer_quality_failure';
     if (answer.status === 'policy_refusal') return 'policy_failure';
@@ -275,25 +302,67 @@ export function classifyLiveFailureSubtype(
     return 'schema_outcome_contract_failure';
 }
 
-export function safeAbstentionSatisfied(answer: NoorAnswer, trace: unknown): boolean {
-    if (!isRecord(trace)
-        || answer.status !== 'insufficient_evidence'
-        || answer.citations.length !== 0
-        || trace.taskType !== 'point_question'
-        || trace.contextSelected !== false
-        || !Array.isArray(trace.preAnswerabilityEvidenceIds)
-        || trace.preAnswerabilityEvidenceIds.length === 0
-        || !Array.isArray(trace.postAnswerabilityEvidenceIds)
-        || trace.postAnswerabilityEvidenceIds.length !== 0
-        || trace.answerabilityReason !== 'insufficient'
-        || trace.generationStatus !== 'not_run'
-        || trace.generationFailurePhase !== 'not_run'
-        || trace.citationValidation !== 'not_run'
-        || trace.qualityJudgeInvoked !== false
-        || trace.statePersistence !== 'not_persisted') {
-        return false;
+export function safeAbstentionFailureReason(answer: NoorAnswer, trace: unknown): string | null {
+    if (!isRecord(trace)) return 'verifier_trace_unavailable';
+    try {
+        parseNoorAnswer(answer);
+    } catch {
+        return 'verifier_public_response_schema';
     }
-    return true;
+    if (answer.status !== 'insufficient_evidence') return 'verifier_status_mismatch';
+    if (answer.answer !== CANONICAL_INSUFFICIENT_EVIDENCE) return 'verifier_unsupported_answer_leak';
+    if (answer.citations.length !== 0) return 'verifier_citations_non_empty';
+    if (trace.statePersistence !== 'not_persisted' || trace.stateAction === 'persisted') {
+        return 'verifier_conversation_state_persisted';
+    }
+    if (trace.answeredUsageIncrement !== undefined
+        && trace.answeredUsageIncrement !== null
+        && trace.answeredUsageIncrement !== 0) {
+        return 'verifier_answered_usage_increment';
+    }
+    if ((trace.backendFailureSubtype !== undefined && trace.backendFailureSubtype !== null)
+        || (trace.finalGenerationErrorClass !== undefined && trace.finalGenerationErrorClass !== null)) {
+        return 'backend_deterministic_failure';
+    }
+    if (!Array.isArray(trace.preAnswerabilityEvidenceIds)
+        || !Array.isArray(trace.postAnswerabilityEvidenceIds)) {
+        return 'verifier_evidence_trace_invalid';
+    }
+
+    if (trace.generationStatus === 'not_run') {
+        if (trace.answerabilityReason !== 'insufficient'
+            || trace.postAnswerabilityEvidenceIds.length !== 0
+            || trace.generationFailurePhase !== 'not_run'
+            || trace.citationValidation !== 'not_run'
+            || trace.structuralValidationResult !== 'not_run'
+            || trace.citationValidationResult !== 'not_run'
+            || trace.qualityJudgeInvoked !== false) {
+            return 'verifier_abstention_trace_incoherent';
+        }
+        return null;
+    }
+
+    if (trace.generationStatus === 'insufficient_evidence') {
+        const passedValidation = trace.structuralValidationResult === 'passed_first_attempt'
+            || trace.structuralValidationResult === 'passed_after_retry';
+        const passedCitations = trace.citationValidationResult === 'passed_first_attempt'
+            || trace.citationValidationResult === 'passed_after_retry';
+        if (trace.answerabilityReason === 'not_run'
+            || trace.postAnswerabilityEvidenceIds.length === 0
+            || trace.generationFailurePhase !== 'none'
+            || !passedValidation
+            || !passedCitations
+            || trace.qualityJudgeInvoked !== false) {
+            return 'verifier_abstention_trace_incoherent';
+        }
+        return null;
+    }
+
+    return 'verifier_abstention_trace_incoherent';
+}
+
+export function safeAbstentionSatisfied(answer: NoorAnswer, trace: unknown): boolean {
+    return safeAbstentionFailureReason(answer, trace) === null;
 }
 
 function replayableProviderFailure(subtype: LiveFailureSubtype | null): boolean {
@@ -317,6 +386,9 @@ export async function executeSequentialLiveTurns(
         requestCount += 1;
         let trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
         let failureSubtype = classifyLiveFailureSubtype(expectedStatus, called.answer, trace);
+        let verifierFailureReason = expectedStatus === 'insufficient_evidence'
+            ? safeAbstentionFailureReason(called.answer, trace)
+            : null;
         let providerReplayUsed = false;
         if (replayableProviderFailure(failureSubtype)) {
             replayBudget.availabilityFailures += 1;
@@ -328,6 +400,9 @@ export async function executeSequentialLiveTurns(
                 requestCount += 1;
                 trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
                 failureSubtype = classifyLiveFailureSubtype(expectedStatus, called.answer, trace);
+                verifierFailureReason = expectedStatus === 'insufficient_evidence'
+                    ? safeAbstentionFailureReason(called.answer, trace)
+                    : null;
                 if (replayableProviderFailure(failureSubtype)) replayBudget.availabilityFailures += 1;
             }
         }
@@ -339,7 +414,8 @@ export async function executeSequentialLiveTurns(
         const contextualQueryProduced = trace?.queryVariantKinds.includes('context_enriched') === true;
         const passed = called.answer.status === expectedStatus
             && trace !== null
-            && (expectedStatus !== 'insufficient_evidence' || safeAbstentionSatisfied(called.answer, trace))
+            && (expectedStatus !== 'insufficient_evidence'
+                || (failureSubtype === null && verifierFailureReason === null))
             && (expectedStatus !== 'answered' || (
                 called.answer.citations.length > 0
                 && input.validateAnsweredCitations(called.answer)
@@ -359,6 +435,7 @@ export async function executeSequentialLiveTurns(
             responseStatus: called.answer.status,
             generationFailurePhase: trace?.generationFailurePhase ?? 'trace_unavailable',
             failureSubtype,
+            verifierFailureReason,
             citationValidation: trace?.citationValidation ?? 'trace_unavailable',
             qualityJudgeInvoked: trace?.qualityJudgeInvoked ?? false,
             stateExpected,
@@ -526,6 +603,7 @@ async function runCase(
                 responseStatus: answer.status,
                 generationFailurePhase: trace?.generationFailurePhase ?? 'trace_unavailable',
                 failureSubtype,
+                verifierFailureReason: null,
                 citationValidation: trace?.citationValidation ?? 'trace_unavailable',
                 qualityJudgeInvoked: trace?.qualityJudgeInvoked ?? false,
                 stateExpected: false,
@@ -580,6 +658,7 @@ async function runCase(
     const activeCorpusVersion = activeVersions.length === 1 ? activeVersions[0]! : null;
     const validation = validateResult(goldenCase, finalAnswer, citations, corpusVersion, artifacts);
     const turnFailureSubtype = turns.find(turn => !turn.passed)?.failureSubtype ?? null;
+    const turnVerifierFailureReason = turns.find(turn => !turn.passed)?.verifierFailureReason ?? null;
     return {
         id: goldenCase.id,
         requestCount,
@@ -595,7 +674,7 @@ async function runCase(
         latencyMs: Math.max(0, Date.now() - startedAt),
         errorClass: validation.passed && turns.length > 0 && turns.every(turn => turn.passed)
             ? null
-            : turnFailureSubtype ?? validation.errorClass ?? 'schema_outcome_contract_failure',
+            : turnFailureSubtype ?? turnVerifierFailureReason ?? validation.errorClass ?? 'schema_outcome_contract_failure',
         turns,
     };
 }

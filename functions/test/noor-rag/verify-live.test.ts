@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import * as verifyLiveModule from '../../scripts/noor-rag/verify-live';
+import { CANONICAL_INSUFFICIENT_EVIDENCE } from '../../src/noor-rag/outcome';
 import type { NoorAnswer, NoorRequest } from '../../src/noor-rag/types';
 
 interface PacerOptions {
@@ -32,6 +33,7 @@ type CitationEvidenceValidator = (
 type TransportErrorClassifier = (error: unknown) => string;
 type HistoryAnswerBounder = (answer: string) => string;
 type SafeAbstentionValidator = (answer: NoorAnswer, trace: Record<string, unknown> | null) => boolean;
+type SafeAbstentionFailureReason = (answer: NoorAnswer, trace: Record<string, unknown> | null) => string | null;
 
 interface SequentialRunnerInput {
     questions: readonly string[];
@@ -92,29 +94,78 @@ function answeredTrace(requestId: string, followUp: boolean): object {
     };
 }
 
+function insufficientTrace(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        taskType: 'point_question',
+        contextSelected: false,
+        preAnswerabilityEvidenceIds: [],
+        postAnswerabilityEvidenceIds: [],
+        answerabilityReason: 'insufficient',
+        generationStatus: 'not_run',
+        generationFailurePhase: 'not_run',
+        finalGenerationErrorClass: null,
+        citationValidation: 'not_run',
+        structuralValidationResult: 'not_run',
+        citationValidationResult: 'not_run',
+        qualityJudgeInvoked: false,
+        statePersistence: 'not_persisted',
+        stateAction: 'unchanged',
+        answeredUsageIncrement: 0,
+        ...overrides,
+    };
+}
+
+function insufficientAnswer(): NoorAnswer {
+    return {
+        requestId: '11111111-1111-4111-8111-111111111111',
+        status: 'insufficient_evidence',
+        answer: CANONICAL_INSUFFICIENT_EVIDENCE,
+        citations: [],
+    };
+}
+
 describe('Noor authenticated live verifier', () => {
-    it('accepts only a grounded safe abstention for an insufficient-evidence gate', () => {
+    it('accepts every coherent insufficient-evidence origin without requiring pre-answerability evidence', () => {
         const module = verifyLiveModule as unknown as Record<string, unknown>;
         assert.equal(typeof module.safeAbstentionSatisfied, 'function');
         const validate = module.safeAbstentionSatisfied as SafeAbstentionValidator;
-        const trace = {
-            taskType: 'point_question',
-            contextSelected: false,
+        const answer = insufficientAnswer();
+
+        assert.equal(validate(answer, insufficientTrace()), true);
+        assert.equal(validate(answer, insufficientTrace({ preAnswerabilityEvidenceIds: ['E1', 'E2'] })), true);
+        assert.equal(validate(answer, insufficientTrace({
             preAnswerabilityEvidenceIds: ['E1'],
-            postAnswerabilityEvidenceIds: [],
-            answerabilityReason: 'insufficient',
-            generationStatus: 'not_run',
-            generationFailurePhase: 'not_run',
-            citationValidation: 'not_run',
-            qualityJudgeInvoked: false,
-            statePersistence: 'not_persisted',
-        };
-        assert.equal(validate({ requestId: 'id', status: 'insufficient_evidence', answer: 'safe', citations: [] }, trace), true);
-        assert.equal(validate({ requestId: 'id', status: 'answered', answer: 'unsafe', citations: [] }, trace), false);
-        assert.equal(validate({ requestId: 'id', status: 'insufficient_evidence', answer: 'safe', citations: [] }, {
-            ...trace,
             postAnswerabilityEvidenceIds: ['E1'],
-        }), false);
+            answerabilityReason: 'sufficient',
+            generationStatus: 'insufficient_evidence',
+            generationFailurePhase: 'none',
+            structuralValidationResult: 'passed_first_attempt',
+            citationValidationResult: 'passed_first_attempt',
+        })), true);
+    });
+
+    it('rejects unsafe insufficient-evidence outcomes and reports verifier failures separately', () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        const validate = module.safeAbstentionSatisfied as SafeAbstentionValidator;
+        const failureReason = module.safeAbstentionFailureReason as SafeAbstentionFailureReason;
+        const classify = module.classifyLiveFailureSubtype as (
+            expectedStatus: NoorAnswer['status'], answer: NoorAnswer, trace: Record<string, unknown>,
+        ) => string | null;
+        const answer = insufficientAnswer();
+        const trace = insufficientTrace();
+
+        assert.equal(validate({ ...answer, citations: [ANSWERED('id').citations[0]!] }, trace), false);
+        assert.equal(validate(answer, { ...trace, statePersistence: 'persisted' }), false);
+        assert.equal(validate(answer, { ...trace, answeredUsageIncrement: 1 }), false);
+        assert.equal(validate({ ...answer, answer: 'The latest score was 2-1.' }, trace), false);
+        assert.equal(validate(answer, { ...trace, finalGenerationErrorClass: 'citation_validation_failure' }), false);
+        assert.equal(failureReason(answer, trace), null);
+        assert.equal(failureReason(answer, { ...trace, answeredUsageIncrement: 1 }), 'verifier_answered_usage_increment');
+        assert.equal(failureReason(answer, { ...trace, finalGenerationErrorClass: 'citation_validation_failure' }), 'backend_deterministic_failure');
+        assert.equal(classify('insufficient_evidence', answer, {
+            ...trace,
+            finalGenerationErrorClass: 'citation_validation_failure',
+        }), 'citation_validation_failure');
     });
 
     it('paces requests to respect the production rolling-minute limit', async () => {
