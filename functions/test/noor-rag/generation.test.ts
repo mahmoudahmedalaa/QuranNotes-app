@@ -285,11 +285,11 @@ describe('Noor grounded generation', () => {
         assert.equal(missing.requestId, REQUEST_ID);
     });
 
-    it('accepts a structured insufficient-evidence outcome with zero citations and no quality-judge call', async () => {
+    it('canonicalizes an empty structured insufficient-evidence outcome before answered-text validation', async () => {
         const provider = new SequenceProvider([
             JSON.stringify({
                 status: 'insufficient_evidence',
-                answer: 'This is an unsupported substantive answer that must never reach the client.',
+                answer: '',
                 citationIds: [],
             }),
         ]);
@@ -304,8 +304,41 @@ describe('Noor grounded generation', () => {
         assert.equal(response.status, 'insufficient_evidence');
         assert.deepEqual(response.citations, []);
         assert.equal(response.answer, 'I could not find enough reliable tafsir evidence to answer that safely.');
-        assert.doesNotMatch(response.answer, /unsupported substantive/iu);
         assert.equal(provider.requests.length, 1);
+        assert.equal(getGenerationDiagnostics(response)?.qualityJudgeInvoked, false);
+    });
+
+    it('canonicalizes model-written abstention wording but rejects contradictory substantive claims', async () => {
+        const abstainingProvider = new SequenceProvider([
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                answer: 'I could not find enough reliable tafsir evidence to answer safely.',
+                citationIds: [],
+            }),
+        ]);
+        const abstention = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider: abstainingProvider,
+        });
+        assert.equal(abstention.status, 'insufficient_evidence');
+        assert.equal(abstention.answer, 'I could not find enough reliable tafsir evidence to answer that safely.');
+        assert.equal(abstainingProvider.requests.length, 1);
+
+        const contradictoryProvider = new SequenceProvider([
+            JSON.stringify({ status: 'insufficient_evidence', answer: 'Bitcoin is performing best.', citationIds: [] }),
+            JSON.stringify({ status: 'insufficient_evidence', answer: 'Bitcoin is performing best.', citationIds: [] }),
+        ]);
+        const rejected = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider: contradictoryProvider,
+        });
+        assert.equal(rejected.status, 'temporarily_unavailable');
+        assert.equal(contradictoryProvider.requests.length, 2);
+        assert.equal(getGenerationDiagnostics(rejected)?.finalGenerationErrorClass, 'answer_validation_failure');
     });
 
     it('keeps unfamiliar questions evidence-bound instead of keyword-refusing them', async () => {

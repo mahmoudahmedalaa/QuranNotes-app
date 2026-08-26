@@ -1,4 +1,5 @@
 import type { NoorCitation } from './generatedContract';
+import { containsAbstentionLanguage } from './outcome';
 import type { RetrievedEvidence } from './types';
 
 const MAX_ANSWER_CHARACTERS = 8000;
@@ -67,7 +68,6 @@ export function diagnoseGeneratedAnswer(
             && value.status !== 'answered'
             && value.status !== 'insufficient_evidence')
         || typeof value.answer !== 'string'
-        || value.answer.trim().length === 0
         || value.answer.length > MAX_ANSWER_CHARACTERS
         || !Array.isArray(value.citationIds)
         || !value.citationIds.every(id => typeof id === 'string')) {
@@ -91,9 +91,15 @@ export function diagnoseGeneratedAnswer(
         return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unknown_citation_id' };
     }
     if (status === 'insufficient_evidence') {
-        return citationIds.length === 0
+        if (citationIds.length > 0) {
+            return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unused_citation' };
+        }
+        return value.answer.trim().length === 0 || containsAbstentionLanguage(value.answer)
             ? null
-            : { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'unused_citation' };
+            : { phase: 'structural_validation', errorClass: 'answer_validation_failure', citationSubtype: null };
+    }
+    if (value.answer.trim().length === 0) {
+        return { phase: 'structural_validation', errorClass: 'answer_validation_failure', citationSubtype: null };
     }
     if (citationIds.length === 0) {
         return { phase: 'citation_validation', errorClass: 'citation_validation_failure', citationSubtype: 'missing_required_citation' };

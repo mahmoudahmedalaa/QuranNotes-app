@@ -2,9 +2,24 @@ import { GoogleGenAI } from '@google/genai';
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-import { isEntitySummaryEvidenceSufficient, selectAnswerableEvidence } from '../../src/noor-rag/answerability';
+import {
+    describeAnswerabilitySemantics,
+    isEntitySummaryEvidenceSufficient,
+    selectAnswerableEvidence,
+    type AnswerabilitySemanticSlot,
+} from '../../src/noor-rag/answerability';
 import { createVertexEmbedder, type VertexEmbeddingClient } from '../../src/noor-rag/embedding';
 import { readRuntimeConfig, verifyCorpusReady } from '../../src/noor-rag/firestore';
+import {
+    handleNoorRequest,
+    type NoorHandlerDependencies,
+    type NoorSanitizedTrace,
+} from '../../src/noor-rag/handler';
+import { classifyRequestPolicy } from '../../src/noor-rag/policy';
+import {
+    createVertexPersonalizedRulingClassifier,
+    type VertexPersonalizedRulingClassifierClient,
+} from '../../src/noor-rag/personalizedRulingClassifier';
 import {
     buildChatQueryPlan,
     buildControlledRecoveryQuery,
@@ -15,6 +30,10 @@ import {
     retrieveEntitySummaryWithStats,
     retrieveSemanticWithStats,
 } from '../../src/noor-rag/retrieval';
+import {
+    createVertexSemanticTaskClassifier,
+    type VertexSemanticTaskClassifierClient,
+} from '../../src/noor-rag/semanticTaskClassifier';
 import type { NoorAnswer, NoorChatRequest, RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
 import { LOCKED_PROJECT } from './verify-index';
 
@@ -24,11 +43,30 @@ const EXPECTED_BAQARAH_CHUNK = 'c_4bf4f3f0cf5d6a2c2b05debd600e5533150ce9f4aa8540
 const FORBIDDEN_BAQARAH_CHUNK = 'c_0c5c342e9579326bbc457839c78ef9603ecd8c7de87c9c8b26e6a0757503a299_000_12f0dac8ffdc';
 
 interface RetrievalPreflightCase {
-    id: 'Noah' | 'Riba' | 'RibaHaram' | 'ArroganceHaram' | 'ArroganceDescription' | 'ArroganceCondemnation' | 'AlBaqarah' | 'Football';
+    id:
+        | 'Noah'
+        | 'Riba'
+        | 'RibaHaram'
+        | 'ArroganceHaram'
+        | 'ArroganceDescription'
+        | 'ArroganceCondemnation'
+        | 'AlBaqarah'
+        | 'Football'
+        | 'Crypto'
+        | 'BitcoinValue'
+        | 'WorldCup'
+        | 'CairoWeather'
+        | 'StockPerformance'
+        | 'CryptoNoisy'
+        | 'BitcoinNoisy'
+        | 'FootballNoisy'
+        | 'CairoWeatherNoisy'
+        | 'StockNoisy';
     query: string;
     expectAnswerable: boolean;
     matchesExpectedEvidence(evidence: RetrievedEvidence): boolean;
     requiresRelevantRetrieval?: boolean;
+    requiresCurrentExternalState?: boolean;
     forbiddenAnswerableIds?: readonly string[];
 }
 
@@ -43,6 +81,10 @@ interface RetrievalPreflightCaseResult {
     retrievalMs: number;
     evidenceCount: number;
     evidenceTokenCount: number;
+    requiredSemanticSlots: readonly AnswerabilitySemanticSlot[];
+    satisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[];
+    unsatisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[];
+    currentExternalStateRequired: boolean;
 }
 
 interface SynthesisPreflightCase {
@@ -62,6 +104,22 @@ interface SynthesisPreflightCaseResult {
     evidenceRanges: string[];
     sourceCount: number;
     retrievalMs: number;
+    passed: boolean;
+}
+
+interface FullHandlerPreflightResult {
+    query: string;
+    taskType: NoorSanitizedTrace['taskType'] | 'not_observed';
+    contextSelected: boolean | null;
+    preEvidenceCount: number;
+    postEvidenceCount: number;
+    answerability: NoorSanitizedTrace['answerabilityReason'] | 'not_observed';
+    generationCalls: number;
+    status: NoorAnswer['status'];
+    citationCount: number;
+    statePersistence: NoorSanitizedTrace['statePersistence'] | 'not_observed';
+    answeredUsageIncrement: number;
+    finalizedNonAnswer: boolean;
     passed: boolean;
 }
 
@@ -184,6 +242,77 @@ function preflightCases(): readonly RetrievalPreflightCase[] {
             query: 'What was the latest football score?',
             expectAnswerable: false,
             matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'Crypto',
+            query: 'Which cryptocurrency is doing well now?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'BitcoinValue',
+            query: 'What is Bitcoin worth today?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'WorldCup',
+            query: "Who won yesterday's World Cup match?",
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'CairoWeather',
+            query: 'What is the weather in Cairo right now?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'StockPerformance',
+            query: 'Which stock performed best today?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'CryptoNoisy',
+            query: 'which crypto doing best rn',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'BitcoinNoisy',
+            query: 'bitcoin price today?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'FootballNoisy',
+            query: 'latest football score?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'CairoWeatherNoisy',
+            query: 'weather cairo rn',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
+        },
+        {
+            id: 'StockNoisy',
+            query: 'best stock today?',
+            expectAnswerable: false,
+            matchesExpectedEvidence: () => true,
+            requiresCurrentExternalState: true,
         },
     ];
 }
@@ -218,6 +347,7 @@ async function main(): Promise<void> {
             repository,
         });
         const answerable = selectAnswerableEvidence(testCase.query, retrieval.evidence, config);
+        const semantics = describeAnswerabilitySemantics(testCase.query, retrieval.evidence);
         const retrievedRelevant = retrieval.evidence.some(testCase.matchesExpectedEvidence);
         const hasExpectedEvidence = testCase.expectAnswerable
             ? answerable.some(testCase.matchesExpectedEvidence)
@@ -231,12 +361,21 @@ async function main(): Promise<void> {
             answerableIds: answerable.map(item => item.chunk.chunkId),
             passed: hasExpectedEvidence
                 && !hasForbiddenEvidence
-                && (!testCase.requiresRelevantRetrieval || retrievedRelevant),
+                && (!testCase.requiresRelevantRetrieval || retrievedRelevant)
+                && (!testCase.requiresCurrentExternalState || (
+                    semantics.currentExternalStateRequired
+                    && semantics.requiredSemanticSlots.includes('temporal_or_current_requirement')
+                    && semantics.unsatisfiedSemanticSlots.includes('temporal_or_current_requirement')
+                )),
             retrievalPath: 'point_question',
             retrievedRelevant,
             retrievalMs: Math.max(0, Date.now() - startedAt),
             evidenceCount: answerable.length,
             evidenceTokenCount: answerable.reduce((total, item) => total + item.chunk.tokenCount, 0),
+            requiredSemanticSlots: semantics.requiredSemanticSlots,
+            satisfiedSemanticSlots: semantics.satisfiedSemanticSlots,
+            unsatisfiedSemanticSlots: semantics.unsatisfiedSemanticSlots,
+            currentExternalStateRequired: semantics.currentExternalStateRequired,
         });
     }
 
@@ -277,7 +416,101 @@ async function main(): Promise<void> {
         });
     }
 
+    const exactCryptoQuestion = 'Which cryptocurrency is doing well now?';
+    let fullHandlerTrace: NoorSanitizedTrace | null = null;
+    let answerGenerationCalls = 0;
+    let answeredUsageIncrement = 0;
+    let finalizedNonAnswer = false;
+    const personalizedRulingClassifier = createVertexPersonalizedRulingClassifier(
+        vertex as unknown as VertexPersonalizedRulingClassifierClient,
+    );
+    const semanticTaskClassifier = createVertexSemanticTaskClassifier(
+        vertex as unknown as VertexSemanticTaskClassifierClient,
+    );
+    const fullHandlerDependencies: NoorHandlerDependencies = {
+        loadRuntimeConfig: async () => config,
+        verifyCorpusReady: async current => verifyCorpusReady(firestore, current),
+        readCompletedReplay: async () => null,
+        resolveEntitlement: async () => ({ class: 'paid', expiresAt: null, source: 'revenuecat' }),
+        claimUsage: async () => ({
+            kind: 'claimed',
+            leaseOwnerId: 'current-world-read-only-preflight',
+            leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+        classifyPolicy: classifyRequestPolicy,
+        classifyPersonalizedRuling: request => personalizedRulingClassifier.classify(request),
+        classifySemanticTask: input => semanticTaskClassifier.classify(input),
+        retrieveSemantic: input => retrieveSemanticWithStats({
+            content: input.query,
+            config: input.config,
+            embedder,
+            repository,
+        }),
+        retrieveEntitySummary: input => retrieveEntitySummaryWithStats({
+            entity: input.entity,
+            config: input.config,
+            repository,
+        }),
+        retrieveExact: async () => [],
+        generateGroundedAnswer: async () => {
+            answerGenerationCalls += 1;
+            throw new Error('Answer generation must not run for unsupported current-state evidence');
+        },
+        finalizeAnswered: async () => {
+            answeredUsageIncrement += 1;
+            return { kind: 'finalized' };
+        },
+        finalizeNonAnswer: async () => {
+            finalizedNonAnswer = true;
+            return { kind: 'finalized' };
+        },
+        emitTelemetry: () => undefined,
+        emitSanitizedTrace: trace => { fullHandlerTrace = trace; },
+        readValidatedConversationState: async () => null,
+        nowMs: Date.now,
+    };
+    const fullHandlerResponse = await handleNoorRequest({
+        request: {
+            mode: 'chat',
+            requestId: '50000000-0000-4000-8000-000000000001',
+            question: exactCryptoQuestion,
+            history: [],
+        },
+        uid: 'current-world-read-only-preflight',
+        invocationId: 'current-world-read-only-preflight',
+        traceCase: 'current-world-full-handler',
+        dependencies: fullHandlerDependencies,
+    });
+    const observedTrace = fullHandlerTrace as NoorSanitizedTrace | null;
+    const fullHandlerResult: FullHandlerPreflightResult = {
+        query: exactCryptoQuestion,
+        taskType: observedTrace?.taskType ?? 'not_observed',
+        contextSelected: observedTrace?.contextSelected ?? null,
+        preEvidenceCount: observedTrace?.preAnswerabilityEvidenceIds.length ?? 0,
+        postEvidenceCount: observedTrace?.postAnswerabilityEvidenceIds.length ?? 0,
+        answerability: observedTrace?.answerabilityReason ?? 'not_observed',
+        generationCalls: answerGenerationCalls,
+        status: fullHandlerResponse.status,
+        citationCount: fullHandlerResponse.citations.length,
+        statePersistence: observedTrace?.statePersistence ?? 'not_observed',
+        answeredUsageIncrement,
+        finalizedNonAnswer,
+        passed: observedTrace?.taskType === 'point_question'
+            && observedTrace.contextSelected === false
+            && observedTrace.preAnswerabilityEvidenceIds.length > 0
+            && observedTrace.postAnswerabilityEvidenceIds.length === 0
+            && observedTrace.answerabilityReason === 'insufficient'
+            && answerGenerationCalls === 0
+            && fullHandlerResponse.status === 'insufficient_evidence'
+            && fullHandlerResponse.citations.length === 0
+            && observedTrace.statePersistence === 'not_persisted'
+            && answeredUsageIncrement === 0
+            && finalizedNonAnswer,
+    };
+
     const failed = [...results, ...synthesisResults].filter(result => !result.passed);
+    const failureCount = failed.length + (fullHandlerResult.passed ? 0 : 1);
+    const totalCount = results.length + synthesisResults.length + 1;
     process.stdout.write(`${JSON.stringify({
         project: LOCKED_PROJECT,
         corpusVersion: config.activeCorpusVersion,
@@ -290,13 +523,14 @@ async function main(): Promise<void> {
                 history: [],
             },
         }),
-        passed: results.length + synthesisResults.length - failed.length,
-        failed: failed.length,
+        passed: totalCount - failureCount,
+        failed: failureCount,
         cases: results,
         synthesisCases: synthesisResults,
+        fullHandlerCase: fullHandlerResult,
     }, undefined, 2)}\n`);
-    process.stdout.write(`SEMANTIC RETRIEVAL PREFLIGHT: ${failed.length === 0 ? 'VERIFIED' : 'FAILED'}\n`);
-    if (failed.length > 0) process.exitCode = 1;
+    process.stdout.write(`SEMANTIC RETRIEVAL PREFLIGHT: ${failureCount === 0 ? 'VERIFIED' : 'FAILED'}\n`);
+    if (failureCount > 0) process.exitCode = 1;
 }
 
 if (require.main === module) {

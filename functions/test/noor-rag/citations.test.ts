@@ -83,4 +83,38 @@ describe('Noor generated citation validation', () => {
             { requireInlineCitations: true },
         )?.citationSubtype, 'malformed_citation');
     });
+
+    it('applies distinct structural contracts to answered and typed insufficient outcomes', () => {
+        const emptyAbstention = validateGeneratedAnswer({
+            status: 'insufficient_evidence',
+            answer: '',
+            citationIds: [],
+        }, EVIDENCE);
+        assert.equal(emptyAbstention.status, 'insufficient_evidence');
+        assert.equal(emptyAbstention.answer, '');
+        assert.deepEqual(emptyAbstention.citationIds, []);
+
+        const writtenAbstention = validateGeneratedAnswer({
+            status: 'insufficient_evidence',
+            answer: 'I could not find enough reliable tafsir evidence to answer safely.',
+            citationIds: [],
+        }, EVIDENCE);
+        assert.equal(writtenAbstention.status, 'insufficient_evidence');
+
+        assert.throws(() => validateGeneratedAnswer({
+            status: 'insufficient_evidence',
+            answer: '',
+            citationIds: ['S1'],
+        }, EVIDENCE), /invalid generated answer/i);
+        assert.throws(() => validateGeneratedAnswer({
+            status: 'insufficient_evidence',
+            answer: 'Bitcoin is performing best.',
+            citationIds: [],
+        }, EVIDENCE), /invalid generated answer/i);
+        assert.throws(() => validateGeneratedAnswer({
+            status: 'answered',
+            answer: '',
+            citationIds: ['S1'],
+        }, EVIDENCE), /invalid generated answer/i);
+    });
 });
