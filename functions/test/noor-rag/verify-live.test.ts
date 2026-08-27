@@ -3,6 +3,8 @@ import { describe, it } from 'node:test';
 
 import * as verifyLiveModule from '../../scripts/noor-rag/verify-live';
 import { CANONICAL_INSUFFICIENT_EVIDENCE } from '../../src/noor-rag/outcome';
+import { buildChatQueryPlan } from '../../src/noor-rag/queryRewrite';
+import { parseNoorRequest } from '../../src/noor-rag/validation';
 import type { NoorAnswer, NoorRequest } from '../../src/noor-rag/types';
 
 interface PacerOptions {
@@ -125,6 +127,113 @@ function insufficientAnswer(): NoorAnswer {
 }
 
 describe('Noor authenticated live verifier', () => {
+    it('keeps full clean and noisy transcripts within the six-entry request contract', async () => {
+        const runTurns = (verifyLiveModule as unknown as Record<string, unknown>).executeSequentialLiveTurns as SequentialRunner;
+        const transcripts = [
+            [
+                'What are the main themes of Surah Al-Baqarah?',
+                'Give me an overview of Surah Yusuf without just revealing one event.',
+                'What is Surah Maryam about?',
+                'What can we learn from Surah Al-Kahf?',
+                'Summarize Surah Al-Nas.',
+                'Tell me about Nuh.',
+                'Why did they reject him?',
+                'How is the story of Nuh and Musa different?',
+                'Ask one natural follow-up about those two stories.',
+                'What lessons do we learn from both their stories?',
+                'Is Riba haram and why?',
+                'Is arrogance haram?',
+                'Which cryptocurrency is doing well now?',
+                'Can I pray without wudu?',
+                'Is this loan halal for my personal financial situation?',
+                'What does the Quran say about patience?',
+            ],
+            [
+                'whats surah baqara basically abt',
+                'what abt yusuf',
+                'tell me main thing in maryam',
+                'what can i learn frm kahf',
+                'summarise al nas plz',
+                'tell me abt nuh',
+                'why they reject him',
+                'and then?',
+                'nuh vs musa whats different',
+                'both their stories teach what',
+                'is riba harram and why',
+                'arrogance haram?',
+                'which crypto doing best rn',
+                'can i pray without wuduu',
+                'is this loan halal for my personal financial situaton',
+            ],
+        ];
+        for (const questions of transcripts) {
+            const count = questions.length;
+            const requests: Array<Extract<NoorRequest, { mode: 'chat' }>> = [];
+            const result = await runTurns({
+                questions,
+                expectedFinalStatus: 'answered',
+                credentials: { endpoint: 'https://example.com', firebaseIdToken: 'token', appCheckToken: 'app-check' },
+                paceRequest: async () => undefined,
+                call: async request => {
+                    assert.equal(request.mode, 'chat');
+                    if (request.mode === 'chat') requests.push(request);
+                    parseNoorRequest(request);
+                    return { answer: ANSWERED(request.requestId), latencyMs: 1 };
+                },
+                readTrace: async requestId => answeredTrace(requestId, requests.length > 1),
+                validateAnsweredCitations: () => true,
+            });
+
+            assert.equal(result.completed, true);
+            assert.equal(requests.length, count);
+            assert.equal(requests.every(request => request.history.length <= 6), true);
+            assert.deepEqual(
+                requests[count - 1]?.history.map(turn => turn.content),
+                [questions[count - 4], 'Grounded answer. [S1]', questions[count - 3], 'Grounded answer. [S1]', questions[count - 2], 'Grounded answer. [S1]'],
+            );
+        }
+    });
+
+    it('sends only the latest six entries for the exact C01-C05 transcript', async () => {
+        const runTurns = (verifyLiveModule as unknown as Record<string, unknown>).executeSequentialLiveTurns as SequentialRunner;
+        const questions = [
+            'What are the main themes of Surah Al-Baqarah?',
+            'Give me an overview of Surah Yusuf without just revealing one event.',
+            'What is Surah Maryam about?',
+            'What can we learn from Surah Al-Kahf?',
+            'Explain Al-Kahf like I know nothing about it.',
+        ];
+        const requests: Array<Extract<NoorRequest, { mode: 'chat' }>> = [];
+        const result = await runTurns({
+            questions,
+            expectedFinalStatus: 'answered',
+            credentials: { endpoint: 'https://example.com', firebaseIdToken: 'token', appCheckToken: 'app-check' },
+            paceRequest: async () => undefined,
+            call: async request => {
+                assert.equal(request.mode, 'chat');
+                if (request.mode === 'chat') requests.push(request);
+                parseNoorRequest(request);
+                return { answer: ANSWERED(request.requestId), latencyMs: 1 };
+            },
+            readTrace: async requestId => answeredTrace(requestId, requests.length > 1),
+            validateAnsweredCitations: () => true,
+        });
+
+        assert.equal(result.completed, true);
+        assert.deepEqual(requests.map(request => request.history.length), [0, 2, 4, 6, 6]);
+        assert.deepEqual(
+            requests[4]?.history.map(turn => turn.content),
+            [questions[1], 'Grounded answer. [S1]', questions[2], 'Grounded answer. [S1]', questions[3], 'Grounded answer. [S1]'],
+        );
+        const c05 = requests[4];
+        assert.ok(c05);
+        const plan = buildChatQueryPlan({ request: c05 });
+        assert.equal(plan.taskType, 'entity_summary');
+        assert.equal(plan.retrievalTask, 'entity_summary');
+        assert.equal(plan.entity?.surahNumber, 18);
+        assert.equal(plan.contextSelected, false);
+    });
+
     it('accepts every coherent insufficient-evidence origin without requiring pre-answerability evidence', () => {
         const module = verifyLiveModule as unknown as Record<string, unknown>;
         assert.equal(typeof module.safeAbstentionSatisfied, 'function');

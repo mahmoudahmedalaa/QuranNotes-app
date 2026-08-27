@@ -2,7 +2,10 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+    boundNoorHistory,
     buildCallableRequest,
+    MAX_NOOR_HISTORY_TURNS,
+    parseCallableErrorDiagnostics,
     parseCallableResponse,
     parseLiveSmokeOptions,
     redactLiveSmokeResult,
@@ -38,6 +41,88 @@ function answeredBody(): Record<string, unknown> {
 }
 
 describe('Noor live smoke helpers', () => {
+    it('bounds eight and ten accumulated entries to the latest six in chronological order', () => {
+        assert.equal(MAX_NOOR_HISTORY_TURNS, 6);
+        for (const accumulatedCount of [8, 10]) {
+            const history = Array.from({ length: accumulatedCount }, (_, index) => ({
+                role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+                content: `${index}`,
+            }));
+            const bounded = boundNoorHistory(history);
+
+            assert.deepEqual(bounded, history.slice(-6));
+            assert.deepEqual(bounded.map(turn => turn.content), [`${accumulatedCount - 6}`, `${accumulatedCount - 5}`, `${accumulatedCount - 4}`, `${accumulatedCount - 3}`, `${accumulatedCount - 2}`, `${accumulatedCount - 1}`]);
+            assert.deepEqual(bounded.map(turn => turn.role), ['user', 'assistant', 'user', 'assistant', 'user', 'assistant']);
+        }
+    });
+
+    it('bounds chat history at the callable envelope boundary', () => {
+        const history = Array.from({ length: 8 }, (_, index) => ({
+            role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+            content: `${index}`,
+        }));
+        const request = {
+            mode: 'chat' as const,
+            requestId: REQUEST_ID,
+            question: 'Current question',
+            history,
+        };
+        const built = buildCallableRequest(request, CREDENTIALS);
+        const outgoing = JSON.parse(built.init.body).data;
+        assert.deepEqual(outgoing.history, history.slice(-6));
+    });
+
+    it('keeps the verifier bound in parity with the Noor request parser', async () => {
+        const { parseNoorRequest } = await import('../../src/noor-rag/validation');
+        const entry = { role: 'user' as const, content: 'Prior turn' };
+        for (const count of [0, 2, 4, 6]) {
+            const valid = {
+                mode: 'chat' as const,
+                requestId: REQUEST_ID,
+                question: 'Current question',
+                history: Array.from({ length: count }, () => entry),
+            };
+            assert.doesNotThrow(() => parseNoorRequest(valid));
+        }
+        const valid = {
+            mode: 'chat' as const,
+            requestId: REQUEST_ID,
+            question: 'Current question',
+            history: Array.from({ length: MAX_NOOR_HISTORY_TURNS }, () => ({
+                role: 'user' as const,
+                content: 'x'.repeat(1_000),
+            })),
+        };
+        assert.doesNotThrow(() => parseNoorRequest(valid));
+        assert.equal(valid.history.every(turn => turn.content.length <= 1_000), true);
+        assert.throws(
+            () => parseNoorRequest({ ...valid, history: [...valid.history, entry] }),
+            /Invalid Noor request/,
+        );
+    });
+
+    it('retains only safe callable error diagnostics', () => {
+        const diagnostics = parseCallableErrorDiagnostics(
+            400,
+            { error: { status: 'INVALID_ARGUMENT', message: 'The Noor request is invalid.' } },
+            REQUEST_ID,
+            new Map([
+                ['x-cloud-trace-context', 'trace-id/123;o=1'],
+                ['authorization', 'Bearer secret-token'],
+            ]),
+        );
+
+        assert.deepEqual(diagnostics, {
+            clientRequestId: REQUEST_ID,
+            httpStatus: 400,
+            callableErrorCode: null,
+            callableErrorStatus: 'INVALID_ARGUMENT',
+            callableErrorMessage: 'The Noor request is invalid.',
+            cloudTrace: 'trace-id/123;o=1',
+        });
+        assert.equal(JSON.stringify(diagnostics).includes('secret-token'), false);
+    });
+
     it('builds the Firebase callable envelope and authentication headers', () => {
         const request = {
             mode: 'chat' as const,
@@ -112,10 +197,14 @@ describe('Noor live smoke helpers', () => {
 
         const rateLimited = parseCallableResponse(429, {
             error: { status: 'RESOURCE_EXHAUSTED', message: 'raw provider details must be ignored' },
-        }, REQUEST_ID);
+        }, REQUEST_ID, new Map([['x-cloud-trace-id', 'trace-429']]));
         assert.equal(rateLimited.status, 'transport_error');
         assert.equal(rateLimited.errorClass, 'rate_limited');
         assert.equal(rateLimited.answerForHistory, undefined);
+        assert.equal(rateLimited.transportDiagnostics?.clientRequestId, REQUEST_ID);
+        assert.equal(rateLimited.transportDiagnostics?.callableErrorStatus, 'RESOURCE_EXHAUSTED');
+        assert.equal(rateLimited.transportDiagnostics?.callableErrorMessage, 'raw provider details must be ignored');
+        assert.equal(rateLimited.transportDiagnostics?.cloudTrace, 'trace-429');
 
         const malformed = parseCallableResponse(200, { result: { answer: 'not a valid answer' } }, REQUEST_ID);
         assert.equal(malformed.status, 'malformed_response');

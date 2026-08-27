@@ -33,6 +33,7 @@ export interface LiveSmokeObservation {
     citations: readonly LiveSmokeCitationReference[];
     errorClass: string | null;
     answerForHistory?: string;
+    transportDiagnostics?: CallableErrorDiagnostics;
 }
 
 export interface LiveSmokeResult {
@@ -42,6 +43,16 @@ export interface LiveSmokeResult {
     citations: readonly { source: LiveSmokeCitationReference['source']; verse: string }[];
     latencyMs: number;
     errorClass: string | null;
+    transportDiagnostics?: CallableErrorDiagnostics;
+}
+
+export interface CallableErrorDiagnostics {
+    clientRequestId: string;
+    httpStatus: number;
+    callableErrorCode: string | null;
+    callableErrorStatus: string | null;
+    callableErrorMessage: string | null;
+    cloudTrace: string | null;
 }
 
 export interface BuiltCallableRequest {
@@ -61,6 +72,8 @@ export interface LiveSmokeReport {
 }
 
 type ChatHistory = Array<{ role: 'user' | 'assistant'; content: string }>;
+
+export const MAX_NOOR_HISTORY_TURNS = 6;
 
 const DEFAULT_INTERVAL_MS = 12_000;
 const DAILY_LIMIT = 50;
@@ -180,6 +193,9 @@ export function parseLiveSmokeCredentials(
 }
 
 export function buildCallableRequest(request: NoorRequest, credentials: LiveSmokeCredentials): BuiltCallableRequest {
+    const boundedRequest = request.mode === 'chat'
+        ? { ...request, history: boundNoorHistory(request.history) }
+        : request;
     return {
         url: credentials.endpoint,
         init: {
@@ -189,8 +205,48 @@ export function buildCallableRequest(request: NoorRequest, credentials: LiveSmok
                 'X-Firebase-AppCheck': credentials.appCheckToken,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ data: request }),
+            body: JSON.stringify({ data: boundedRequest }),
         },
+    };
+}
+
+export function boundNoorHistory(history: ChatHistory): ChatHistory {
+    return history.slice(-MAX_NOOR_HISTORY_TURNS);
+}
+
+type HeaderReader = { get(name: string): string | null } | ReadonlyMap<string, string>;
+
+function readHeader(headers: HeaderReader | undefined, name: string): string | null {
+    if (!headers) return null;
+    const value = headers instanceof Map ? headers.get(name) : headers.get(name);
+    return typeof value === 'string' && value.length > 0 ? value.slice(0, 256) : null;
+}
+
+function safeCallableText(value: unknown): string | null {
+    if (typeof value !== 'string' || value.length === 0) return null;
+    return value.replace(/[\u0000-\u001F\u007F]/gu, '').slice(0, 256);
+}
+
+export function parseCallableErrorDiagnostics(
+    httpStatus: number,
+    body: unknown,
+    clientRequestId: string,
+    headers?: HeaderReader,
+): CallableErrorDiagnostics {
+    const error = isRecord(body) && isRecord(body.error) ? body.error : null;
+    const callableErrorCode = safeCallableText(error?.code);
+    const callableErrorStatus = safeCallableText(error?.status)?.toUpperCase() ?? null;
+    const callableErrorMessage = safeCallableText(error?.message);
+    const cloudTrace = readHeader(headers, 'x-cloud-trace-context')
+        ?? readHeader(headers, 'x-cloud-trace-id')
+        ?? readHeader(headers, 'traceparent');
+    return {
+        clientRequestId,
+        httpStatus,
+        callableErrorCode,
+        callableErrorStatus,
+        callableErrorMessage,
+        cloudTrace,
     };
 }
 
@@ -238,9 +294,15 @@ export function parseCallableResponse(
     httpStatus: number,
     body: unknown,
     expectedRequestId: string,
+    headers?: HeaderReader,
 ): LiveSmokeObservation {
     if (httpStatus < 200 || httpStatus >= 300) {
-        return { status: 'transport_error', citations: [], errorClass: transportErrorClass(httpStatus, body) };
+        return {
+            status: 'transport_error',
+            citations: [],
+            errorClass: transportErrorClass(httpStatus, body),
+            transportDiagnostics: parseCallableErrorDiagnostics(httpStatus, body, expectedRequestId, headers),
+        };
     }
 
     const result = isRecord(body) && Object.prototype.hasOwnProperty.call(body, 'result') ? body.result : undefined;
@@ -270,6 +332,7 @@ export function redactLiveSmokeResult(caseLabel: string, latencyMs: number, obse
         })),
         latencyMs,
         errorClass: observation.errorClass,
+        ...(observation.transportDiagnostics ? { transportDiagnostics: observation.transportDiagnostics } : {}),
     };
 }
 
@@ -290,6 +353,7 @@ function chatRequest(question: string, history: ChatHistory): NoorRequest {
 type FetchImplementation = (input: string, init: BuiltCallableRequest['init']) => Promise<{
     status: number;
     json(): Promise<unknown>;
+    headers?: HeaderReader;
 }>;
 
 async function executeRequest(
@@ -305,7 +369,7 @@ async function executeRequest(
         const built = buildCallableRequest(request, credentials);
         const response = await fetchImpl(built.url, built.init);
         const body = await response.json();
-        observation = parseCallableResponse(response.status, body, request.requestId);
+        observation = parseCallableResponse(response.status, body, request.requestId, response.headers);
     } catch {
         observation = { status: 'transport_error', citations: [], errorClass: 'network_error' };
     }
@@ -347,7 +411,7 @@ export async function runLiveSmoke(
     } else if (options.mode === 'conversation') {
         const history: ChatHistory = [];
         for (const [index, question] of CONVERSATION_TURNS.entries()) {
-            const answer = await run(`conversation-turn-${index + 1}`, chatRequest(question, [...history]));
+            const answer = await run(`conversation-turn-${index + 1}`, chatRequest(question, boundNoorHistory(history)));
             history.push({ role: 'user', content: question });
             history.push({ role: 'assistant', content: boundedHistoryAnswer(answer) });
         }

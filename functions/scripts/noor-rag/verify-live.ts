@@ -8,8 +8,11 @@ import type { NoorAnswer, NoorRequest } from '../../src/noor-rag/types';
 import { CANONICAL_INSUFFICIENT_EVIDENCE } from '../../src/noor-rag/outcome';
 import { parseNoorAnswer } from '../../src/noor-rag/validation';
 import {
+    boundNoorHistory,
     buildCallableRequest,
+    parseCallableErrorDiagnostics,
     parseLiveSmokeCredentials,
+    type CallableErrorDiagnostics,
     type LiveSmokeCredentials,
 } from './live-smoke';
 import {
@@ -43,6 +46,7 @@ interface LiveCaseResult {
     citations: readonly LiveCitation[];
     latencyMs: number;
     errorClass: string | null;
+    transportDiagnostics?: CallableErrorDiagnostics;
     turns: readonly LiveTurnResult[];
 }
 
@@ -145,6 +149,15 @@ const LIVE_CASE_IDS = [
 const MAX_HISTORY_ANSWER_CHARACTERS = 1_000;
 const DEFAULT_REQUEST_INTERVAL_MS = 15_000;
 const PROVIDER_REPLAY_DELAY_MS = 10_000;
+
+class LiveTransportError extends Error {
+    requestCount?: number;
+
+    constructor(readonly diagnostics: CallableErrorDiagnostics) {
+        super(safeErrorClass(diagnostics.httpStatus));
+        this.name = 'LiveTransportError';
+    }
+}
 
 export interface LiveRequestPacerOptions {
     intervalMs?: number;
@@ -381,8 +394,19 @@ export async function executeSequentialLiveTurns(
     for (let index = 0; index < input.questions.length; index += 1) {
         const question = input.questions[index]!;
         const expectedStatus = index < input.questions.length - 1 ? 'answered' : input.expectedFinalStatus;
-        let request: NoorRequest = { mode: 'chat', requestId: randomUUID(), question, history: [...history] };
-        let called = await input.call(request);
+        let request: NoorRequest = {
+            mode: 'chat',
+            requestId: randomUUID(),
+            question,
+            history: boundNoorHistory(history),
+        };
+        let called: Awaited<ReturnType<SequentialLiveTurnsInput['call']>>;
+        try {
+            called = await input.call(request);
+        } catch (error: unknown) {
+            if (error instanceof LiveTransportError) error.requestCount = index + 1;
+            throw error;
+        }
         requestCount += 1;
         let trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
         let failureSubtype = classifyLiveFailureSubtype(expectedStatus, called.answer, trace);
@@ -395,8 +419,18 @@ export async function executeSequentialLiveTurns(
             if (replayBudget.availabilityFailures === 1) {
                 await sleep(PROVIDER_REPLAY_DELAY_MS);
                 providerReplayUsed = true;
-                request = { mode: 'chat', requestId: randomUUID(), question, history: [...history] };
-                called = await input.call(request);
+                request = {
+                    mode: 'chat',
+                    requestId: randomUUID(),
+                    question,
+                    history: boundNoorHistory(history),
+                };
+                try {
+                    called = await input.call(request);
+                } catch (error: unknown) {
+                    if (error instanceof LiveTransportError) error.requestCount = index + 2;
+                    throw error;
+                }
                 requestCount += 1;
                 trace = parseLiveTurnTrace(await input.readTrace(request.requestId), request.requestId);
                 failureSubtype = classifyLiveFailureSubtype(expectedStatus, called.answer, trace);
@@ -455,10 +489,15 @@ export async function executeSequentialLiveTurns(
     return { requestCount, completed: true, turns, finalAnswer };
 }
 
-function answerFromResponse(status: number, body: unknown, expectedRequestId: string): NoorAnswer {
+function answerFromResponse(
+    status: number,
+    body: unknown,
+    expectedRequestId: string,
+    headers?: { get(name: string): string | null },
+): NoorAnswer {
     if (status < 200 || status >= 300 || typeof body !== 'object' || body === null || Array.isArray(body)
         || !Object.prototype.hasOwnProperty.call(body, 'result')) {
-        throw new Error(safeErrorClass(status));
+        throw new LiveTransportError(parseCallableErrorDiagnostics(status, body, expectedRequestId, headers));
     }
     const answer = parseNoorAnswer((body as { result: unknown }).result);
     if (answer.requestId !== expectedRequestId) throw new Error('request_id_mismatch');
@@ -486,7 +525,10 @@ async function callNoor(
     const startedAt = Date.now();
     const response = await fetch(built.url, built.init);
     const body = await response.json() as unknown;
-    return { answer: answerFromResponse(response.status, body, request.requestId), latencyMs: Math.max(0, Date.now() - startedAt) };
+    return {
+        answer: answerFromResponse(response.status, body, request.requestId, response.headers),
+        latencyMs: Math.max(0, Date.now() - startedAt),
+    };
 }
 
 function expectedChunkIds(goldenCase: GoldenCase): string[] {
@@ -577,8 +619,8 @@ async function runCase(
                 surah: goldenCase.exact.surah,
                 verse: goldenCase.exact.verse,
             };
-            let called = await callNoor(request, credentials, paceRequest);
             requestCount = 1;
+            let called = await callNoor(request, credentials, paceRequest);
             let trace = parseLiveTurnTrace(await readTrace(request.requestId), request.requestId);
             let failureSubtype = classifyLiveFailureSubtype(goldenCase.expectedStatus, called.answer, trace);
             let providerReplayUsed = false;
@@ -588,8 +630,8 @@ async function runCase(
                     await new Promise(resolve => setTimeout(resolve, PROVIDER_REPLAY_DELAY_MS));
                     providerReplayUsed = true;
                     request = { ...request, requestId: randomUUID() };
-                    called = await callNoor(request, credentials, paceRequest);
                     requestCount += 1;
+                    called = await callNoor(request, credentials, paceRequest);
                     trace = parseLiveTurnTrace(await readTrace(request.requestId), request.requestId);
                     failureSubtype = classifyLiveFailureSubtype(goldenCase.expectedStatus, called.answer, trace);
                     if (replayableProviderFailure(failureSubtype)) providerReplayBudget.availabilityFailures += 1;
@@ -635,6 +677,8 @@ async function runCase(
             answer = executed.finalAnswer;
         }
     } catch (error: unknown) {
+        const transportDiagnostics = error instanceof LiveTransportError ? error.diagnostics : undefined;
+        if (error instanceof LiveTransportError) requestCount = error.requestCount ?? Math.max(requestCount, 1);
         return {
             id: goldenCase.id,
             requestCount,
@@ -649,6 +693,7 @@ async function runCase(
             citations: [],
             latencyMs: Math.max(0, Date.now() - startedAt),
             errorClass: classifyLiveTransportError(error),
+            ...(transportDiagnostics ? { transportDiagnostics } : {}),
             turns,
         };
     }
