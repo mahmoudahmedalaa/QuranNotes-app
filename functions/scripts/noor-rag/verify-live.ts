@@ -22,6 +22,12 @@ import {
 } from './golden';
 import { readCorpusArtifacts } from './evaluate-golden';
 import { LOCKED_PROJECT } from './verify-index';
+import {
+    LOCKED_VERIFICATION_CORPUS_VERSION,
+    preflightVerificationCorpus,
+} from './verification-corpus';
+
+export { preflightVerificationCorpus } from './verification-corpus';
 
 interface LiveCitation {
     chunkId: string;
@@ -136,6 +142,16 @@ interface LiveVerificationReport {
     reason?: string;
 }
 
+export interface LiveStartupFailureReport {
+    status: 'FAILED';
+    stage: string;
+    exitCode: 1;
+    errorClass: string;
+    message: string;
+    missingPath?: string;
+    lastCompletedGate: string;
+}
+
 const LIVE_CASE_IDS = [
     'riba-direct-01',
     'riba-followup-01',
@@ -149,6 +165,52 @@ const LIVE_CASE_IDS = [
 const MAX_HISTORY_ANSWER_CHARACTERS = 1_000;
 const DEFAULT_REQUEST_INTERVAL_MS = 15_000;
 const PROVIDER_REPLAY_DELAY_MS = 10_000;
+
+const MAX_STARTUP_ERROR_MESSAGE_LENGTH = 500;
+let activeVerifierStage = 'bootstrap';
+let lastCompletedVerifierGate = 'bootstrap';
+
+function boundedStartupMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    return message
+        .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
+        .replace(/(token|secret|password|credential|api[_-]?key)=[^\s&]+/gi, '$1=[REDACTED]')
+        .slice(0, MAX_STARTUP_ERROR_MESSAGE_LENGTH);
+}
+
+function startupErrorProperty(error: unknown, name: string): unknown {
+    return isRecord(error) ? error[name] : undefined;
+}
+
+export function createLiveStartupFailureReport(
+    error: unknown,
+    lastCompletedGate: string,
+): LiveStartupFailureReport {
+    const explicitStage = startupErrorProperty(error, 'stage');
+    const stage = typeof explicitStage === 'string'
+        ? explicitStage
+        : startupErrorProperty(error, 'code') === 'verification_corpus_missing'
+            || startupErrorProperty(error, 'code') === 'verification_corpus_invalid'
+            || startupErrorProperty(error, 'code') === 'verification_corpus_mismatch'
+            ? 'corpus_preflight'
+            : activeVerifierStage;
+    const code = startupErrorProperty(error, 'code');
+    const errorClass = typeof code === 'string'
+        ? code
+        : error instanceof Error && error.name
+            ? error.name
+            : 'startup_failure';
+    const missingPath = startupErrorProperty(error, 'missingPath');
+    return {
+        status: 'FAILED',
+        stage,
+        exitCode: 1,
+        errorClass,
+        message: boundedStartupMessage(error),
+        ...(typeof missingPath === 'string' ? { missingPath } : {}),
+        lastCompletedGate,
+    };
+}
 
 class LiveTransportError extends Error {
     requestCount?: number;
@@ -737,11 +799,15 @@ function createLiveTraceReader(firestore: ReturnType<typeof getFirestore>): (req
 }
 
 async function main(): Promise<void> {
-    const version = '2026-08-10-v1';
+    const version = LOCKED_VERIFICATION_CORPUS_VERSION;
     const casesPath = resolve(__dirname, '../../../evals/noor-golden-cases.json');
     const artifactsPath = resolve(__dirname, '../../../.generated/noor-corpus', version);
     const manifest = parseGoldenManifest(readJson(casesPath));
     if (manifest.corpusVersion !== version) throw new Error('Live golden corpus version is not locked');
+    activeVerifierStage = 'corpus_preflight';
+    const corpus = preflightVerificationCorpus(artifactsPath);
+    lastCompletedVerifierGate = 'corpus_preflight';
+    activeVerifierStage = 'candidate_baseline';
     let credentials: LiveSmokeCredentials;
     try {
         credentials = parseLiveSmokeCredentials(process.env);
@@ -756,7 +822,8 @@ async function main(): Promise<void> {
         process.exitCode = 2;
         return;
     }
-    const artifacts = readCorpusArtifacts(artifactsPath);
+    const artifacts = corpus.artifacts;
+    activeVerifierStage = 'candidate_baseline';
     const credential = applicationDefault();
     await credential.getAccessToken();
     const app = initializeApp({ credential, projectId: LOCKED_PROJECT }, `noor-live-verify-${Date.now()}`);
@@ -791,12 +858,15 @@ async function main(): Promise<void> {
         results,
     };
     process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`);
+    lastCompletedVerifierGate = 'candidate_baseline';
     if (failedCaseIds.length > 0) process.exitCode = 1;
 }
 
 if (require.main === module) {
-    main().catch(() => {
-        process.stderr.write('Noor live verification failed; no provider details or credentials were emitted.\n');
+    main().catch(error => {
+        const report = createLiveStartupFailureReport(error, lastCompletedVerifierGate);
+        process.stderr.write(`LIVE_VERIFIER_STARTUP_FAILURE ${JSON.stringify(report)}\n`);
+        process.stdout.write(`${JSON.stringify(report)}\n`);
         process.exitCode = 1;
     });
 }

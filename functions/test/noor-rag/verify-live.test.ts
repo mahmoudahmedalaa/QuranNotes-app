@@ -1,4 +1,8 @@
 import * as assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import * as verifyLiveModule from '../../scripts/noor-rag/verify-live';
@@ -34,6 +38,31 @@ type CitationEvidenceValidator = (
 
 type TransportErrorClassifier = (error: unknown) => string;
 type HistoryAnswerBounder = (answer: string) => string;
+
+type StartupFailureReporter = (error: unknown, lastCompletedGate: string) => Record<string, unknown>;
+type CorpusPreflight = (directory: string, expected?: Record<string, unknown>) => Record<string, unknown>;
+
+function corpusFixture(): { directory: string; expected: Record<string, unknown> } {
+    const directory = mkdtempSync(join(tmpdir(), 'noor-verification-corpus-'));
+    const units = [{}];
+    const chunks = [{}];
+    const lookups = [{}];
+    const digest = (value: unknown) => createHash('sha256').update(`${JSON.stringify(value, undefined, 2)}\n`).digest('hex');
+    const artifactSha256 = { units: digest(units), chunks: digest(chunks), lookups: digest(lookups) };
+    const aggregateSha256 = createHash('sha256')
+        .update((['chunks', 'lookups', 'units'] as const).map(name => `${name}.json\0${artifactSha256[name]}\n`).join(''))
+        .digest('hex');
+    const manifest = {
+        corpusVersion: '2026-08-10-v1', unitCount: 1, chunkCount: 1, lookupCount: 1,
+        artifactSha256, aggregateSha256,
+    };
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'units.json'), JSON.stringify(units, undefined, 2));
+    writeFileSync(join(directory, 'chunks.json'), JSON.stringify(chunks, undefined, 2));
+    writeFileSync(join(directory, 'lookups.json'), JSON.stringify(lookups, undefined, 2));
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify(manifest, undefined, 2));
+    return { directory, expected: manifest };
+}
 type SafeAbstentionValidator = (answer: NoorAnswer, trace: Record<string, unknown> | null) => boolean;
 type SafeAbstentionFailureReason = (answer: NoorAnswer, trace: Record<string, unknown> | null) => string | null;
 
@@ -127,6 +156,37 @@ function insufficientAnswer(): NoorAnswer {
 }
 
 describe('Noor authenticated live verifier', () => {
+    it('exposes an explicit verification-corpus preflight for the locked live corpus', () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        assert.equal(typeof module.preflightVerificationCorpus, 'function');
+        const preflight = module.preflightVerificationCorpus as CorpusPreflight;
+        const fixture = corpusFixture();
+        const result = preflight(fixture.directory, fixture.expected);
+
+        assert.equal(result.ready, true);
+        assert.equal(result.corpusVersion, '2026-08-10-v1');
+    });
+
+    it('preserves a bounded startup error and last completed gate', () => {
+        const module = verifyLiveModule as unknown as Record<string, unknown>;
+        assert.equal(typeof module.createLiveStartupFailureReport, 'function');
+        const createReport = module.createLiveStartupFailureReport as StartupFailureReporter;
+        const report = createReport(
+            Object.assign(new Error('verification_corpus_missing'), { code: 'verification_corpus_missing', missingPath: '/tmp/missing/units.json' }),
+            'bootstrap',
+        );
+
+        assert.deepEqual(report, {
+            status: 'FAILED',
+            stage: 'corpus_preflight',
+            exitCode: 1,
+            errorClass: 'verification_corpus_missing',
+            message: 'verification_corpus_missing',
+            missingPath: '/tmp/missing/units.json',
+            lastCompletedGate: 'bootstrap',
+        });
+    });
+
     it('keeps full clean and noisy transcripts within the six-entry request contract', async () => {
         const runTurns = (verifyLiveModule as unknown as Record<string, unknown>).executeSequentialLiveTurns as SequentialRunner;
         const transcripts = [

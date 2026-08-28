@@ -17,6 +17,8 @@
     "noor:verify:package": "node scripts/noor-rag/verify-deployment-package.js",
     "noor:verify:retrieval": "npm --prefix functions run noor:verify:retrieval",
     "noor:verify:live": "npm --prefix functions run noor:verify:live",
+    "noor:prepare:verification-carrier": "npm --prefix functions run noor:verification:corpus --",
+    "noor:verify:release-preflight": "node scripts/noor-rag/release-preflight.js",
     "report:firebase-usage": "node scripts/report-firebase-usage.js",
     "report:paywall-funnel": "node scripts/report-paywall-funnel.js",
     "paywall:rollout": "node scripts/manage-paywall-rollout.js",

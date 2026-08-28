@@ -17,6 +17,7 @@
         "noor:verify:policy-classifier": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-personalized-ruling-classifier.js",
         "noor:verify:task-classifier": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-semantic-task-classifier.js",
         "noor:verify:live": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verify-live.js",
+        "noor:verification:corpus": "npm run build:scripts && node lib-scripts/scripts/noor-rag/verification-corpus.js",
         "noor:live-smoke": "npm run build:scripts && node lib-scripts/scripts/noor-rag/live-smoke.js",
         "noor:eval:validate-cases": "npm run build:scripts && node lib-scripts/scripts/noor-rag/evaluation-cases.js --input=evals/noor-evaluation-cases.json",
         "noor:runtime:configure": "npm run build:scripts && node lib-scripts/scripts/noor-rag/configure-runtime.js",

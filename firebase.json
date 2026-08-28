@@ -8,7 +8,8 @@
       "source": "functions",
       "codebase": "default",
       "predeploy": [
-        "node \"$RESOURCE_DIR/../scripts/noor-rag/verify-deployment-package.js\""
+        "node \"$RESOURCE_DIR/../scripts/noor-rag/verify-deployment-package.js\"",
+        "node \"$RESOURCE_DIR/../scripts/noor-rag/release-preflight.js\""
       ],
       "ignore": [
         "node_modules",
