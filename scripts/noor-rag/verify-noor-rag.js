@@ -1,11 +1,16 @@
 const { execFileSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
-const { resolve } = require('node:path');
+const { join, resolve } = require('node:path');
+
+const {
+    evaluateCarrierContract,
+    requestedReleaseSha,
+} = require('./carrier-contract');
 
 const repositoryRoot = resolve(__dirname, '../..');
 const functionsRoot = resolve(repositoryRoot, 'functions');
-const expectedBranch = 'feature/noor-ai-phase5';
 const corpusVersion = '2026-08-10-v1';
+const requiredVerificationCorpusArtifacts = ['units.json', 'chunks.json', 'lookups.json', 'manifest.json'];
 const casesPath = resolve(functionsRoot, 'evals/noor-golden-cases.json');
 
 const summary = [];
@@ -42,16 +47,27 @@ function runStep(label, command, args, cwd = repositoryRoot) {
 function verifyCarrier() {
     const branch = commandOutput('git', ['branch', '--show-current']).trim();
     const head = commandOutput('git', ['rev-parse', 'HEAD']).trim();
-    const status = commandOutput('git', ['status', '--porcelain', '--untracked-files=no']).trim();
+    const status = commandOutput('git', ['status', '--porcelain', '--untracked-files=all']).trim();
     const ragExists = existsSync(resolve(functionsRoot, 'src/noor-rag'));
     const scriptsExist = existsSync(resolve(functionsRoot, 'scripts/noor-rag'));
     const lockedSource = readFileSync(resolve(functionsRoot, 'scripts/noor-rag/verify-index.ts'), 'utf8');
-    const expectedVersionPresent = lockedSource.includes(`LOCKED_CORPUS_VERSION = '${corpusVersion}'`);
-    const detachedCiCheckout = process.env.CI === 'true' && branch === '';
-    if (status !== '' || (branch !== expectedBranch && !detachedCiCheckout) || !ragExists || !scriptsExist || !expectedVersionPresent) {
-        throw new Error(`carrier mismatch branch=${branch} head=${head} dirty=${status !== ''} rag=${ragExists} scripts=${scriptsExist} corpus=${expectedVersionPresent}`);
+    const lockedVersionPresent = lockedSource.includes(`LOCKED_CORPUS_VERSION = '${corpusVersion}'`);
+    const corpusDirectory = resolve(functionsRoot, '.generated', 'noor-corpus', corpusVersion);
+    const corpusArtifactsPresent = requiredVerificationCorpusArtifacts.every(file => existsSync(join(corpusDirectory, file)));
+    const releaseSha = requestedReleaseSha();
+    const result = evaluateCarrierContract({
+        branch,
+        head,
+        dirty: status !== '',
+        ragExists,
+        scriptsExist,
+        corpusPresent: lockedVersionPresent && corpusArtifactsPresent,
+        requestedSha: releaseSha,
+    });
+    if (!result.ok) {
+        throw new Error(`carrier mismatch mode=${result.mode} releaseSha=${releaseSha ?? '(none)'} branch=${branch} head=${head} dirty=${status !== ''} rag=${ragExists} scripts=${scriptsExist} corpus=${lockedVersionPresent && corpusArtifactsPresent} failed=${result.failedChecks.join(',')}`);
     }
-    process.stdout.write(`CARRIER branch=${branch || '(detached-ci)'} head=${head} status=clean rag=present corpus=${corpusVersion}\n`);
+    process.stdout.write(`CARRIER mode=${result.mode} branch=${branch || '(detached)'} head=${head} status=clean rag=present scripts=present corpus=${corpusVersion}\n`);
 }
 
 function main() {
