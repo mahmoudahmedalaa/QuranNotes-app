@@ -18,6 +18,28 @@ export const REQUIRED_VERIFICATION_CORPUS_ARTIFACTS = [
     'manifest.json',
 ] as const;
 
+export interface VerificationCorpusSourceIdentity {
+    schemaVersion: number;
+    normalizationVersion: string;
+    chunkingVersion: string;
+    unitCount: number;
+    lookupCount: number;
+    sourceCounts: readonly {
+        source: string;
+        fileCount: number;
+        mappingCount: number;
+        unitCount: number;
+    }[];
+}
+
+export interface VerificationCorpusBuildIdentity {
+    tokenizerMode: string;
+    tokenizerModel: string;
+    targetTokens: number;
+    hardMaxTokens: number;
+    overlapTokens: number;
+}
+
 export interface VerificationCorpusContract {
     corpusVersion: typeof LOCKED_VERIFICATION_CORPUS_VERSION;
     unitCount: number;
@@ -29,11 +51,13 @@ export interface VerificationCorpusContract {
         lookups: string;
     };
     aggregateSha256: string;
+    sourceIdentity?: VerificationCorpusSourceIdentity;
+    buildIdentity?: VerificationCorpusBuildIdentity;
 }
 
 // This is verifier metadata only. The corpus payload remains ignored and is copied into
 // a local verification carrier from the canonical prepared-artifact source.
-export const PROMOTED_VERIFICATION_CORPUS_CONTRACT: VerificationCorpusContract = {
+export const LOCAL_VERIFICATION_CORPUS_CONTRACT: VerificationCorpusContract = {
     corpusVersion: LOCKED_VERIFICATION_CORPUS_VERSION,
     unitCount: 7_867,
     chunkCount: 9_057,
@@ -44,6 +68,24 @@ export const PROMOTED_VERIFICATION_CORPUS_CONTRACT: VerificationCorpusContract =
         lookups: 'f0f644c2e3fd574858df6a62a027fdd7b024759f083b0814f9050faaf78862ae',
     },
     aggregateSha256: 'f6efa40de7dfa052619232fdbc99b67e7d7a45f19bbacdee4c1947f639adbca5',
+    sourceIdentity: {
+        schemaVersion: 1,
+        normalizationVersion: 'html-entities-nfc-whitespace-v1',
+        chunkingVersion: 'raw-paragraph-sentence-900-1400-overlap-80-v1',
+        unitCount: 7_867,
+        lookupCount: 12_408,
+        sourceCounts: [
+            { source: 'ibn_kathir_en_abridged', fileCount: 114, mappingCount: 6_231, unitCount: 1_895 },
+            { source: 'al_sadi_ar', fileCount: 114, mappingCount: 6_177, unitCount: 5_972 },
+        ],
+    },
+    buildIdentity: {
+        tokenizerMode: 'local-deterministic',
+        tokenizerModel: 'unicode-word-punctuation-v1',
+        targetTokens: 900,
+        hardMaxTokens: 1_400,
+        overlapTokens: 80,
+    },
 };
 
 export interface VerificationCorpusPreflightResult {
@@ -119,22 +161,82 @@ function assertSha256(value: unknown, name: string): asserts value is string {
     }
 }
 
+function manifestSourceIdentity(manifest: Record<string, unknown>): VerificationCorpusSourceIdentity | null {
+    if (typeof manifest.schemaVersion !== 'number'
+        || typeof manifest.normalizationVersion !== 'string'
+        || typeof manifest.chunkingVersion !== 'string'
+        || typeof manifest.unitCount !== 'number'
+        || typeof manifest.lookupCount !== 'number'
+        || !Array.isArray(manifest.sourceCounts)) {
+        return null;
+    }
+    const sourceCounts = manifest.sourceCounts.map(value => {
+        if (!isRecord(value)
+            || typeof value.source !== 'string'
+            || typeof value.fileCount !== 'number'
+            || typeof value.mappingCount !== 'number'
+            || typeof value.unitCount !== 'number') {
+            return null;
+        }
+        return {
+            source: value.source,
+            fileCount: value.fileCount,
+            mappingCount: value.mappingCount,
+            unitCount: value.unitCount,
+        };
+    });
+    if (sourceCounts.some(value => value === null)) return null;
+    return {
+        schemaVersion: manifest.schemaVersion,
+        normalizationVersion: manifest.normalizationVersion,
+        chunkingVersion: manifest.chunkingVersion,
+        unitCount: manifest.unitCount,
+        lookupCount: manifest.lookupCount,
+        sourceCounts: sourceCounts as VerificationCorpusSourceIdentity['sourceCounts'],
+    };
+}
+
+function manifestBuildIdentity(manifest: Record<string, unknown>): VerificationCorpusBuildIdentity | null {
+    if (typeof manifest.tokenizerMode !== 'string'
+        || typeof manifest.tokenizerModel !== 'string'
+        || typeof manifest.targetTokens !== 'number'
+        || typeof manifest.hardMaxTokens !== 'number'
+        || typeof manifest.overlapTokens !== 'number') {
+        return null;
+    }
+    return {
+        tokenizerMode: manifest.tokenizerMode,
+        tokenizerModel: manifest.tokenizerModel,
+        targetTokens: manifest.targetTokens,
+        hardMaxTokens: manifest.hardMaxTokens,
+        overlapTokens: manifest.overlapTokens,
+    };
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function preflightVerificationCorpus(
     directory: string,
-    expected: VerificationCorpusContract = PROMOTED_VERIFICATION_CORPUS_CONTRACT,
+    expected: VerificationCorpusContract = LOCAL_VERIFICATION_CORPUS_CONTRACT,
 ): VerificationCorpusPreflightResult {
     const artifactValues = Object.fromEntries(
         REQUIRED_VERIFICATION_CORPUS_ARTIFACTS.map(fileName => [fileName, readRequiredJson(directory, fileName)]),
     ) as Record<string, unknown>;
     const manifest = artifactValues['manifest.json'];
+    const manifestIdentity = isRecord(manifest) ? manifestSourceIdentity(manifest) : null;
+    const manifestBuild = isRecord(manifest) ? manifestBuildIdentity(manifest) : null;
     if (!isRecord(manifest)
         || manifest.corpusVersion !== LOCKED_VERIFICATION_CORPUS_VERSION
         || manifest.corpusVersion !== expected.corpusVersion
         || manifest.unitCount !== expected.unitCount
         || manifest.chunkCount !== expected.chunkCount
         || manifest.lookupCount !== expected.lookupCount
-        || !isRecord(manifest.artifactSha256)) {
-        throw new VerificationCorpusPreflightError('verification_corpus_mismatch', 'verification_corpus_mismatch: manifest identity does not match the promoted corpus contract');
+        || !isRecord(manifest.artifactSha256)
+        || (expected.sourceIdentity !== undefined && !sameJson(manifestIdentity, expected.sourceIdentity))
+        || (expected.buildIdentity !== undefined && !sameJson(manifestBuild, expected.buildIdentity))) {
+        throw new VerificationCorpusPreflightError('verification_corpus_mismatch', 'verification_corpus_mismatch: manifest identity does not match the local verification corpus contract');
     }
 
     const units = artifactValues['units.json'];
@@ -144,7 +246,7 @@ export function preflightVerificationCorpus(
     assertArray(chunks, 'chunks.json');
     assertArray(lookups, 'lookups.json');
     if (units.length !== expected.unitCount || chunks.length !== expected.chunkCount || lookups.length !== expected.lookupCount) {
-        throw new VerificationCorpusPreflightError('verification_corpus_mismatch', 'verification_corpus_mismatch: artifact counts do not match the promoted corpus contract');
+        throw new VerificationCorpusPreflightError('verification_corpus_mismatch', 'verification_corpus_mismatch: artifact counts do not match the local verification corpus contract');
     }
 
     const artifactSha256 = {
@@ -156,13 +258,13 @@ export function preflightVerificationCorpus(
         assertSha256(manifest.artifactSha256[name], `manifest.artifactSha256.${name}`);
         if (artifactSha256[name] !== manifest.artifactSha256[name]
             || artifactSha256[name] !== expected.artifactSha256[name]) {
-            throw new VerificationCorpusPreflightError('verification_corpus_mismatch', `verification_corpus_mismatch: ${name}.json hash does not match the promoted corpus contract`);
+            throw new VerificationCorpusPreflightError('verification_corpus_mismatch', `verification_corpus_mismatch: ${name}.json hash does not match the local verification corpus contract`);
         }
     }
     assertSha256(manifest.aggregateSha256, 'manifest.aggregateSha256');
     const computedAggregateSha256 = aggregateSha256(artifactSha256);
     if (computedAggregateSha256 !== manifest.aggregateSha256 || computedAggregateSha256 !== expected.aggregateSha256) {
-        throw new VerificationCorpusPreflightError('verification_corpus_mismatch', 'verification_corpus_mismatch: aggregate hash does not match the promoted corpus contract');
+        throw new VerificationCorpusPreflightError('verification_corpus_mismatch', 'verification_corpus_mismatch: aggregate hash does not match the local verification corpus contract');
     }
 
     const artifactPaths = Object.fromEntries(
@@ -203,7 +305,7 @@ export function prepareVerificationCarrier(input: {
     sourceDirectory: string;
     expected?: VerificationCorpusContract;
 }): VerificationCorpusPreflightResult {
-    const expected = input.expected ?? PROMOTED_VERIFICATION_CORPUS_CONTRACT;
+    const expected = input.expected ?? LOCAL_VERIFICATION_CORPUS_CONTRACT;
     const targetDirectory = resolve(
         input.carrierRoot,
         'functions',
@@ -230,12 +332,17 @@ async function main(): Promise<void> {
         ? prepareVerificationCarrier({ carrierRoot, sourceDirectory })
         : preflightVerificationCorpus(sourceDirectory);
     process.stdout.write(`${JSON.stringify({
-        verificationCorpus: {
+        localVerificationCorpus: {
             ready: result.ready,
             corpusVersion: result.corpusVersion,
+            unitCount: LOCAL_VERIFICATION_CORPUS_CONTRACT.unitCount,
+            chunkCount: LOCAL_VERIFICATION_CORPUS_CONTRACT.chunkCount,
+            lookupCount: LOCAL_VERIFICATION_CORPUS_CONTRACT.lookupCount,
             requiredArtifacts: result.requiredArtifacts,
             artifactSha256: result.artifactSha256,
             aggregateSha256: result.aggregateSha256,
+            sourceIdentity: LOCAL_VERIFICATION_CORPUS_CONTRACT.sourceIdentity,
+            ...LOCAL_VERIFICATION_CORPUS_CONTRACT.buildIdentity,
         },
     })}\n`);
 }

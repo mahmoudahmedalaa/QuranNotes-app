@@ -69,4 +69,29 @@ describe('Noor verification corpus preflight', () => {
             /verification_corpus_mismatch/,
         );
     });
+
+    it('rejects a local manifest with an unexpected source or chunking identity', () => {
+        const { source, expected } = fixture();
+        const sourceIdentity = {
+            schemaVersion: 1,
+            normalizationVersion: 'html-entities-nfc-whitespace-v1',
+            chunkingVersion: 'raw-paragraph-sentence-900-1400-overlap-80-v1',
+            unitCount: 1,
+            lookupCount: 1,
+            sourceCounts: [{ source: 'fixture', fileCount: 1, mappingCount: 1, unitCount: 1 }],
+        };
+        const manifest = {
+            ...expected,
+            schemaVersion: sourceIdentity.schemaVersion,
+            normalizationVersion: sourceIdentity.normalizationVersion,
+            chunkingVersion: 'unexpected-chunking',
+            sourceCounts: sourceIdentity.sourceCounts,
+        };
+        writeFileSync(join(source, 'manifest.json'), JSON.stringify(manifest, undefined, 2));
+
+        assert.throws(
+            () => preflightVerificationCorpus(source, { ...expected, sourceIdentity } as VerificationCorpusContract),
+            /verification_corpus_mismatch/,
+        );
+    });
 });
