@@ -63,7 +63,9 @@ export function classifyGenerationOutcome(
     const errorClass = diagnostics?.errorClass;
     if (errorClass === 'provider_transient_failure'
         || errorClass === 'provider_permanent_failure'
-        || errorClass === 'provider_timeout') return 'provider_failure';
+        || errorClass === 'provider_safety_block'
+        || errorClass === 'provider_timeout'
+        || errorClass === 'provider_unknown_failure') return 'provider_failure';
     if (errorClass === 'malformed_json' || errorClass === 'answer_validation_failure') return 'structured_failure';
     if (errorClass === 'citation_validation_failure') return 'citation_failure';
     if (errorClass === 'answer_quality_failure' || errorClass === 'answer_quality_judgement_failure') return 'quality_failure';

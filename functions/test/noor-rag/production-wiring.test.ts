@@ -75,7 +75,14 @@ describe('Noor telemetry', () => {
             citationValidationFailureSubtype: null,
             qualityJudgeInvoked: true,
             generationRetryInvoked: false,
+            providerFailureCategory: null,
+            providerFailureStatus: null,
+            providerFailureCode: null,
+            providerRetryCount: 0,
+            providerRetryRecovered: false,
             correctionInvoked: false,
+            generationAbstentionReason: null,
+            generationAbstentionDisagreement: false,
             finalGenerationErrorClass: null,
             personalizedRulingClassifierInvoked: true,
             personalizedRulingClassification: 'general_information',
@@ -133,7 +140,9 @@ describe('Noor telemetry', () => {
             generationAttemptCount: 0, generationFailurePhase: 'not_run',
             structuralValidationResult: 'not_run', citationValidationResult: 'not_run',
             citationValidationFailureSubtype: null, qualityJudgeInvoked: false,
-            generationRetryInvoked: false, correctionInvoked: false, finalGenerationErrorClass: null,
+            generationRetryInvoked: false, correctionInvoked: false,
+            generationAbstentionReason: null, generationAbstentionDisagreement: false,
+            finalGenerationErrorClass: null,
             personalizedRulingClassifierInvoked: true, personalizedRulingClassification: 'general_information',
             personalizedRulingClassifierLatencyMs: 12, personalizedRulingClassifierFailureType: null,
             semanticTaskClassifierInvoked: false, semanticTaskClassification: 'not_run',
@@ -159,7 +168,12 @@ describe('Noor telemetry', () => {
                 generationAttemptCount: 1, generationFailurePhase: 'none',
                 structuralValidationResult: 'passed_first_attempt', citationValidationResult: 'passed_first_attempt',
                 citationValidationFailureSubtype: null, qualityJudgeInvoked: true,
-                generationRetryInvoked: false, correctionInvoked: false, finalGenerationErrorClass: null,
+                generationRetryInvoked: false, correctionInvoked: false,
+                providerFailureCategory: 'unknown', providerFailureStatus: null,
+                providerFailureCode: 'SECRET_API_KEY_ALPHA', providerRetryCount: 0,
+                providerRetryRecovered: false,
+                generationAbstentionReason: null, generationAbstentionDisagreement: false,
+                finalGenerationErrorClass: null,
                 personalizedRulingClassifierInvoked: true, personalizedRulingClassification: 'general_information',
                 personalizedRulingClassifierLatencyMs: 4, personalizedRulingClassifierFailureType: null,
                 semanticTaskClassifierInvoked: false, semanticTaskClassification: 'not_run',
@@ -172,6 +186,7 @@ describe('Noor telemetry', () => {
         const telemetry = documents.get('noorTelemetry/trace-1') as Record<string, unknown>;
         assert.equal(telemetry.retrievalMs, 3);
         assert.equal(telemetry.generationMs, 7);
+        assert.equal(telemetry.providerFailureCode, null);
         for (const forbiddenKey of ['uid', 'question', 'history', 'answer', 'email', 'callablePayload', 'providerBody']) {
             assert.equal(Object.prototype.hasOwnProperty.call(telemetry, forbiddenKey), false);
         }

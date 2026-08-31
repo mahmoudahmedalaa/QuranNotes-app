@@ -1,7 +1,12 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { diagnoseGeneratedAnswer, parseAndValidateGeneratedAnswer, validateGeneratedAnswer } from '../../src/noor-rag/citations';
+import {
+    diagnoseGeneratedAnswer,
+    parseAndValidateGeneratedAnswer,
+    validateGeneratedAnswer,
+    type GeneratedAnswerValidationOptions,
+} from '../../src/noor-rag/citations';
 import type { RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
 
 function evidence(promptSourceId: string, overrides: Partial<TafsirChunk> = {}): RetrievedEvidence {
@@ -22,6 +27,26 @@ const EVIDENCE = [
     evidence('S1'),
     evidence('S2', { source: 'ibn_kathir_en_abridged', sourceTitle: 'Tafsir Ibn Kathir', language: 'en' }),
 ];
+
+const COMPARISON_EVIDENCE = [
+    evidence('S1', { chunkId: 'nuh-1', canonicalUnitId: 'nuh-unit-1', surah: 10 }),
+    evidence('S2', { chunkId: 'nuh-2', canonicalUnitId: 'nuh-unit-2', surah: 23 }),
+    evidence('S3', { chunkId: 'musa-1', canonicalUnitId: 'musa-unit-1', surah: 20 }),
+    evidence('S4', { chunkId: 'musa-2', canonicalUnitId: 'musa-unit-2', surah: 28 }),
+    evidence('S5', { chunkId: 'third-entity', canonicalUnitId: 'third-unit', surah: 12 }),
+];
+
+const COMPARISON_OPTIONS = {
+    requireInlineCitations: true,
+    comparisonCitationContract: {
+        taskType: 'multi_entity_comparison',
+        entities: [
+            { id: 'subject:nuh', label: 'Nuh', evidenceIds: ['S1', 'S2'] },
+            { id: 'subject:musa', label: 'Musa', evidenceIds: ['S3', 'S4'] },
+        ],
+        allowedEvidenceIds: ['S1', 'S2', 'S3', 'S4'],
+    },
+} as unknown as GeneratedAnswerValidationOptions;
 
 describe('Noor generated citation validation', () => {
     it('accepts valid single and multi-source answers and maps only cited metadata', () => {
@@ -84,18 +109,80 @@ describe('Noor generated citation validation', () => {
         )?.citationSubtype, 'malformed_citation');
     });
 
+    it('accepts formatting-only comparison headings and claim-local branch citations', () => {
+        assert.equal(diagnoseGeneratedAnswer({
+            status: 'answered',
+            answer: [
+                '## Comparison of Nuh and Musa',
+                '## Nuh',
+                'Nuh faced rejection from his people. [S1]',
+                '## Musa',
+                'Musa confronted Pharaoh. [S3]',
+                'Nuh and Musa faced different opponents and circumstances. [S1, S3]',
+            ].join('\n\n'),
+            citationIds: ['S1', 'S3'],
+        }, COMPARISON_EVIDENCE, COMPARISON_OPTIONS), null);
+
+        assert.equal(diagnoseGeneratedAnswer({
+            status: 'answered',
+            answer: [
+                'Nuh and Musa: Key Differences',
+                'Nuh faced rejection from his people. [S1]',
+                'Musa confronted Pharaoh. [S3]',
+            ].join('\n\n'),
+            citationIds: ['S1', 'S3'],
+        }, COMPARISON_EVIDENCE, COMPARISON_OPTIONS), null);
+    });
+
+    it('does not over-require both entity branches for a one-sided comparison paragraph', () => {
+        assert.equal(diagnoseGeneratedAnswer({
+            status: 'answered',
+            answer: 'Nuh remained with his people through prolonged rejection. [S2]',
+            citationIds: ['S2'],
+        }, COMPARISON_EVIDENCE, COMPARISON_OPTIONS), null);
+    });
+
+    it('rejects missing, wrong-entity, one-sided comparison, and third-entity citation support', () => {
+        const cases = [
+            { answer: 'Nuh faced rejection from his people.', citationIds: [] },
+            { answer: 'Nuh faced rejection from his people. [S3]', citationIds: ['S3'] },
+            { answer: 'Musa confronted Pharaoh. [S1]', citationIds: ['S1'] },
+            { answer: 'Nuh and Musa faced different opponents. [S1]', citationIds: ['S1'] },
+            { answer: 'Nuh faced rejection from his people. [S5]', citationIds: ['S5'] },
+        ];
+        for (const value of cases) {
+            assert.notEqual(
+                diagnoseGeneratedAnswer({ status: 'answered', ...value }, COMPARISON_EVIDENCE, COMPARISON_OPTIONS),
+                null,
+                value.answer,
+            );
+        }
+    });
+
+    it('rejects an empty answered comparison without weakening the ordinary single-entity contract', () => {
+        assert.notEqual(diagnoseGeneratedAnswer({
+            status: 'answered', answer: '', citationIds: [],
+        }, COMPARISON_EVIDENCE, COMPARISON_OPTIONS), null);
+        assert.equal(diagnoseGeneratedAnswer({
+            status: 'answered', answer: 'Grounded ordinary answer. [S1]', citationIds: ['S1'],
+        }, EVIDENCE), null);
+    });
+
     it('applies distinct structural contracts to answered and typed insufficient outcomes', () => {
         const emptyAbstention = validateGeneratedAnswer({
             status: 'insufficient_evidence',
+            abstentionReason: 'other_evidence_gap',
             answer: '',
             citationIds: [],
         }, EVIDENCE);
         assert.equal(emptyAbstention.status, 'insufficient_evidence');
+        assert.equal(emptyAbstention.abstentionReason, 'other_evidence_gap');
         assert.equal(emptyAbstention.answer, '');
         assert.deepEqual(emptyAbstention.citationIds, []);
 
         const writtenAbstention = validateGeneratedAnswer({
             status: 'insufficient_evidence',
+            abstentionReason: 'evidence_conflict',
             answer: 'I could not find enough reliable tafsir evidence to answer safely.',
             citationIds: [],
         }, EVIDENCE);
@@ -104,10 +191,18 @@ describe('Noor generated citation validation', () => {
         assert.throws(() => validateGeneratedAnswer({
             status: 'insufficient_evidence',
             answer: '',
+            citationIds: [],
+        }, EVIDENCE), /invalid generated answer/i);
+
+        assert.throws(() => validateGeneratedAnswer({
+            status: 'insufficient_evidence',
+            abstentionReason: 'other_evidence_gap',
+            answer: '',
             citationIds: ['S1'],
         }, EVIDENCE), /invalid generated answer/i);
         assert.throws(() => validateGeneratedAnswer({
             status: 'insufficient_evidence',
+            abstentionReason: 'other_evidence_gap',
             answer: 'Bitcoin is performing best.',
             citationIds: [],
         }, EVIDENCE), /invalid generated answer/i);

@@ -207,6 +207,7 @@ async function runCase(
                         maxEvidenceCharacters: input.config.maxEvidenceCharacters,
                         provider: generationProvider,
                         taskPlan: input.taskPlan,
+                        answerabilityContract: input.answerabilityContract,
                     });
                 },
                 finalizeAnswered: async () => {

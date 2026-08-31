@@ -1,4 +1,5 @@
 import type { NoorRuntimeConfig } from './config';
+import { normalizeQueryInterpretation } from './queryInterpretation';
 import type { RetrievedEvidence } from './types';
 import type { QuranSurahEntity } from './quranEntities';
 import { describeSynthesisEvidenceCapacity } from './synthesisCoverage';
@@ -7,12 +8,12 @@ const ENTITY_SUMMARY_COVERAGE_SECTIONS = 6;
 const MIN_ENTITY_SUMMARY_UNITS = 4;
 
 const ANSWERABILITY_IGNORED_TOKENS = new Set([
-    'a', 'about', 'after', 'alike', 'an', 'and', 'are', 'at', 'before', 'but', 'can', 'compare', 'compared', 'comparison', 'contrast', 'could', 'describe', 'did', 'differ', 'difference', 'different', 'does', 'do', 'doing', 'during',
-    'explain', 'for', 'from', 'give', 'had', 'has', 'have', 'he', 'her', 'him', 'his', 'how',
+    'a', 'about', 'abt', 'after', 'alike', 'an', 'and', 'are', 'at', 'before', 'but', 'can', 'compare', 'compared', 'comparison', 'contrast', 'could', 'describe', 'did', 'differ', 'difference', 'different', 'does', 'do', 'doing', 'during',
+    'explain', 'for', 'from', 'give', 'had', 'has', 'have', 'he', 'her', 'him', 'his', 'how', 'i',
     'happen', 'happened', 'happens', 'in', 'is', 'islam', 'islamic', 'it', 'its', 'may', 'me', 'mention', 'mentioned', 'mentions', 'might', 'most', 'my', 'of', 'on', 'or',
     'our', 'passage', 'please', 'prophet', 'quran', 'question', 'regarding', 'say', 'she', 'should',
     'right', 'similar', 'surah', 'tafsir', 'tell', 'than', 'the', 'their', 'them', 'then', 'they', 'this', 'to', 'us', 'verse', 'was',
-    'we', 'were', 'what', "what's", 'when', 'where', 'which', 'who', 'why', 'will', 'with', 'would', 'you', 'your',
+    'we', 'were', 'what', "what's", 'when', 'where', 'which', 'who', 'why', 'will', 'with', 'without', 'would', 'you', 'your',
 ]);
 const ANSWERABILITY_CONCEPTS = new Map<string, string>([
     ['importance', 'importance'],
@@ -100,6 +101,13 @@ const RELATION_CONCEPTS = new Set([
     'opposition', 'performance', 'permission', 'prohibition', 'result', 'teaching', 'value',
 ]);
 const CURRENT_TIME_TOKENS = new Set(['current', 'currently', 'latest', 'now', 'recent', 'rn', 'today', 'yesterday']);
+const CAUSAL_TOKENS = new Set([
+    'because', 'cause', 'caused', 'causes', 'consequence', 'consequently', 'due',
+    'if', 'reason', 'reasons', 'since', 'therefore', 'thus',
+]);
+const PROGRESSION_TOKENS = new Set([
+    'after', 'continued', 'continues', 'following', 'later', 'next', 'subsequently', 'then',
+]);
 const STATIC_CORPUS_FRAME_TOKENS = new Set([
     'ayah', 'islam', 'islamic', 'prophet', 'quran', 'religion', 'surah', 'tafsir', 'verse',
 ]);
@@ -125,6 +133,7 @@ export interface AnswerabilitySemanticDecision {
 interface AnswerabilitySemanticRequirements {
     subjectTokens: readonly string[];
     relationConcept: string | null;
+    causalSupportRequired: boolean;
     currentExternalStateRequired: boolean;
     requiredSemanticSlots: readonly AnswerabilitySemanticSlot[];
 }
@@ -136,8 +145,8 @@ function meaningfulQueryTokens(query: string): readonly string[] {
 function framedSubjectTokens(query: string): readonly string[] | null {
     const normalized = query.normalize('NFKC').toLocaleLowerCase();
     const patterns = [
-        /\babout\s+(.+)$/iu,
-        /\b(?:tell\s+me\s+about|what\s+(?:does|do|did)\b.{0,40}\bsay\s+about|(?:explanation|warning)\s+(?:of|about))\s+(.+)$/iu,
+        /\b(?:about|abt)\s+(.+)$/iu,
+        /\b(?:tell\s+me\s+(?:about|abt)|what\s+(?:does|do|did)\b.{0,40}\bsay\s+(?:about|abt)|(?:explanation|warning)\s+(?:of|about|abt))\s+(.+)$/iu,
         /\b(?:describe|explain)\s+(.+)$/iu,
         /\bwhat\s+happened\s+(?:after|before|to)\s+(.+)$/iu,
     ];
@@ -151,11 +160,17 @@ function framedSubjectTokens(query: string): readonly string[] | null {
 function evidenceTokens(value: string): Set<string> {
     return new Set(value
         .normalize('NFKC')
+        // Canonical tafsir headings can concatenate an entity and the next
+        // capitalized heading word (for example, `ZenthoraThe`). Restore that
+        // lost boundary before case-folding; this is exact normalization, not
+        // fuzzy subject matching.
+        .replace(/([\p{Ll}])([\p{Lu}])/gu, '$1 $2')
         .toLocaleLowerCase()
         .replace(/[^\p{L}\p{N}'-]+/gu, ' ')
         .split(/\s+/u)
         .filter(Boolean)
         .map(token => token.endsWith("'s") ? token.slice(0, -2) : token)
+        .map(token => token.replace(/^'+|'+$/gu, ''))
         .filter(Boolean));
 }
 
@@ -178,9 +193,10 @@ function hasCrossSpellingSubjectMatch(queryTokens: readonly string[], chunkToken
 
 function relationConceptForQuery(query: string, tokens: readonly string[]): string | null {
     const normalized = query.normalize('NFKC').toLocaleLowerCase();
-    if (/\b(?:tell\s+me\s+about|(?:explanation|warning)\s+(?:of|about)|what\s+(?:does|do|did)\b.{0,40}\bsay\s+about|what\s+happened\b)\b/iu.test(normalized)) {
+    if (/\b(?:tell\s+me\s+(?:about|abt)|(?:explanation|warning)\s+(?:of|about|abt)|what\s+(?:does|do|did)\b.{0,40}\bsay\s+(?:about|abt)|what\s+(?:about|abt)\b|what\s+happened\b)\b/iu.test(normalized)) {
         return 'description';
     }
+    if (/\b(?:can|could|may)\b.{1,80}\bwithout\b/iu.test(normalized)) return 'obligation';
     for (const token of tokens) {
         const concept = semanticConcept(token);
         if (RELATION_CONCEPTS.has(concept)) return concept;
@@ -225,19 +241,24 @@ function currentExternalStateRequired(query: string, tokens: readonly string[], 
 
 function lexicalStem(token: string): string {
     let stem = token.replace(/['-]/gu, '').replace(/(.)\1+/gu, '$1');
-    if (stem.length > 5 && stem.endsWith('ing')) stem = stem.slice(0, -3);
+    if (stem.length > 7 && stem.endsWith('antly')) stem = stem.slice(0, -5);
+    else if (stem.length > 6 && (stem.endsWith('ance') || stem.endsWith('ancy'))) stem = stem.slice(0, -4);
+    else if (stem.length > 5 && stem.endsWith('ant')) stem = stem.slice(0, -3);
+    else if (stem.length > 5 && stem.endsWith('ing')) stem = stem.slice(0, -3);
     else if (stem.length > 4 && stem.endsWith('ed')) stem = stem.slice(0, -2);
     else if (stem.length > 4 && stem.endsWith('es')) stem = stem.slice(0, -2);
     else if (stem.length > 3 && stem.endsWith('s')) stem = stem.slice(0, -1);
+    else if (stem.length > 5 && stem.endsWith('er')) stem = stem.slice(0, -2);
     if (stem.length > 4 && stem.endsWith('e')) stem = stem.slice(0, -1);
     return stem;
 }
 
 function semanticRequirements(query: string): AnswerabilitySemanticRequirements {
-    const tokens = [...evidenceTokens(query)];
-    const relationConcept = relationConceptForQuery(query, tokens);
-    const requiresCurrentExternalState = currentExternalStateRequired(query, tokens, relationConcept);
-    const subjectTokens = (framedSubjectTokens(query) ?? meaningfulQueryTokens(query)).filter(token => (
+    const interpretedQuery = normalizeQueryInterpretation(query);
+    const tokens = [...evidenceTokens(interpretedQuery)];
+    const relationConcept = relationConceptForQuery(interpretedQuery, tokens);
+    const requiresCurrentExternalState = currentExternalStateRequired(interpretedQuery, tokens, relationConcept);
+    const subjectTokens = (framedSubjectTokens(interpretedQuery) ?? meaningfulQueryTokens(interpretedQuery)).filter(token => (
         (!CURRENT_TIME_TOKENS.has(token) || relationConcept === 'definition')
         && semanticConcept(token) !== relationConcept
         && !RELATION_CONCEPTS.has(semanticConcept(token))
@@ -248,14 +269,34 @@ function semanticRequirements(query: string): AnswerabilitySemanticRequirements 
     return {
         subjectTokens,
         relationConcept,
+        causalSupportRequired: /(?:^|\s)why\b|\b(?:cause|caused|causes|reason|reasons)\b/iu.test(interpretedQuery.toLocaleLowerCase()),
         currentExternalStateRequired: requiresCurrentExternalState,
         requiredSemanticSlots,
     };
 }
 
+function semanticSegments(value: string): readonly string[] {
+    const segments = value
+        .normalize('NFKC')
+        .split(/(?:[.!?;]+\s+)|\n+/u)
+        .map(segment => segment.trim())
+        .filter(Boolean);
+    return segments.length > 0 ? segments : [value];
+}
+
+function causalSupportPresent(segment: string, tokens: ReadonlySet<string>): boolean {
+    return [...tokens].some(token => CAUSAL_TOKENS.has(semanticConcept(token)) || CAUSAL_TOKENS.has(token))
+        || /\bjust\s+as\b/iu.test(segment.normalize('NFKC'));
+}
+
 function subjectSupported(requirements: AnswerabilitySemanticRequirements, chunkTokens: ReadonlySet<string>): boolean {
+    const chunkConcepts = new Set([...chunkTokens].map(semanticConcept));
+    const chunkStems = new Set([...chunkTokens].map(lexicalStem));
     return requirements.subjectTokens.length > 0 && requirements.subjectTokens.every(token => (
-        chunkTokens.has(token) || hasCrossSpellingSubjectMatch([token], chunkTokens)
+        chunkTokens.has(token)
+        || chunkConcepts.has(semanticConcept(token))
+        || chunkStems.has(lexicalStem(token))
+        || hasCrossSpellingSubjectMatch([token], chunkTokens)
     ));
 }
 
@@ -263,30 +304,114 @@ function satisfiedSemanticSlots(
     requirements: AnswerabilitySemanticRequirements,
     evidence: RetrievedEvidence,
 ): Set<AnswerabilitySemanticSlot> {
-    const chunkTokens = evidenceTokens(evidence.chunk.retrievalText);
-    const chunkConcepts = new Set([...chunkTokens].map(semanticConcept));
-    const satisfied = new Set<AnswerabilitySemanticSlot>();
-    const hasSubject = subjectSupported(requirements, chunkTokens);
-    if (hasSubject) satisfied.add('subject');
-    if (requirements.relationConcept === 'description' && hasSubject) {
-        satisfied.add('relation_or_attribute');
-    } else if (requirements.relationConcept?.startsWith('lexical:')) {
-        const relationToken = requirements.relationConcept.slice('lexical:'.length);
-        if ([...chunkTokens].some(token => lexicalStem(token) === lexicalStem(relationToken))) {
+    let best = new Set<AnswerabilitySemanticSlot>();
+    for (const segment of semanticSegments(evidence.chunk.retrievalText)) {
+        const segmentTokens = evidenceTokens(segment);
+        const segmentConcepts = new Set([...segmentTokens].map(semanticConcept));
+        const satisfied = new Set<AnswerabilitySemanticSlot>();
+        const hasSubject = subjectSupported(requirements, segmentTokens);
+        if (hasSubject) satisfied.add('subject');
+        let relationSupported = false;
+        if (requirements.relationConcept === 'description' && hasSubject) {
+            relationSupported = true;
+        } else if (requirements.relationConcept?.startsWith('lexical:')) {
+            const relationToken = requirements.relationConcept.slice('lexical:'.length);
+            relationSupported = [...segmentTokens].some(token => lexicalStem(token) === lexicalStem(relationToken));
+        } else if (requirements.relationConcept !== null && segmentConcepts.has(requirements.relationConcept)) {
+            relationSupported = true;
+        }
+        if (relationSupported && (!requirements.causalSupportRequired || causalSupportPresent(segment, segmentTokens))) {
             satisfied.add('relation_or_attribute');
         }
-    } else if (requirements.relationConcept !== null && chunkConcepts.has(requirements.relationConcept)) {
-        satisfied.add('relation_or_attribute');
+        if (satisfied.size > best.size) best = satisfied;
     }
     // The approved tafsir corpus is static. It cannot establish a material
     // relative/current external-state fact, even when a nearby chunk shares words.
-    return satisfied;
+    return best;
 }
 
 function hasDirectQuestionSupport(requirements: AnswerabilitySemanticRequirements, evidence: RetrievedEvidence): boolean {
     if (requirements.requiredSemanticSlots.length === 0) return false;
     const satisfied = satisfiedSemanticSlots(requirements, evidence);
     return requirements.requiredSemanticSlots.every(slot => satisfied.has(slot));
+}
+
+function contextualOppositionSupported(segment: string, concepts: ReadonlySet<string>): boolean {
+    if (concepts.has('opposition')) return true;
+    const normalized = segment.normalize('NFKC').toLocaleLowerCase();
+    return /\b(?:disbeliev\p{L}*|den(?:y|ied|ies|ial)|resist\p{L}*)\b/iu.test(normalized)
+        || /\b(?:do|does|did|will|would|can|could|shall|should)\s+not\s+(?:believe|follow|accept|obey)\b/iu.test(normalized);
+}
+
+function contextualConditionalRationaleSupported(segment: string): boolean {
+    const normalized = segment.normalize('NFKC').toLocaleLowerCase();
+    return /\b(?:shall|should|would|could|can)\b.{0,120}\b(?:believe|follow|accept|obey)\b.{0,180}\bwhen\b/isu.test(normalized)
+        || /\b(?:do|does|did|will|would|can|could)\s+not\s+(?:believe|follow|accept|obey)\b.{0,180}\bwhen\b/isu.test(normalized);
+}
+
+function contextualRelationSupported(
+    relationConcept: string,
+    segment: string,
+    tokens: ReadonlySet<string>,
+): boolean {
+    const concepts = new Set([...tokens].map(semanticConcept));
+    if (relationConcept === 'description') return true;
+    if (relationConcept === 'progression') {
+        return [...tokens].some(token => PROGRESSION_TOKENS.has(token));
+    }
+    if (relationConcept === 'opposition') return contextualOppositionSupported(segment, concepts);
+    if (relationConcept.startsWith('lexical:')) {
+        const relationToken = relationConcept.slice('lexical:'.length);
+        return [...tokens].some(token => lexicalStem(token) === lexicalStem(relationToken));
+    }
+    return concepts.has(relationConcept);
+}
+
+function contextualCausalSupportPresent(relationConcept: string, segment: string, tokens: ReadonlySet<string>): boolean {
+    return causalSupportPresent(segment, tokens)
+        || (relationConcept === 'opposition' && contextualConditionalRationaleSupported(segment));
+}
+
+/**
+ * Qualifies a contextual follow-up against a previously validated discourse
+ * subject. State resolves the intended subject but does not establish evidence
+ * support: the resolved subject, material terms, relation, and causal
+ * requirements must bind in one semantic segment.
+ */
+export function selectContextualAnswerableEvidence(
+    resolvedSubject: readonly string[],
+    question: string,
+    evidence: readonly RetrievedEvidence[],
+    config: NoorRuntimeConfig,
+): RetrievedEvidence[] {
+    const stateSubjectTokens = meaningfulQueryTokens(resolvedSubject.join(' '));
+    if (stateSubjectTokens.length === 0) return [];
+    const interpretedQuestion = normalizeQueryInterpretation(question);
+    const ordinary = semanticRequirements(interpretedQuestion);
+    const progression = /^\s*(?:and\s+then|then\s+what|what\s+happened\s+next|what\s+next|go\s+on)\b/iu.test(interpretedQuestion);
+    const relationConcept = progression ? 'progression' : ordinary.relationConcept ?? 'description';
+    const stateRequirements: AnswerabilitySemanticRequirements = {
+        subjectTokens: stateSubjectTokens,
+        relationConcept: 'description',
+        causalSupportRequired: false,
+        currentExternalStateRequired: false,
+        requiredSemanticSlots: ['subject', 'relation_or_attribute'],
+    };
+    const directlySupported = evidence.filter(item => {
+        return semanticSegments(item.chunk.retrievalText).some(segment => {
+            const tokens = evidenceTokens(segment);
+            const resolvedSubjectSupported = subjectSupported(stateRequirements, tokens);
+            const materialSubjectSupported = ordinary.subjectTokens.length === 0
+                || subjectSupported({ ...ordinary, subjectTokens: ordinary.subjectTokens }, tokens);
+            if (!resolvedSubjectSupported
+                || !materialSubjectSupported
+                || !contextualRelationSupported(relationConcept, segment, tokens)) return false;
+            return !ordinary.causalSupportRequired
+                || contextualCausalSupportPresent(relationConcept, segment, tokens);
+        });
+    });
+    return directlySupported.filter(item => item.kind !== 'semantic'
+        || item.similarity >= (config.sourceThresholds[item.chunk.source] ?? 1));
 }
 
 export function describeAnswerabilitySemantics(
@@ -320,6 +445,42 @@ export function selectAnswerableEvidence(
     config: NoorRuntimeConfig,
 ): RetrievedEvidence[] {
     const requirements = semanticRequirements(query);
+    const directlySupported = evidence.filter(item => hasDirectQuestionSupport(requirements, item));
+    if (directlySupported.length === 0) return [];
+    const directIds = new Set(directlySupported.map(item => item.chunk.chunkId));
+    return evidence.filter(item => {
+        if (directIds.has(item.chunk.chunkId)) return true;
+        if (item.kind !== 'semantic') return false;
+        const threshold = config.sourceThresholds[item.chunk.source] ?? 1;
+        return item.similarity >= threshold
+            && directlySupported.some(direct => verseRangesOverlap(direct, item));
+    });
+}
+
+function comparisonSemanticRequirements(entityLabel: string, question: string): AnswerabilitySemanticRequirements {
+    const interpretedQuestion = normalizeQueryInterpretation(question);
+    const queryTokens = [...evidenceTokens(interpretedQuestion)];
+    const explicitRelation = queryTokens
+        .map(semanticConcept)
+        .find(concept => RELATION_CONCEPTS.has(concept) && concept !== 'narrative');
+    const relationConcept = explicitRelation ?? 'description';
+    const subjectTokens = meaningfulQueryTokens(entityLabel);
+    return {
+        subjectTokens,
+        relationConcept,
+        causalSupportRequired: /(?:^|\s)why\b|\b(?:cause|caused|causes|reason|reasons)\b/iu.test(interpretedQuestion.toLocaleLowerCase()),
+        currentExternalStateRequired: false,
+        requiredSemanticSlots: ['subject', 'relation_or_attribute'],
+    };
+}
+
+export function selectComparisonAnswerableEvidence(
+    entityLabel: string,
+    question: string,
+    evidence: readonly RetrievedEvidence[],
+    config: NoorRuntimeConfig,
+): RetrievedEvidence[] {
+    const requirements = comparisonSemanticRequirements(entityLabel, question);
     const directlySupported = evidence.filter(item => hasDirectQuestionSupport(requirements, item));
     if (directlySupported.length === 0) return [];
     const directIds = new Set(directlySupported.map(item => item.chunk.chunkId));

@@ -1,13 +1,21 @@
 import { createHash } from 'node:crypto';
 
 import type { NoorRuntimeConfig } from './config';
+import type { ComparisonCitationContract, GenerationAbstentionReason } from './citations';
 import type { EntitlementDecision } from './entitlement';
 import {
     getGenerationDiagnostics,
     type GenerationDiagnostics,
     type NoorGenerationErrorClass,
 } from './generation';
-import { isEntitySummaryEvidenceSufficient, selectAnswerableEvidence } from './answerability';
+import {
+    describeAnswerabilitySemantics,
+    isEntitySummaryEvidenceSufficient,
+    selectAnswerableEvidence,
+    selectComparisonAnswerableEvidence,
+    selectContextualAnswerableEvidence,
+    type AnswerabilitySemanticDecision,
+} from './answerability';
 import type { NoorPolicyCategory } from './policy';
 import type {
     PersonalizedRulingClassification,
@@ -22,6 +30,7 @@ import {
     buildControlledRecoveryQuery,
     buildSemanticTaskFallbackInput,
     createValidatedConversationState,
+    parseValidatedConversationState,
     type ChatQueryPlan,
     type DiscourseEntity,
     type ValidatedConversationState,
@@ -86,7 +95,14 @@ export interface NoorHandlerTelemetryEvent {
     citationValidationFailureSubtype: GenerationDiagnostics['citationValidationFailureSubtype'];
     qualityJudgeInvoked: boolean;
     generationRetryInvoked: boolean;
+    providerFailureCategory?: GenerationDiagnostics['providerFailureCategory'];
+    providerFailureStatus?: number | null;
+    providerFailureCode?: string | null;
+    providerRetryCount?: number;
+    providerRetryRecovered?: boolean;
     correctionInvoked: boolean;
+    generationAbstentionReason: GenerationAbstentionReason | null;
+    generationAbstentionDisagreement: boolean;
     finalGenerationErrorClass: NoorGenerationErrorClass;
     personalizedRulingClassifierInvoked: boolean;
     personalizedRulingClassification: PersonalizedRulingClassification | 'not_run';
@@ -132,7 +148,14 @@ export interface NoorSanitizedTrace {
     citationValidationFailureSubtype: GenerationDiagnostics['citationValidationFailureSubtype'];
     qualityJudgeInvoked: boolean;
     generationRetryInvoked: boolean;
+    providerFailureCategory?: GenerationDiagnostics['providerFailureCategory'];
+    providerFailureStatus?: number | null;
+    providerFailureCode?: string | null;
+    providerRetryCount?: number;
+    providerRetryRecovered?: boolean;
     correctionInvoked: boolean;
+    generationAbstentionReason: GenerationAbstentionReason | null;
+    generationAbstentionDisagreement: boolean;
     finalGenerationErrorClass: NoorGenerationErrorClass;
     personalizedRulingClassifierInvoked: boolean;
     personalizedRulingClassification: PersonalizedRulingClassification | 'not_run';
@@ -210,6 +233,8 @@ export interface NoorHandlerDependencies {
         evidence: readonly RetrievedEvidence[];
         config: NoorRuntimeConfig;
         taskPlan: ChatQueryPlan;
+        comparisonCitationContract: ComparisonCitationContract | null;
+        answerabilityContract: AnswerabilitySemanticDecision | null;
     }>): Promise<unknown>;
     finalizeAnswered(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
     finalizeNonAnswer(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
@@ -393,15 +418,42 @@ function evidenceKey(item: RetrievedEvidence): string {
     return `${item.chunk.source}:${item.chunk.chunkId}`;
 }
 
+function buildComparisonCitationContract(
+    plan: ChatQueryPlan,
+    evidence: readonly RetrievedEvidence[],
+    branchGroups: readonly (readonly RetrievedEvidence[])[],
+): ComparisonCitationContract | null {
+    if (plan.retrievalTask !== 'multi_entity_comparison') return null;
+    const finalIds = new Map(evidence.map(item => [evidenceKey(item), item.promptSourceId]));
+    const entities = plan.entitySet.map((entity, index) => ({
+        id: entity.id,
+        label: entity.label,
+        evidenceIds: [...new Set((branchGroups[index] ?? []).flatMap(item => {
+            const id = finalIds.get(evidenceKey(item));
+            return id === undefined ? [] : [id];
+        }))],
+    }));
+    if (entities.length < 2 || entities.some(entity => entity.evidenceIds.length === 0)) return null;
+    const supportedIds = new Set(entities.flatMap(entity => entity.evidenceIds));
+    return {
+        taskType: 'multi_entity_comparison',
+        entities,
+        allowedEvidenceIds: evidence.map(item => item.promptSourceId).filter(id => supportedIds.has(id)),
+    };
+}
+
 function hasDistinctEntityBranchSupport(
     entities: readonly DiscourseEntity[],
     evidence: readonly RetrievedEvidence[],
     branchGroups: readonly (readonly RetrievedEvidence[])[],
 ): boolean {
     const finalKeys = new Set(evidence.map(evidenceKey));
-    const eligibleKeys = entities.map((_entity, index) => (branchGroups[index] ?? [])
-        .map(evidenceKey)
-        .filter(key => finalKeys.has(key)));
+    const branchKeySets = entities.map((_entity, index) => new Set(
+        (branchGroups[index] ?? []).map(evidenceKey).filter(key => finalKeys.has(key)),
+    ));
+    const eligibleKeys = branchKeySets.map((keys, index) => [...keys].filter(key => (
+        branchKeySets.every((otherKeys, otherIndex) => otherIndex === index || !otherKeys.has(key))
+    )));
     const assign = (index: number, used: ReadonlySet<string>): boolean => {
         if (index >= eligibleKeys.length) return true;
         return (eligibleKeys[index] ?? []).some(key => (
@@ -541,7 +593,14 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             citationValidationFailureSubtype: generationDiagnostics?.citationValidationFailureSubtype ?? null,
             qualityJudgeInvoked: generationDiagnostics?.qualityJudgeInvoked ?? false,
             generationRetryInvoked: generationDiagnostics?.generationRetryInvoked ?? false,
+            providerFailureCategory: generationDiagnostics?.providerFailureCategory ?? null,
+            providerFailureStatus: generationDiagnostics?.providerFailureStatus ?? null,
+            providerFailureCode: generationDiagnostics?.providerFailureCode ?? null,
+            providerRetryCount: generationDiagnostics?.providerRetryCount ?? 0,
+            providerRetryRecovered: generationDiagnostics?.providerRetryRecovered ?? false,
             correctionInvoked: generationDiagnostics?.correctionInvoked ?? false,
+            generationAbstentionReason: generationDiagnostics?.abstentionReason ?? null,
+            generationAbstentionDisagreement: generationDiagnostics?.abstentionDisagreement ?? false,
             finalGenerationErrorClass: generationDiagnostics?.finalGenerationErrorClass ?? null,
             personalizedRulingClassifierInvoked,
             personalizedRulingClassification,
@@ -594,7 +653,14 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                 citationValidationFailureSubtype: generationDiagnostics?.citationValidationFailureSubtype ?? null,
                 qualityJudgeInvoked: generationDiagnostics?.qualityJudgeInvoked ?? false,
                 generationRetryInvoked: generationDiagnostics?.generationRetryInvoked ?? false,
+                providerFailureCategory: generationDiagnostics?.providerFailureCategory ?? null,
+                providerFailureStatus: generationDiagnostics?.providerFailureStatus ?? null,
+                providerFailureCode: generationDiagnostics?.providerFailureCode ?? null,
+                providerRetryCount: generationDiagnostics?.providerRetryCount ?? 0,
+                providerRetryRecovered: generationDiagnostics?.providerRetryRecovered ?? false,
                 correctionInvoked: generationDiagnostics?.correctionInvoked ?? false,
+                generationAbstentionReason: generationDiagnostics?.abstentionReason ?? null,
+                generationAbstentionDisagreement: generationDiagnostics?.abstentionDisagreement ?? false,
                 finalGenerationErrorClass: generationDiagnostics?.finalGenerationErrorClass ?? null,
                 personalizedRulingClassifierInvoked,
                 personalizedRulingClassification,
@@ -814,12 +880,31 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                         ? 'unavailable'
                         : normalized.some(value => value.lexicalSearchStatus === 'available') ? 'available' : 'not_configured';
                     const answerabilityGateActive = results.length > 0 && results.every(isSemanticRetrievalResult);
+                    const contextualState = queryPlan.taskType === 'contextual_followup'
+                        && queryPlan.contextSelected
+                        && validatedConversationState !== null
+                        ? parseValidatedConversationState(validatedConversationState)
+                        : null;
                     const answerableGroups = queryPlan.retrievalTask === 'multi_entity_comparison'
                         ? normalized.map((value, index) => {
-                            const branch = queryPlan.variants[index];
-                            return branch ? selectAnswerableEvidence(branch.query, value.evidence, config) : [];
+                            const branchEntity = queryPlan.entitySet[index];
+                            return branchEntity
+                                ? selectComparisonAnswerableEvidence(
+                                    branchEntity.label,
+                                    request.question,
+                                    value.evidence,
+                                    config,
+                                )
+                                : [];
                         })
-                        : answerabilityGateActive
+                        : answerabilityGateActive && contextualState !== null
+                            ? normalized.map(value => selectContextualAnswerableEvidence(
+                                contextualState.semanticSubject,
+                                request.question,
+                                value.evidence,
+                                config,
+                            ))
+                            : answerabilityGateActive
                             ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
                             : normalized.map(value => value.evidence);
                     evidence = mergeEvidence(answerableGroups, config);
@@ -860,7 +945,14 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                                     .find(variant => variant.kind === 'context_enriched')?.query
                                     ?? queryPlan.variants[0]?.query
                                     ?? request.question;
-                                const recoveryEvidence = selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config);
+                                const recoveryEvidence = contextualState === null
+                                    ? selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config)
+                                    : selectContextualAnswerableEvidence(
+                                        contextualState.semanticSubject,
+                                        request.question,
+                                        recovery.evidence,
+                                        config,
+                                    );
                                 evidence = mergeEvidence([...answerableGroups, recoveryEvidence], config);
                                 if (evidence.length > 0) answerabilityReason = 'sufficient';
                             } catch {
@@ -886,10 +978,30 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             return finish(response, 'insufficient_evidence');
         }
 
+        const comparisonCitationContract = buildComparisonCitationContract(
+            queryPlan,
+            evidence,
+            multiEntitySupportGroups,
+        );
+        if (queryPlan.retrievalTask === 'multi_entity_comparison' && comparisonCitationContract === null) {
+            throw new HandlerFailure('citation_validation_failure');
+        }
+        const answerabilityContract = request.mode === 'chat'
+            && queryPlan.taskType === 'point_question'
+            && queryPlan.retrievalTask === 'point_question'
+            ? describeAnswerabilitySemantics(request.question, evidence)
+            : null;
         let generated: unknown;
         const generationStartedAt = safeNow(dependencies);
         try {
-            generated = await dependencies.generateGroundedAnswer({ request, evidence, config, taskPlan: queryPlan });
+            generated = await dependencies.generateGroundedAnswer({
+                request,
+                evidence,
+                config,
+                taskPlan: queryPlan,
+                comparisonCitationContract,
+                answerabilityContract,
+            });
         } catch {
             throw new HandlerFailure('generation_unavailable');
         } finally {

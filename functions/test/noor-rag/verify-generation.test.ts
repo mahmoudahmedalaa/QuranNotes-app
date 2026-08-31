@@ -15,7 +15,14 @@ function diagnostics(errorClass: GenerationDiagnostics['errorClass']): Generatio
         citationValidationFailureSubtype: null,
         qualityJudgeInvoked: false,
         generationRetryInvoked: false,
+        providerFailureCategory: null,
+        providerFailureStatus: null,
+        providerFailureCode: null,
+        providerRetryCount: 0,
+        providerRetryRecovered: false,
         correctionInvoked: false,
+        abstentionReason: null,
+        abstentionDisagreement: false,
         finalGenerationErrorClass: errorClass,
     };
 }
@@ -24,6 +31,8 @@ describe('Noor real-provider generation verifier', () => {
     it('keeps provider, structure, citation, and quality failures in separate bounded metrics', () => {
         assert.equal(classifyGenerationOutcome({ status: 'answered' }, diagnostics(null)), 'answered');
         assert.equal(classifyGenerationOutcome({ status: 'temporarily_unavailable' }, diagnostics('provider_timeout')), 'provider_failure');
+        assert.equal(classifyGenerationOutcome({ status: 'temporarily_unavailable' }, diagnostics('provider_safety_block')), 'provider_failure');
+        assert.equal(classifyGenerationOutcome({ status: 'temporarily_unavailable' }, diagnostics('provider_unknown_failure')), 'provider_failure');
         assert.equal(classifyGenerationOutcome({ status: 'temporarily_unavailable' }, diagnostics('malformed_json')), 'structured_failure');
         assert.equal(classifyGenerationOutcome({ status: 'temporarily_unavailable' }, diagnostics('citation_validation_failure')), 'citation_failure');
         assert.equal(classifyGenerationOutcome({ status: 'temporarily_unavailable' }, diagnostics('answer_quality_failure')), 'quality_failure');

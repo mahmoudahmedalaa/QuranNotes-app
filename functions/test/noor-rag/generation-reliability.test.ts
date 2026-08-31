@@ -86,7 +86,14 @@ describe('Noor generation reliability diagnostics', () => {
             citationValidationFailureSubtype: 'unknown_citation_id',
             qualityJudgeInvoked: false,
             generationRetryInvoked: true,
+            providerFailureCategory: null,
+            providerFailureStatus: null,
+            providerFailureCode: null,
+            providerRetryCount: 0,
+            providerRetryRecovered: false,
             correctionInvoked: false,
+            abstentionReason: null,
+            abstentionDisagreement: false,
             finalGenerationErrorClass: 'citation_validation_failure',
         });
 
@@ -127,16 +134,13 @@ describe('Noor generation reliability diagnostics', () => {
         assert.doesNotMatch(answer.answer, /DEADLINE|secret|provider/i);
     });
 
-    it('fails permanent provider errors once without retrying or leaking provider details', async () => {
+    it('fails request-deterministic provider errors once without retrying or leaking provider details', async () => {
         for (const error of [
             providerError('bad request with secret', { status: 400 }),
             providerError('unauthorized provider body', { status: 401 }),
             providerError('forbidden provider body', { status: 403 }),
             providerError('invalid argument provider body', { code: 'INVALID_ARGUMENT' }),
             providerError('permission denied provider body', { code: 'PERMISSION_DENIED' }),
-            providerError('resource exhausted provider body', { code: 'RESOURCE_EXHAUSTED' }),
-            providerError('aborted provider body', { code: 'ABORTED' }),
-            providerError('internal provider body', { code: 'INTERNAL' }),
         ]) {
             const provider = new SequenceProvider([error]);
             const answer = await generateGroundedAnswer(input(provider));
@@ -145,6 +149,78 @@ describe('Noor generation reliability diagnostics', () => {
             assert.equal(provider.requests.length, 1);
             assert.doesNotMatch(answer.answer, /secret|provider|unauthorized|forbidden/i);
         }
+    });
+
+    it('retries named retryable provider and nested transport failures exactly once', async () => {
+        for (const error of [
+            providerError('resource exhausted provider body', { code: 'RESOURCE_EXHAUSTED' }),
+            providerError('aborted provider body', { code: 'ABORTED' }),
+            providerError('internal provider body', { code: 'INTERNAL' }),
+            providerError('fetch failed', { cause: { code: 'ECONNRESET' } }),
+            providerError('fetch failed', { code: 'ERR_NETWORK', cause: { code: 'ECONNRESET' } }),
+            providerError('fetch failed', { cause: { code: 'UND_ERR_SOCKET' } }),
+        ]) {
+            const provider = new SequenceProvider([
+                error,
+                '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+                QUALITY_PASS,
+            ]);
+            const answer = await generateGroundedAnswer(input(provider));
+            assert.equal(answer.status, 'answered');
+            assert.equal(provider.requests.length, 3);
+            assert.equal(getGenerationDiagnostics(answer)?.providerRetryCount, 1);
+            assert.equal(getGenerationDiagnostics(answer)?.providerRetryRecovered, true);
+        }
+    });
+
+    it('classifies safety blocks and unknown provider errors separately without retrying', async () => {
+        for (const [error, expected] of [
+            [providerError('blocked provider body', { providerCategory: 'safety_block', code: 'SAFETY' }), 'provider_safety_block'],
+            [providerError('unclassified provider body', {}), 'provider_unknown_failure'],
+        ] as const) {
+            const provider = new SequenceProvider([error]);
+            const answer = await generateGroundedAnswer(input(provider));
+            assert.equal(answer.status, 'temporarily_unavailable');
+            assert.equal(getGenerationDiagnostics(answer)?.errorClass, expected);
+            assert.equal(provider.requests.length, 1);
+            assert.equal(getGenerationDiagnostics(answer)?.providerRetryCount, 0);
+        }
+    });
+
+    it('does not retain arbitrary provider error codes in diagnostics', async () => {
+        const provider = new SequenceProvider([
+            providerError('unclassified provider body', { code: 'SECRET_API_KEY_ALPHA' }),
+        ]);
+        const answer = await generateGroundedAnswer(input(provider));
+        assert.equal(answer.status, 'temporarily_unavailable');
+        assert.equal(getGenerationDiagnostics(answer)?.errorClass, 'provider_unknown_failure');
+        assert.equal(getGenerationDiagnostics(answer)?.providerFailureCode, null);
+    });
+
+    it('applies the single provider retry budget to quality judgement calls too', async () => {
+        const provider = new SequenceProvider([
+            '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+            providerError('temporary judge failure', { status: 503 }),
+            QUALITY_PASS,
+        ]);
+        const answer = await generateGroundedAnswer(input(provider));
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 3);
+        assert.equal(getGenerationDiagnostics(answer)?.providerRetryCount, 1);
+        assert.equal(getGenerationDiagnostics(answer)?.providerRetryRecovered, true);
+    });
+
+    it('never grants a second provider retry later in the same user request', async () => {
+        const provider = new SequenceProvider([
+            providerError('temporary answer failure', { status: 503 }),
+            '{"answer":"Grounded. [S1]","citationIds":["S1"]}',
+            providerError('temporary judge failure', { status: 503 }),
+        ]);
+        const answer = await generateGroundedAnswer(input(provider));
+        assert.equal(answer.status, 'temporarily_unavailable');
+        assert.equal(getGenerationDiagnostics(answer)?.errorClass, 'provider_transient_failure');
+        assert.equal(provider.requests.length, 3);
+        assert.equal(getGenerationDiagnostics(answer)?.providerRetryCount, 1);
     });
 
     it('retries explicitly transient numeric provider statuses exactly once', async () => {

@@ -368,6 +368,59 @@ describe('production-shaped semantic replay', () => {
         assert.equal(generationCalls, 0);
     });
 
+    it('qualifies a contextual rejection reason against the validated discourse subject', async () => {
+        const firstRequest: NoorChatRequest = {
+            mode: 'chat',
+            requestId: '10000000-0000-4000-8000-000000000015',
+            question: 'Tell me about Nuh.',
+            history: [],
+        };
+        const state = createValidatedConversationState({
+            request: firstRequest,
+            response: citationAnswer(firstRequest.requestId, NOAH_PRODUCTION_REPLAY),
+            evidence: [NOAH_PRODUCTION_REPLAY],
+        });
+        assert.ok(state);
+        const text = 'Nuh faced people who said, "We do not believe you and will not follow you when only outsiders support you."';
+        const contextualEvidence: RetrievedEvidence = {
+            ...NOAH_PRODUCTION_REPLAY,
+            chunk: {
+                ...NOAH_PRODUCTION_REPLAY.chunk,
+                chunkId: 'contextual-rejection-reason',
+                canonicalUnitId: 'contextual-rejection-reason-unit',
+                originalStart: 0,
+                originalEnd: text.length,
+                originalText: text,
+                retrievalText: text,
+            },
+        };
+        let generationCalls = 0;
+        let generatedEvidence: readonly RetrievedEvidence[] = [];
+        const value = dependencies({
+            readValidatedConversationState: async () => state,
+            retrieveSemantic: async () => retrievalResult([contextualEvidence]),
+            generateGroundedAnswer: async input => {
+                generationCalls += 1;
+                generatedEvidence = input.evidence;
+                return citationAnswer(input.request.requestId, input.evidence[0]!);
+            },
+        });
+
+        const response = await run({
+            mode: 'chat',
+            requestId: '10000000-0000-4000-8000-000000000016',
+            question: 'Why did they reject him?',
+            history: [
+                { role: 'user', content: firstRequest.question },
+                { role: 'assistant', content: 'A grounded first-turn answer.' },
+            ],
+        }, value);
+
+        assert.equal(response.status, 'answered');
+        assert.equal(generationCalls, 1);
+        assert.deepEqual(generatedEvidence.map(item => item.chunk.chunkId), ['contextual-rejection-reason']);
+    });
+
     it('keeps a safe abstention when an optional contextual retry fails', async () => {
         const firstRequest: NoorChatRequest = {
             mode: 'chat',

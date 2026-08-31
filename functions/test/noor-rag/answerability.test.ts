@@ -4,6 +4,8 @@ import { describe, it } from 'node:test';
 import {
     describeAnswerabilitySemantics,
     selectAnswerableEvidence,
+    selectComparisonAnswerableEvidence,
+    selectContextualAnswerableEvidence,
 } from '../../src/noor-rag/answerability';
 import type { NoorRuntimeConfig } from '../../src/noor-rag/config';
 import type { RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
@@ -147,9 +149,76 @@ describe('Noor point-question semantic answerability', () => {
         );
     });
 
+    it('treats generic shorthand descriptions and omitted prerequisites as semantic equivalents', () => {
+        for (const query of ['tell me abt caldorin', 'what abt caldorin']) {
+            assert.deepEqual(
+                selectAnswerableEvidence(
+                    query,
+                    [evidence('shorthand-description', 'Caldorin is a bounded historical practice.')],
+                    CONFIG,
+                ).map(item => item.chunk.chunkId),
+                ['shorthand-description'],
+                query,
+            );
+        }
+
+        const prerequisite = evidence(
+            'generic-prerequisite',
+            'Zenthos is required before operating Floran safely.',
+        );
+        for (const query of [
+            'Can I operate Floran without Zenthos?',
+            'Can I operate Floran wthout Zenthos?',
+            'Can I operate Floran withuot Zenthos?',
+            'Can I operate Floran wihout Zenthos?',
+        ]) {
+            assert.deepEqual(
+                selectAnswerableEvidence(query, [prerequisite], CONFIG)
+                    .map(item => item.chunk.chunkId),
+                ['generic-prerequisite'],
+                query,
+            );
+            assert.deepEqual(describeAnswerabilitySemantics(query, [prerequisite]).unsatisfiedSemanticSlots, [], query);
+        }
+
+        assert.deepEqual(
+            selectAnswerableEvidence(
+                'Can I speak without a permit?',
+                [evidence('generic-lexical-family', 'A permit is required before a speaker may operate.')],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['generic-lexical-family'],
+        );
+        assert.deepEqual(
+            selectAnswerableEvidence(
+                'Can I operate Floran without Zenthos?',
+                [evidence('generic-adjacent', 'Zenthos and Floran are mentioned together.')],
+                CONFIG,
+            ),
+            [],
+        );
+
+        const unchangedEvidence = evidence('query-only-normalization', 'Zenthos wthout Floran is only an unrelated phrase.');
+        const originalEvidenceText = unchangedEvidence.chunk.retrievalText;
+        assert.deepEqual(selectAnswerableEvidence('Can I operate Floran wthout Zenthos?', [unchangedEvidence], CONFIG), []);
+        assert.equal(unchangedEvidence.chunk.retrievalText, originalEvidenceText);
+
+        const purification = evidence(
+            'purification-prerequisite',
+            'Wudu is commanded for prayer and is an obligation in the case of impurity.',
+        );
+        for (const query of ['Can I pray without wudu?', 'can i pray without wuduu']) {
+            assert.deepEqual(
+                selectAnswerableEvidence(query, [purification], CONFIG).map(item => item.chunk.chunkId),
+                ['purification-prerequisite'],
+                query,
+            );
+        }
+    });
+
     it('preserves supported point relations and refuses unsupported relation upgrades', () => {
         const riba = evidence('riba', 'Riba is forbidden and prohibited.');
-        const arrogance = evidence('arrogance', 'Arrogance is condemned and the proud are disgraced.');
+        const arrogance = evidence('arrogance', 'Arrogance is condemned because the proud reject the truth and are disgraced.');
 
         assert.deepEqual(selectAnswerableEvidence('Is riba haram?', [riba], CONFIG).map(item => item.chunk.chunkId), ['riba']);
         assert.deepEqual(
@@ -164,7 +233,7 @@ describe('Noor point-question semantic answerability', () => {
 
         const pharaohOnly = evidence('pharaoh-only', 'Pharaoh ruled his people.');
         const pharaohOpposedOthers = evidence('pharaoh-opposed-others', 'Pharaoh opposed his people.');
-        const opposition = evidence('opposition', 'Pharaoh opposed Musa and rejected his signs.');
+        const opposition = evidence('opposition', 'Pharaoh opposed Musa because he rejected his signs.');
         assert.deepEqual(selectAnswerableEvidence('Why did Pharaoh oppose Musa?', [pharaohOnly], CONFIG), []);
         assert.deepEqual(selectAnswerableEvidence('Why did Pharaoh oppose Musa?', [pharaohOpposedOthers], CONFIG), []);
         assert.deepEqual(
@@ -173,6 +242,231 @@ describe('Noor point-question semantic answerability', () => {
         );
         assert.deepEqual(
             selectAnswerableEvidence('Is this prohibited?', [evidence('subjectless', 'Riba is prohibited.')], CONFIG),
+            [],
+        );
+    });
+
+    it('binds subject and requested relation within the same semantic segment', () => {
+        const directProhibition = evidence('direct-prohibition', 'Caldorin is prohibited because it causes harm.');
+        const condemnationOnly = evidence('condemnation-only', 'Caldorin is condemned because it causes harm.');
+        const adjacentPrerequisite = evidence(
+            'adjacent-prerequisite',
+            'Zenthos is required for prayer. Operating Floran is described elsewhere.',
+        );
+        const directPrerequisite = evidence(
+            'direct-prerequisite',
+            'Zenthos is required before operating Floran safely.',
+        );
+        const causal = evidence('causal', 'Caldorin changed because the council rejected it.');
+        const conditionalCause = evidence(
+            'conditional-cause',
+            'If Caldorin is used to mislead people, then Caldorin is condemned.',
+        );
+        const linkedCause = evidence(
+            'linked-cause',
+            'Just as Caldorin breached the agreement, the council condemned Caldorin.',
+        );
+        const derivedSubjectCause = evidence(
+            'derived-subject-cause',
+            'Just as the council acted defiantly, it was disgraced.',
+        );
+        const descriptiveOnly = evidence('descriptive-only', 'Caldorin changed during the council meeting.');
+
+        assert.deepEqual(
+            selectAnswerableEvidence('Is Caldorin prohibited?', [directProhibition], CONFIG).map(item => item.chunk.chunkId),
+            ['direct-prohibition'],
+        );
+        assert.deepEqual(selectAnswerableEvidence('Is Caldorin prohibited?', [condemnationOnly], CONFIG), []);
+        assert.deepEqual(selectAnswerableEvidence('Can I operate Floran without Zenthos?', [adjacentPrerequisite], CONFIG), []);
+        assert.deepEqual(
+            selectAnswerableEvidence('Can I operate Floran without Zenthos?', [directPrerequisite], CONFIG)
+                .map(item => item.chunk.chunkId),
+            ['direct-prerequisite'],
+        );
+        assert.deepEqual(
+            selectAnswerableEvidence('Why did Caldorin change?', [causal], CONFIG).map(item => item.chunk.chunkId),
+            ['causal'],
+        );
+        assert.deepEqual(
+            selectAnswerableEvidence('Why is Caldorin condemned?', [conditionalCause], CONFIG)
+                .map(item => item.chunk.chunkId),
+            ['conditional-cause'],
+        );
+        assert.deepEqual(
+            selectAnswerableEvidence('Why is Caldorin condemned?', [linkedCause], CONFIG)
+                .map(item => item.chunk.chunkId),
+            ['linked-cause'],
+        );
+        assert.deepEqual(
+            selectAnswerableEvidence('Why is defiance condemned?', [derivedSubjectCause], CONFIG)
+                .map(item => item.chunk.chunkId),
+            ['derived-subject-cause'],
+        );
+        assert.deepEqual(selectAnswerableEvidence('Why did Caldorin change?', [descriptiveOnly], CONFIG), []);
+    });
+
+    it('normalizes concatenated source headings without borrowing relation support across segments', () => {
+        const sourceHeading = evidence(
+            'source-heading',
+            'Virtues of ZenthoraThe recorded account explains its importance.',
+        );
+        const unrelated = evidence(
+            'unrelated-heading',
+            'Virtues are recorded here. Zenthora is described in another sentence.',
+        );
+
+        assert.deepEqual(
+            selectAnswerableEvidence(
+                'What is its significance? Regarding Zenthora.',
+                [sourceHeading],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['source-heading'],
+        );
+        assert.deepEqual(
+            selectAnswerableEvidence(
+                'What is its significance? Regarding Zenthora.',
+                [unrelated],
+                CONFIG,
+            ),
+            [],
+        );
+    });
+
+    it('qualifies comparison evidence by entity branch and requested dimension', () => {
+        const caldorinAccount = evidence('caldorin-account', 'Caldorin faced exile and later returned to the city.');
+        const caldorinLesson = evidence('caldorin-lesson', 'The account of Caldorin teaches a lesson about patience.');
+
+        assert.deepEqual(
+            selectComparisonAnswerableEvidence(
+                'Caldorin',
+                'What differs between the stories of Caldorin and Velunari?',
+                [caldorinAccount],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['caldorin-account'],
+        );
+        assert.deepEqual(
+            selectComparisonAnswerableEvidence(
+                'Caldorin',
+                'Compare the lessons from Caldorin and Velunari.',
+                [caldorinAccount],
+                CONFIG,
+            ),
+            [],
+        );
+        assert.deepEqual(
+            selectComparisonAnswerableEvidence(
+                'Caldorin',
+                'Compare the lessons from Caldorin and Velunari.',
+                [caldorinLesson],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['caldorin-lesson'],
+        );
+    });
+
+    it('qualifies contextual evidence from validated subject scope and locally bound relation semantics', () => {
+        const supportedRejection = evidence(
+            'supported-contextual-rejection',
+            'Caldorin faced a council that said, "We do not believe you and will not follow you when only outsiders support you."',
+        );
+        const wrongRelation = evidence(
+            'wrong-contextual-relation',
+            'This account concerns Caldorin. The council condemned the proposal because it caused harm.',
+        );
+        const missingCause = evidence(
+            'missing-contextual-cause',
+            'This account concerns Caldorin. The council did not believe the proposal during the meeting.',
+        );
+        const wrongExplicitSubject = evidence(
+            'wrong-explicit-subject',
+            'This account concerns Caldorin. The council did not believe Velunari when only outsiders supported it.',
+        );
+
+        assert.deepEqual(
+            selectContextualAnswerableEvidence(
+                ['caldorin'],
+                'Why did they reject him?',
+                [supportedRejection, wrongRelation, missingCause],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['supported-contextual-rejection'],
+        );
+        assert.deepEqual(
+            selectContextualAnswerableEvidence(
+                ['caldorin'],
+                'Why did they reject Floran?',
+                [wrongExplicitSubject],
+                CONFIG,
+            ),
+            [],
+        );
+    });
+
+    it('does not combine a resolved contextual subject with relation support from another semantic segment', () => {
+        const crossSegmentCause = evidence(
+            'cross-segment-cause',
+            'Caldorin is named here. Velunari rejected Floran because Floran opposed the council.',
+        );
+        const sameSegmentCause = evidence(
+            'same-segment-cause',
+            'Caldorin was rejected by the council because Caldorin opposed its proposal.',
+        );
+        const crossSegmentCondemnation = evidence(
+            'cross-segment-condemnation',
+            'Caldorin is described in this paragraph. Velunari was condemned because Velunari broke the agreement.',
+        );
+        const wrongResolvedSubject = evidence(
+            'wrong-resolved-subject',
+            'Velunari was rejected by the council because Velunari opposed its proposal.',
+        );
+        const multiParagraph = evidence(
+            'multi-paragraph',
+            'Caldorin is the subject of the first account.\n\nThe later account says Velunari was rejected because Velunari opposed the council.',
+        );
+
+        assert.deepEqual(
+            selectContextualAnswerableEvidence(
+                ['caldorin'],
+                'Why did they reject him?',
+                [crossSegmentCause, crossSegmentCondemnation, wrongResolvedSubject, multiParagraph],
+                CONFIG,
+            ),
+            [],
+        );
+        assert.deepEqual(
+            selectContextualAnswerableEvidence(
+                ['caldorin'],
+                'Why did they reject him?',
+                [sameSegmentCause],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['same-segment-cause'],
+        );
+    });
+
+    it('uses validated contextual subject for unambiguous progression without weakening no-context behavior', () => {
+        const caldorinProgression = evidence(
+            'caldorin-progression',
+            'The account concerns Caldorin. Caldorin continued to warn the council after their refusal.',
+        );
+        const velunariProgression = evidence(
+            'velunari-progression',
+            'The account concerns Velunari. Velunari returned to the city after the council meeting.',
+        );
+
+        assert.deepEqual(
+            selectContextualAnswerableEvidence(
+                ['caldorin'],
+                'And then?',
+                [caldorinProgression, velunariProgression],
+                CONFIG,
+            ).map(item => item.chunk.chunkId),
+            ['caldorin-progression'],
+        );
+        assert.deepEqual(
+            selectContextualAnswerableEvidence([], 'And then?', [caldorinProgression], CONFIG),
             [],
         );
     });

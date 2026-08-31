@@ -1,11 +1,16 @@
 import { GoogleGenAI } from '@google/genai';
 
+import type { AnswerabilitySemanticDecision } from './answerability';
 import type { NoorAnswer, NoorRequest } from './generatedContract';
 import {
+    GENERATION_ABSTENTION_REASONS,
     diagnoseGeneratedAnswer,
     validateGeneratedAnswer,
     type CitationValidationFailureSubtype,
+    type ComparisonCitationContract,
     type GeneratedAnswerValidationFailure,
+    type GeneratedAnswerValidationOptions,
+    type GenerationAbstentionReason,
     type ValidatedGeneratedAnswer,
 } from './citations';
 import { classifyRequestPolicy } from './policy';
@@ -23,6 +28,8 @@ export const GENERATION_MODEL = 'gemini-3.5-flash-lite' as const;
 export const VERTEX_GENERATION_LOCATION = 'global' as const;
 const MAX_OUTPUT_TOKENS = 800;
 const QUALITY_MAX_OUTPUT_TOKENS = 256;
+const PROVIDER_RETRY_BACKOFF_MIN_MS = 75;
+const PROVIDER_RETRY_BACKOFF_JITTER_MS = 50;
 
 const POLICY_REFUSAL = 'Noor only explains Quran passages using Tafsir Ibn Kathir and Tafsir Al-Sa\'di. For personal rulings, please speak with a qualified scholar.';
 const SCOPE_REFUSAL = 'I’m Noor, focused on the Qur’an and Islamic tafsir. I can help explain verses, tafsir, and Qur’an-related questions.';
@@ -45,7 +52,11 @@ export interface GenerationProvider {
 
 export interface VertexGenerationClient {
     models: {
-        generateContent(request: VertexGenerationRequest): Promise<{ text?: string }>;
+        generateContent(request: VertexGenerationRequest): Promise<{
+            text?: string;
+            candidates?: Array<{ finishReason?: string }>;
+            promptFeedback?: { blockReason?: string };
+        }>;
     };
 }
 
@@ -64,17 +75,22 @@ export interface GenerateGroundedAnswerInput {
     maxEvidenceCharacters: number;
     provider: GenerationProvider;
     taskPlan?: ChatQueryPlan;
+    comparisonCitationContract?: ComparisonCitationContract | null;
+    answerabilityContract?: AnswerabilitySemanticDecision | null;
 }
 
 export type NoorGenerationErrorClass =
     | 'provider_transient_failure'
     | 'provider_permanent_failure'
+    | 'provider_safety_block'
     | 'provider_timeout'
+    | 'provider_unknown_failure'
     | 'malformed_json'
     | 'citation_validation_failure'
     | 'answer_validation_failure'
     | 'answer_quality_judgement_failure'
     | 'answer_quality_failure'
+    | 'generation_abstention_disagreement'
     | null;
 
 export interface GenerationDiagnostics {
@@ -86,6 +102,7 @@ export interface GenerationDiagnostics {
         | 'provider'
         | 'structural_validation'
         | 'citation_validation'
+        | 'abstention_correction'
         | 'quality_judgement'
         | 'quality_correction';
     structuralValidationResult: 'not_run' | 'passed_first_attempt' | 'passed_after_retry' | 'failed';
@@ -93,7 +110,14 @@ export interface GenerationDiagnostics {
     citationValidationFailureSubtype: CitationValidationFailureSubtype | null;
     qualityJudgeInvoked: boolean;
     generationRetryInvoked: boolean;
+    providerFailureCategory: 'retryable_transport' | 'request_deterministic' | 'safety_block' | 'timeout' | 'unknown' | null;
+    providerFailureStatus: number | null;
+    providerFailureCode: string | null;
+    providerRetryCount: number;
+    providerRetryRecovered: boolean;
     correctionInvoked: boolean;
+    abstentionReason: GenerationAbstentionReason | null;
+    abstentionDisagreement: boolean;
     finalGenerationErrorClass: NoorGenerationErrorClass;
 }
 
@@ -107,18 +131,26 @@ export function getGenerationDiagnostics(value: unknown): GenerationDiagnostics 
 function responseSchema(
     evidence: readonly RetrievedEvidence[],
     taskPlan?: ChatQueryPlan,
+    comparisonCitationContract?: ComparisonCitationContract | null,
 ): Readonly<Record<string, unknown>> {
     const allowedCitationIds = evidence.map(item => item.promptSourceId);
     const synthesis = taskPlan?.retrievalTask === 'entity_summary' && taskPlan.entity !== null;
     return {
         type: 'object',
         additionalProperties: false,
-        required: ['status', 'answer', 'citationIds'],
+        required: ['status', 'abstentionReason', 'answer', 'citationIds'],
         properties: {
             status: { type: 'string', enum: ['answered', 'insufficient_evidence'] },
+            abstentionReason: {
+                type: 'string',
+                enum: ['not_applicable', ...GENERATION_ABSTENTION_REASONS],
+                description: 'Use not_applicable when status is answered. For insufficient_evidence, identify only the bounded remaining evidence gap.',
+            },
             answer: {
                 type: 'string',
-                description: synthesis
+                description: comparisonCitationContract
+                    ? `A grounded comparison using exactly ${comparisonCitationContract.entities.length + 1} substantive paragraphs and no standalone headings: one entity-local paragraph per requested entity in contract order, then one direct relation paragraph. Each entity-local paragraph names only its own entity and uses claim-local inline citations from that branch. The relation paragraph names every requested entity and cites distinct support from every branch.`
+                    : synthesis
                     ? 'A grounded synthesis in which every non-empty paragraph contains inline [S#] or [S#, S#] markers and no uncited standalone heading or lead-in.'
                     : 'A grounded answer using only the selected evidence.',
             },
@@ -174,9 +206,10 @@ const BASE_SYSTEM_INSTRUCTIONS = [
     'Do not phrase a technically source-faithful statement in a way that creates a materially misleading normal-language conclusion.',
     'Explain technical or source wording clearly enough for a normal user to understand the answer.',
     'Ensure citations correspond to the selected evidence and to the claims they support.',
-    'Return a JSON object with exactly three keys: status, answer, and citationIds.',
+    'Return a JSON object with exactly four keys: status, abstentionReason, answer, and citationIds.',
     'Use status answered only for a substantive evidence-supported answer and include every supporting source in citationIds.',
-    'Use status insufficient_evidence for a non-answer and return citationIds as an empty array.',
+    'For status answered, use abstentionReason not_applicable.',
+    'Use status insufficient_evidence for a non-answer, return citationIds as an empty array, and identify one bounded abstentionReason: missing_subject_support, missing_relation_support, missing_required_context, evidence_conflict, or other_evidence_gap.',
     'Unless task-specific instructions require them, inline citation markers such as [S1] are optional; if you use them, each marker must match a citationId exactly.',
 ];
 
@@ -196,9 +229,17 @@ function boundedEvidence(evidence: readonly RetrievedEvidence[], maximumCharacte
     return selected;
 }
 
+function comparisonCitationContractXml(contract: ComparisonCitationContract): string {
+    const branches = contract.entities.map(entity => (
+        `<entityBranch entityId="${escapeXml(entity.id)}" label="${escapeXml(entity.label)}" evidenceIds="${entity.evidenceIds.map(escapeXml).join(',')}"/>`
+    )).join('');
+    return `<comparisonCitationContract allowedEvidenceIds="${contract.allowedEvidenceIds.map(escapeXml).join(',')}">${branches}</comparisonCitationContract>`;
+}
+
 function taskInstructions(
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
+    comparisonCitationContract?: ComparisonCitationContract | null,
 ): string {
     if (taskPlan?.retrievalTask === 'multi_entity_comparison') {
         const entities = taskPlan.entitySet
@@ -209,6 +250,21 @@ function taskInstructions(
             `<requestedEntities>${entities}</requestedEntities>`,
             'Use balanced supporting evidence for every requested entity. Address the relation the user actually requested across the entities; contrast them only when the question asks for differences.',
             'Do not substitute an incidental concept from one evidence passage for either requested entity.',
+            comparisonCitationContract === null || comparisonCitationContract === undefined
+                ? ''
+                : comparisonCitationContractXml(comparisonCitationContract),
+            comparisonCitationContract === null || comparisonCitationContract === undefined
+                ? ''
+                : 'Every substantive paragraph must explicitly name the requested entity label or labels it makes claims about and must contain claim-local inline citations from those entity branches. A direct claim about multiple requested entities must cite distinct supporting evidence from every named branch. A paragraph about only one requested entity needs support from only that entity branch.',
+            comparisonCitationContract === null || comparisonCitationContract === undefined
+                ? ''
+                : `Use exactly ${comparisonCitationContract.entities.length + 1} substantive paragraphs: one entity-local paragraph for each requested entity in comparisonCitationContract order, followed by one direct relation paragraph. In an entity-local paragraph, name only that paragraph's entity; do not name another requested entity. In the final relation paragraph, explicitly name every requested entity and cite distinct supporting evidence from every branch.`,
+            comparisonCitationContract === null || comparisonCitationContract === undefined
+                ? ''
+                : 'Do not emit any standalone heading, title, introduction, label, or lead-in. Put any organizing words in a substantive cited paragraph. The deterministic validator still recognizes formatting-only headings defensively, but generated answers must not rely on that exception.',
+            comparisonCitationContract === null || comparisonCitationContract === undefined
+                ? ''
+                : 'The citationIds array must exactly equal the unique inline marker IDs and may contain only allowedEvidenceIds from the comparisonCitationContract.',
         ].join('\n');
     }
     if (taskPlan?.retrievalTask !== 'entity_summary' || taskPlan.entity === null) return '';
@@ -229,8 +285,13 @@ function taskInstructions(
 function systemInstructions(
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
+    comparisonCitationContract?: ComparisonCitationContract | null,
 ): string {
-    return [BASE_SYSTEM_INSTRUCTIONS.join('\n'), taskInstructions(taskPlan, coverageRequirement)].filter(Boolean).join('\n');
+    return [BASE_SYSTEM_INSTRUCTIONS.join('\n'), taskInstructions(
+        taskPlan,
+        coverageRequirement,
+        comparisonCitationContract,
+    )].filter(Boolean).join('\n');
 }
 
 function evidenceBlocks(evidence: readonly RetrievedEvidence[]): string {
@@ -238,6 +299,23 @@ function evidenceBlocks(evidence: readonly RetrievedEvidence[]): string {
         const chunk = item.chunk;
         return `<evidenceBlock><promptSourceId>${escapeXml(item.promptSourceId)}</promptSourceId><source>${chunk.source}</source><title>${escapeXml(chunk.sourceTitle)}</title><surah>${chunk.surah}</surah><range>${chunk.verseStart}-${chunk.verseEnd}</range><originalText>${escapeXml(chunk.originalText)}</originalText></evidenceBlock>`;
     }).join('\n');
+}
+
+function answerabilityContractXml(
+    contract: AnswerabilitySemanticDecision | null | undefined,
+    evidence: readonly RetrievedEvidence[],
+): string {
+    if (contract === null || contract === undefined) return '';
+    const slots = (name: string, values: readonly string[]): string => (
+        `<${name}>${values.map(value => `<slot>${escapeXml(value)}</slot>`).join('')}</${name}>`
+    );
+    return [
+        `<answerabilityEvidenceContract allowedEvidenceIds="${evidence.map(item => escapeXml(item.promptSourceId)).join(',')}">`,
+        slots('requiredSemanticSlots', contract.requiredSemanticSlots),
+        slots('satisfiedSemanticSlots', contract.satisfiedSemanticSlots),
+        slots('unsatisfiedSemanticSlots', contract.unsatisfiedSemanticSlots),
+        '</answerabilityEvidenceContract>',
+    ].join('');
 }
 
 function requestData(request: NoorRequest): string {
@@ -261,6 +339,8 @@ export function buildGroundedPrompt(
     evidence: readonly RetrievedEvidence[],
     maxEvidenceCharacters: number,
     taskPlan?: ChatQueryPlan,
+    comparisonCitationContract?: ComparisonCitationContract | null,
+    answerabilityContract?: AnswerabilitySemanticDecision | null,
 ): GroundedPrompt {
     const selected = boundedEvidence(evidence, maxEvidenceCharacters);
     const coverageRequirement = taskPlan?.retrievalTask === 'entity_summary' && taskPlan.entity !== null
@@ -268,7 +348,7 @@ export function buildGroundedPrompt(
         : null;
     return {
         evidence: selected,
-        prompt: `${systemInstructions(taskPlan, coverageRequirement)}\n<evidence>${evidenceBlocks(selected)}</evidence>\n${requestData(request)}`,
+        prompt: `${systemInstructions(taskPlan, coverageRequirement, comparisonCitationContract)}\n${answerabilityContractXml(answerabilityContract, selected)}\n<evidence>${evidenceBlocks(selected)}</evidence>\n${requestData(request)}`,
     };
 }
 
@@ -278,11 +358,50 @@ function correctivePrompt(
     critique: string,
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
+    comparisonCitationContract?: ComparisonCitationContract | null,
+    answerabilityContract?: AnswerabilitySemanticDecision | null,
 ): string {
     return [
-        systemInstructions(taskPlan, coverageRequirement),
+        systemInstructions(taskPlan, coverageRequirement, comparisonCitationContract),
         'Rewrite the answer exactly once using the same question, conversation context, and evidence. Address only the generic quality critique below. Do not add outside facts or alter the evidence.',
         `<qualityCritique>${escapeXml(critique)}</qualityCritique>`,
+        answerabilityContractXml(answerabilityContract, evidence),
+        `<evidence>${evidenceBlocks(evidence)}</evidence>`,
+        requestData(request),
+    ].join('\n');
+}
+
+function abstentionContradictsContract(
+    reason: GenerationAbstentionReason,
+    contract: AnswerabilitySemanticDecision | null | undefined,
+): boolean {
+    if (contract === null || contract === undefined) return false;
+    const satisfied = new Set(contract.satisfiedSemanticSlots);
+    if (reason === 'missing_subject_support') return satisfied.has('subject');
+    if (reason === 'missing_relation_support') return satisfied.has('relation_or_attribute');
+    if (reason === 'missing_required_context') {
+        return contract.requiredSemanticSlots.every(slot => satisfied.has(slot));
+    }
+    return false;
+}
+
+function abstentionCorrectionPrompt(
+    request: NoorRequest,
+    evidence: readonly RetrievedEvidence[],
+    reason: GenerationAbstentionReason,
+    taskPlan?: ChatQueryPlan,
+    coverageRequirement?: SynthesisCoverageRequirement | null,
+    comparisonCitationContract?: ComparisonCitationContract | null,
+    answerabilityContract?: AnswerabilitySemanticDecision | null,
+): string {
+    return [
+        systemInstructions(taskPlan, coverageRequirement, comparisonCitationContract),
+        'The previous generation abstention contradicts the request-scoped evidence contract because it reported a semantic slot as missing after that slot was established by evidence qualification.',
+        'Regenerate exactly once using the same selected evidence and allowed citation IDs.',
+        'Produce a grounded answer using only the supplied evidence. Do not abstain unless you identify a specific remaining evidence gap consistent with the contract.',
+        'This correction does not force an answer: evidence_conflict or another material evidence gap may still justify insufficient_evidence.',
+        `<previousAbstentionReason>${escapeXml(reason)}</previousAbstentionReason>`,
+        answerabilityContractXml(answerabilityContract, evidence),
         `<evidence>${evidenceBlocks(evidence)}</evidence>`,
         requestData(request),
     ].join('\n');
@@ -299,6 +418,7 @@ function generationRetryPrompt(
             unknown_citation_id: 'Replace every unknown citation ID with an identifier from the allowed list.',
             malformed_citation: 'Use citation identifiers exactly in the S<number> format shown in the allowed list. Every non-empty answer paragraph must contain a valid inline [S#] or [S#, S#] marker, with no spaces between S and its number.',
             missing_required_citation: 'Include at least one supporting citation ID. Every non-empty answer paragraph must contain an inline [S#] or [S#, S#] marker. Do not emit an uncited standalone heading, title, introduction, label, or lead-in. Make citationIds exactly equal the unique inline marker IDs.',
+            entity_provenance_violation: 'Use claim-local evidence from the requested entity branch named by each substantive paragraph. A direct comparison about multiple requested entities must cite distinct supporting evidence from every named side.',
             unused_citation: 'Make citationIds and any inline citation markers name the same supporting evidence; remove unused IDs.',
             duplicate_citation: 'List each citation identifier at most once; remove duplicate citation IDs.',
         };
@@ -323,6 +443,8 @@ function answerQualityPrompt(
     answer: ValidatedGeneratedAnswer,
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
+    comparisonCitationContract?: ComparisonCitationContract | null,
+    answerabilityContract?: AnswerabilitySemanticDecision | null,
 ): string {
     const citationIds = answer.citationIds.map(id => `<citationId>${escapeXml(id)}</citationId>`).join('');
     return [
@@ -337,7 +459,8 @@ function answerQualityPrompt(
         'Set clear true only when technical or source wording is explained sufficiently for a normal user.',
         'Set citationConsistent true only when claims and citations correspond to the selected evidence.',
         'Return only the required JSON booleans. Do not state or infer the correct religious answer.',
-        taskInstructions(taskPlan, coverageRequirement),
+        taskInstructions(taskPlan, coverageRequirement, comparisonCitationContract),
+        answerabilityContractXml(answerabilityContract, evidence),
         `<evidence>${evidenceBlocks(evidence)}</evidence>`,
         requestData(request),
         `<candidate><generatedAnswer>${escapeXml(answer.answer)}</generatedAnswer><citations>${citationIds}</citations></candidate>`,
@@ -381,22 +504,105 @@ function numericProviderCode(value: unknown): number | null {
     return null;
 }
 
-function classifyProviderFailure(error: unknown): Exclude<NoorGenerationErrorClass, null> {
-    const record = isRecord(error) ? error : null;
-    const status = numericProviderCode(record?.status ?? record?.statusCode ?? record?.code);
-    const codeValue = record?.code ?? record?.status ?? record?.statusCode;
-    const code = typeof codeValue === 'string' ? codeValue.toUpperCase() : '';
-    const name = typeof record?.name === 'string' ? record.name : '';
-    if (status === 408 || status === 504 || code === 'DEADLINE_EXCEEDED' || name === 'AbortError') {
-        return 'provider_timeout';
+type ProviderFailureClassification = Readonly<{
+    errorClass: Exclude<NoorGenerationErrorClass, null>;
+    category: Exclude<GenerationDiagnostics['providerFailureCategory'], null>;
+    status: number | null;
+    code: string | null;
+    retryable: boolean;
+}>;
+
+const RETRYABLE_PROVIDER_CODES = new Set([
+    'ABORTED', 'ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN', 'ENETDOWN', 'ENETUNREACH', 'EPIPE',
+    'INTERNAL', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'UND_ERR_SOCKET',
+]);
+const TIMEOUT_PROVIDER_CODES = new Set([
+    'DEADLINE_EXCEEDED', 'ESOCKETTIMEDOUT', 'ETIMEDOUT', 'UND_ERR_BODY_TIMEOUT',
+    'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT',
+]);
+const DETERMINISTIC_PROVIDER_CODES = new Set([
+    'ALREADY_EXISTS', 'FAILED_PRECONDITION', 'INVALID_ARGUMENT', 'NOT_FOUND', 'OUT_OF_RANGE',
+    'MAX_TOKENS', 'PAYLOAD_TOO_LARGE', 'PERMISSION_DENIED', 'UNAUTHENTICATED',
+]);
+const SAFETY_PROVIDER_CODES = new Set([
+    'BLOCKLIST', 'IMAGE_SAFETY', 'PROHIBITED_CONTENT', 'SAFETY', 'SPII',
+]);
+const SAFE_PROVIDER_DIAGNOSTIC_CODES = new Set([
+    ...RETRYABLE_PROVIDER_CODES,
+    ...TIMEOUT_PROVIDER_CODES,
+    ...DETERMINISTIC_PROVIDER_CODES,
+    ...SAFETY_PROVIDER_CODES,
+]);
+
+export function isSafeProviderDiagnosticCode(value: unknown): value is string {
+    return typeof value === 'string' && SAFE_PROVIDER_DIAGNOSTIC_CODES.has(value);
+}
+
+function providerRecords(error: unknown): Record<string, unknown>[] {
+    const records: Record<string, unknown>[] = [];
+    let current = isRecord(error) ? error : null;
+    for (let depth = 0; depth < 4 && current !== null; depth += 1) {
+        records.push(current);
+        current = isRecord(current.cause) ? current.cause : null;
     }
-    if (status === 429 || (status !== 504 && status !== null && status >= 500 && status <= 599)) {
-        return 'provider_transient_failure';
+    return records;
+}
+
+function normalizedProviderCodes(records: readonly Record<string, unknown>[]): string[] {
+    const codes: string[] = [];
+    for (const record of records) {
+        for (const value of [record.code, record.status, record.statusCode]) {
+            if (typeof value !== 'string') continue;
+            const normalized = value.trim().toUpperCase();
+            if (isSafeProviderDiagnosticCode(normalized) && !codes.includes(normalized)) codes.push(normalized);
+        }
     }
-    if (code === 'UNAVAILABLE') {
-        return 'provider_transient_failure';
+    return codes;
+}
+
+function classifyProviderFailure(error: unknown): ProviderFailureClassification {
+    const records = providerRecords(error);
+    const status = records.map(record => numericProviderCode(record.status ?? record.statusCode ?? record.code))
+        .find(value => value !== null) ?? null;
+    const codes = normalizedProviderCodes(records);
+    const safetyBlock = records.some(record => record.providerCategory === 'safety_block');
+    const abortError = records.some(record => record.name === 'AbortError');
+    if (safetyBlock) {
+        return {
+            errorClass: 'provider_safety_block', category: 'safety_block', status,
+            code: codes.find(value => SAFETY_PROVIDER_CODES.has(value)) ?? null, retryable: false,
+        };
     }
-    return 'provider_permanent_failure';
+    const timeoutCode = codes.find(value => TIMEOUT_PROVIDER_CODES.has(value)) ?? null;
+    if (status === 408 || status === 504 || abortError || timeoutCode !== null) {
+        return { errorClass: 'provider_timeout', category: 'timeout', status, code: timeoutCode, retryable: false };
+    }
+    const retryableCode = codes.find(value => RETRYABLE_PROVIDER_CODES.has(value)) ?? null;
+    if (status === 429 || (status !== null && status >= 500 && status <= 599)
+        || retryableCode !== null) {
+        return {
+            errorClass: 'provider_transient_failure', category: 'retryable_transport', status,
+            code: retryableCode, retryable: true,
+        };
+    }
+    const deterministicCode = codes.find(value => DETERMINISTIC_PROVIDER_CODES.has(value)) ?? null;
+    if ((status !== null && status >= 400 && status <= 499)
+        || deterministicCode !== null) {
+        return {
+            errorClass: 'provider_permanent_failure', category: 'request_deterministic', status,
+            code: deterministicCode, retryable: false,
+        };
+    }
+    return { errorClass: 'provider_unknown_failure', category: 'unknown', status, code: null, retryable: false };
+}
+
+function recordProviderFailure(
+    diagnostics: GenerationDiagnostics,
+    classification: ProviderFailureClassification,
+): void {
+    diagnostics.providerFailureCategory = classification.category;
+    diagnostics.providerFailureStatus = classification.status;
+    diagnostics.providerFailureCode = classification.code;
 }
 
 type GeneratedOutputFailure = GeneratedAnswerValidationFailure
@@ -411,7 +617,7 @@ class GeneratedOutputError extends Error {
 function parseGeneratedOutput(
     text: string,
     evidence: readonly RetrievedEvidence[],
-    requireInlineCitations: boolean,
+    validationOptions: GeneratedAnswerValidationOptions,
 ): ValidatedGeneratedAnswer {
     let value: unknown;
     try {
@@ -423,9 +629,9 @@ function parseGeneratedOutput(
             citationSubtype: null,
         });
     }
-    const failure = diagnoseGeneratedAnswer(value, evidence, { requireInlineCitations });
+    const failure = diagnoseGeneratedAnswer(value, evidence, validationOptions);
     if (failure !== null) throw new GeneratedOutputError(failure);
-    return validateGeneratedAnswer(value, evidence, { requireInlineCitations });
+    return validateGeneratedAnswer(value, evidence, validationOptions);
 }
 
 function parseAnswerQualityJudgement(text: string): AnswerQualityJudgement {
@@ -540,7 +746,14 @@ function initialDiagnostics(): GenerationDiagnostics {
         citationValidationFailureSubtype: null,
         qualityJudgeInvoked: false,
         generationRetryInvoked: false,
+        providerFailureCategory: null,
+        providerFailureStatus: null,
+        providerFailureCode: null,
+        providerRetryCount: 0,
+        providerRetryRecovered: false,
         correctionInvoked: false,
+        abstentionReason: null,
+        abstentionDisagreement: false,
         finalGenerationErrorClass: null,
     };
 }
@@ -560,7 +773,24 @@ export function createVertexGenerationProvider(
     return {
         generate: async (request: VertexGenerationRequest): Promise<string> => {
             const response = await client.models.generateContent(request);
-            if (typeof response.text !== 'string') throw new Error('Noor generation failed');
+            if (typeof response.text !== 'string') {
+                const finishReason = response.candidates?.[0]?.finishReason?.toUpperCase() ?? null;
+                const blockReason = response.promptFeedback?.blockReason?.toUpperCase() ?? null;
+                const safetyReasons = new Set(['BLOCKLIST', 'IMAGE_SAFETY', 'PROHIBITED_CONTENT', 'SAFETY', 'SPII']);
+                if ((finishReason !== null && safetyReasons.has(finishReason))
+                    || (blockReason !== null && safetyReasons.has(blockReason))) {
+                    throw Object.assign(new Error('Noor provider safety block'), {
+                        providerCategory: 'safety_block',
+                        code: blockReason ?? finishReason ?? 'SAFETY',
+                    });
+                }
+                if (finishReason === 'MAX_TOKENS') {
+                    throw Object.assign(new Error('Noor provider output limit'), { code: 'MAX_TOKENS' });
+                }
+                throw Object.assign(new Error('Noor provider returned no structured output'), {
+                    code: finishReason ?? 'MISSING_TEXT',
+                });
+            }
             return response.text;
         },
     };
@@ -571,40 +801,72 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
     if (policy !== 'allowed') {
         return fixedAnswer(input.request.requestId, 'policy_refusal', policy === 'out_of_scope' ? SCOPE_REFUSAL : POLICY_REFUSAL);
     }
-    const built = buildGroundedPrompt(input.request, input.evidence, input.maxEvidenceCharacters, input.taskPlan);
+    const comparisonCitationContract = input.comparisonCitationContract ?? null;
+    const built = buildGroundedPrompt(
+        input.request,
+        input.evidence,
+        input.maxEvidenceCharacters,
+        input.taskPlan,
+        comparisonCitationContract,
+        input.answerabilityContract,
+    );
     if (built.evidence.length === 0) {
         return fixedAnswer(input.request.requestId, 'insufficient_evidence', INSUFFICIENT_EVIDENCE);
     }
     const coverageRequirement = input.taskPlan?.retrievalTask === 'entity_summary' && input.taskPlan.entity !== null
         ? buildSynthesisCoverageRequirement(input.taskPlan.entity, built.evidence)
         : null;
-    const requireInlineCitations = coverageRequirement !== null;
-    const schema = responseSchema(built.evidence, input.taskPlan);
+    const validationOptions: GeneratedAnswerValidationOptions = {
+        requireInlineCitations: coverageRequirement !== null || comparisonCitationContract !== null,
+        comparisonCitationContract,
+    };
+    const schema = responseSchema(built.evidence, input.taskPlan, comparisonCitationContract);
     let request = providerRequest(built.prompt, schema);
     let providerCalls = 0;
     const diagnostics = initialDiagnostics();
+    let providerRetryAvailable = true;
+    const invokeProvider = async (
+        providerRequestValue: VertexGenerationRequest,
+        countsAsGenerationAttempt: boolean,
+    ): Promise<string> => {
+        for (let providerAttempt = 0; providerAttempt < 2; providerAttempt += 1) {
+            providerCalls += 1;
+            diagnostics.attempts = providerCalls;
+            if (countsAsGenerationAttempt) diagnostics.generationAttemptCount += 1;
+            try {
+                const text = await input.provider.generate(providerRequestValue);
+                if (providerAttempt === 1) diagnostics.providerRetryRecovered = true;
+                return text;
+            } catch (error: unknown) {
+                const classification = classifyProviderFailure(error);
+                recordProviderFailure(diagnostics, classification);
+                if (!classification.retryable || !providerRetryAvailable || providerAttempt === 1) throw error;
+                providerRetryAvailable = false;
+                diagnostics.generationRetryInvoked = true;
+                diagnostics.providerRetryCount += 1;
+                await new Promise(resolve => setTimeout(
+                    resolve,
+                    PROVIDER_RETRY_BACKOFF_MIN_MS
+                        + Math.floor(Math.random() * (PROVIDER_RETRY_BACKOFF_JITTER_MS + 1)),
+                ));
+            }
+        }
+        throw new Error('Noor provider retry invariant failed');
+    };
     let initialAnswer: ValidatedGeneratedAnswer | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
         let text: string;
         try {
-            providerCalls += 1;
-            diagnostics.attempts = providerCalls;
-            diagnostics.generationAttemptCount += 1;
-            text = await input.provider.generate(request);
+            text = await invokeProvider(request, true);
         } catch (error: unknown) {
-            // Vertex can transiently fail while the request is otherwise valid.
-            // Retry once inside the callable deadline; never leak provider details.
-            const errorClass = classifyProviderFailure(error);
+            const classification = classifyProviderFailure(error);
+            recordProviderFailure(diagnostics, classification);
             diagnostics.generationFailurePhase = 'provider';
-            if (errorClass === 'provider_transient_failure' && attempt === 0) {
-                diagnostics.generationRetryInvoked = true;
-                continue;
-            }
             return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
-                finalDiagnostics(diagnostics, errorClass));
+                finalDiagnostics(diagnostics, classification.errorClass));
         }
         try {
-            initialAnswer = parseGeneratedOutput(text, built.evidence, requireInlineCitations);
+            initialAnswer = parseGeneratedOutput(text, built.evidence, validationOptions);
             diagnostics.structuralValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
             diagnostics.citationValidationResult = attempt === 0 ? 'passed_first_attempt' : 'passed_after_retry';
             break;
@@ -633,29 +895,86 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, 'answer_validation_failure'));
     }
+    let abstentionCorrectionUsed = false;
     if (initialAnswer.status === 'insufficient_evidence') {
-        return fixedAnswer(
-            input.request.requestId,
-            'insufficient_evidence',
-            INSUFFICIENT_EVIDENCE,
-            finalDiagnostics(diagnostics, null),
-        );
+        diagnostics.abstentionReason = initialAnswer.abstentionReason;
+        if (initialAnswer.abstentionReason === null
+            || !abstentionContradictsContract(initialAnswer.abstentionReason, input.answerabilityContract)) {
+            return fixedAnswer(
+                input.request.requestId,
+                'insufficient_evidence',
+                INSUFFICIENT_EVIDENCE,
+                finalDiagnostics(diagnostics, null),
+            );
+        }
+        diagnostics.abstentionDisagreement = true;
+        diagnostics.correctionInvoked = true;
+        diagnostics.generationFailurePhase = 'abstention_correction';
+        let corrected: ValidatedGeneratedAnswer;
+        try {
+            corrected = parseGeneratedOutput(await invokeProvider(providerRequest(abstentionCorrectionPrompt(
+                input.request,
+                built.evidence,
+                initialAnswer.abstentionReason,
+                input.taskPlan,
+                coverageRequirement,
+                comparisonCitationContract,
+                input.answerabilityContract,
+            ), schema), true), built.evidence, validationOptions);
+        } catch (error: unknown) {
+            if (error instanceof GeneratedOutputError) {
+                diagnostics.citationValidationFailureSubtype = error.failure.citationSubtype;
+                if (error.failure.phase === 'structural_validation') diagnostics.structuralValidationResult = 'failed';
+                else diagnostics.citationValidationResult = 'failed';
+                return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+                    finalDiagnostics(diagnostics, error.failure.errorClass));
+            }
+            const classification = classifyProviderFailure(error);
+            recordProviderFailure(diagnostics, classification);
+            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+                finalDiagnostics(diagnostics, classification.errorClass));
+        }
+        if (corrected.status === 'insufficient_evidence') {
+            diagnostics.abstentionReason = corrected.abstentionReason;
+            if (corrected.abstentionReason !== null
+                && !abstentionContradictsContract(corrected.abstentionReason, input.answerabilityContract)) {
+                return fixedAnswer(
+                    input.request.requestId,
+                    'insufficient_evidence',
+                    INSUFFICIENT_EVIDENCE,
+                    finalDiagnostics(diagnostics, null),
+                );
+            }
+            return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+                finalDiagnostics(diagnostics, 'generation_abstention_disagreement'));
+        }
+        initialAnswer = corrected;
+        abstentionCorrectionUsed = true;
     }
 
     let initialJudgement: AnswerQualityJudgement;
     try {
-        providerCalls += 1;
-        diagnostics.attempts = providerCalls;
         diagnostics.qualityJudgeInvoked = true;
-        initialJudgement = enforceDeterministicTaskFulfillment(parseAnswerQualityJudgement(await input.provider.generate(providerRequest(
-            answerQualityPrompt(input.request, built.evidence, initialAnswer, input.taskPlan, coverageRequirement),
+        initialJudgement = enforceDeterministicTaskFulfillment(parseAnswerQualityJudgement(await invokeProvider(providerRequest(
+            answerQualityPrompt(
+                input.request,
+                built.evidence,
+                initialAnswer,
+                input.taskPlan,
+                coverageRequirement,
+                comparisonCitationContract,
+                input.answerabilityContract,
+            ),
             ANSWER_QUALITY_SCHEMA,
             QUALITY_MAX_OUTPUT_TOKENS,
-        ))), initialAnswer, built.evidence, input.taskPlan, coverageRequirement);
+        ), false)), initialAnswer, built.evidence, input.taskPlan, coverageRequirement);
     } catch (error: unknown) {
-        const errorClass = error instanceof Error && error.message === 'answer_quality_judgement_failure'
-            ? 'answer_quality_judgement_failure'
-            : classifyProviderFailure(error);
+        let errorClass: NoorGenerationErrorClass = 'answer_quality_judgement_failure';
+        if (!(error instanceof Error && error.message === 'answer_quality_judgement_failure')) {
+            const classification = classifyProviderFailure(error);
+            recordProviderFailure(diagnostics, classification);
+            errorClass = classification.errorClass;
+        }
         diagnostics.generationFailurePhase = 'quality_judgement';
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, errorClass));
@@ -665,19 +984,25 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
         return answeredResponse(input.request.requestId, initialAnswer, finalDiagnostics(diagnostics, null));
     }
 
+    if (abstentionCorrectionUsed) {
+        diagnostics.generationFailurePhase = 'quality_correction';
+        return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
+            finalDiagnostics(diagnostics, 'answer_quality_failure'));
+    }
+
     let correctedAnswer: ValidatedGeneratedAnswer;
     try {
-        providerCalls += 1;
-        diagnostics.attempts = providerCalls;
         diagnostics.correctionInvoked = true;
-        const correctedText = await input.provider.generate(providerRequest(correctivePrompt(
+        const correctedText = await invokeProvider(providerRequest(correctivePrompt(
             input.request,
             built.evidence,
             genericQualityCritique(initialJudgement, initialAnswer, built.evidence, input.taskPlan, coverageRequirement),
             input.taskPlan,
             coverageRequirement,
-        ), schema));
-        correctedAnswer = parseGeneratedOutput(correctedText, built.evidence, requireInlineCitations);
+            comparisonCitationContract,
+            input.answerabilityContract,
+        ), schema), true);
+        correctedAnswer = parseGeneratedOutput(correctedText, built.evidence, validationOptions);
     } catch (error: unknown) {
         diagnostics.generationFailurePhase = 'quality_correction';
         if (error instanceof GeneratedOutputError) {
@@ -687,8 +1012,10 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
             return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
                 finalDiagnostics(diagnostics, error.failure.errorClass));
         }
+        const classification = classifyProviderFailure(error);
+        recordProviderFailure(diagnostics, classification);
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
-            finalDiagnostics(diagnostics, classifyProviderFailure(error)));
+            finalDiagnostics(diagnostics, classification.errorClass));
     }
     if (correctedAnswer.status === 'insufficient_evidence') {
         return fixedAnswer(
@@ -701,17 +1028,26 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
 
     let correctedJudgement: AnswerQualityJudgement;
     try {
-        providerCalls += 1;
-        diagnostics.attempts = providerCalls;
-        correctedJudgement = enforceDeterministicTaskFulfillment(parseAnswerQualityJudgement(await input.provider.generate(providerRequest(
-            answerQualityPrompt(input.request, built.evidence, correctedAnswer, input.taskPlan, coverageRequirement),
+        correctedJudgement = enforceDeterministicTaskFulfillment(parseAnswerQualityJudgement(await invokeProvider(providerRequest(
+            answerQualityPrompt(
+                input.request,
+                built.evidence,
+                correctedAnswer,
+                input.taskPlan,
+                coverageRequirement,
+                comparisonCitationContract,
+                input.answerabilityContract,
+            ),
             ANSWER_QUALITY_SCHEMA,
             QUALITY_MAX_OUTPUT_TOKENS,
-        ))), correctedAnswer, built.evidence, input.taskPlan, coverageRequirement);
+        ), false)), correctedAnswer, built.evidence, input.taskPlan, coverageRequirement);
     } catch (error: unknown) {
-        const errorClass = error instanceof Error && error.message === 'answer_quality_judgement_failure'
-            ? 'answer_quality_judgement_failure'
-            : classifyProviderFailure(error);
+        let errorClass: NoorGenerationErrorClass = 'answer_quality_judgement_failure';
+        if (!(error instanceof Error && error.message === 'answer_quality_judgement_failure')) {
+            const classification = classifyProviderFailure(error);
+            recordProviderFailure(diagnostics, classification);
+            errorClass = classification.errorClass;
+        }
         diagnostics.generationFailurePhase = 'quality_judgement';
         return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
             finalDiagnostics(diagnostics, errorClass));

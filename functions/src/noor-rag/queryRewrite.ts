@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { NoorAnswer, NoorChatRequest, NoorRequest } from './types';
 import type { RetrievedEvidence } from './types';
+import { normalizeQueryInterpretation } from './queryInterpretation';
 import {
     canonicalSurahByNumber,
     hasEntitySummarySignal,
@@ -31,13 +32,22 @@ const STOP_WORDS = new Set([
     'meaning', 'teach', 'teaches',
 ]);
 const FOLLOW_UP_TOKENS = new Set([
-    'alternative', 'alternatives', 'else', 'happened', 'he', 'her', 'hers', 'him',
-    'his', 'more', 'next', 'she', 'their', 'theirs', 'them', 'then', 'they',
-    'this', 'those', 'tell', 'instead', 'its',
+    'alternative', 'alternatives', 'both', 'compare', 'contrast', 'difference', 'differences',
+    'different', 'else', 'happened', 'he', 'her', 'hers', 'him', 'his', 'learn',
+    'more', 'next', 'she', 'their', 'theirs', 'them', 'then', 'they', 'this',
+    'those', 'tell', 'instead', 'its', 'versus', 'vs', "what's", 'whats',
 ]);
 const SUMMARY_TASK_TOKENS = new Set([
     'across', 'its', 'learn', 'lesson', 'lessons', 'main', 'mainly', 'overview',
     'summary', 'summarise', 'summarize', 'surah', 'theme', 'themes',
+]);
+const ELLIPTICAL_NORMATIVE_PREDICATES = new Set([
+    'allowed', 'forbidden', 'halal', 'haram', 'impermissible', 'mandatory',
+    'obligatory', 'permissible', 'permitted', 'prohibited', 'required',
+]);
+const EXPLICIT_QUESTION_FRAME_TOKENS = new Set([
+    'are', 'can', 'could', 'did', 'do', 'does', 'has', 'have', 'how', 'is', 'may',
+    'must', 'should', 'was', 'were', 'what', 'when', 'where', 'who', 'why', 'will', 'would',
 ]);
 
 const ENTITY_PHRASE_NOISE = new Set([
@@ -665,28 +675,45 @@ export function buildChatQueryPlan(input: Readonly<{
     request: NoorChatRequest;
     validatedConversationState?: ValidatedConversationState | null;
 }>): ChatQueryPlan {
-    const original: QueryVariant = { kind: 'original', query: input.request.question };
+    const interpretedQuestion = normalizeQueryInterpretation(input.request.question);
+    const questionTokens = tokenize(interpretedQuestion);
+    const finalToken = questionTokens.at(-1) ?? '';
+    const ellipticalNormative = questionTokens.length >= 2
+        && ELLIPTICAL_NORMATIVE_PREDICATES.has(finalToken)
+        && !questionTokens.some(token => EXPLICIT_QUESTION_FRAME_TOKENS.has(token));
+    const retrievalQuestion = ellipticalNormative
+        ? `Is ${interpretedQuestion.trim().replace(/^is\s+/iu, '')}`
+        : interpretedQuestion;
+    const original: QueryVariant = { kind: 'original', query: retrievalQuestion };
     const state = input.validatedConversationState
         ? parseValidatedConversationState(input.validatedConversationState)
         : null;
     const verseReference = input.request.verseContext
         ? ` Regarding Quran ${input.request.verseContext.surah}:${input.request.verseContext.verse}.`
         : '';
-    const directEntity = resolveQuranSurahEntity(input.request.question);
-    const summarySignal = hasEntitySummarySignal(input.request.question)
-        || (directEntity !== null && hasWholeEntityScopeSignal(input.request.question));
-    const directEntitySet = extractComparisonEntitySet(input.request.question);
-    const structuralFollowUp = (isStructuralFollowUp(input.request.question)
-        || isAmbiguousStandaloneFragment(input.request.question))
+    const directEntity = resolveQuranSurahEntity(interpretedQuestion);
+    const summarySignal = hasEntitySummarySignal(interpretedQuestion)
+        || (directEntity !== null && hasWholeEntityScopeSignal(interpretedQuestion));
+    const directEntitySet = extractComparisonEntitySet(interpretedQuestion);
+    const structuralFollowUp = (isStructuralFollowUp(interpretedQuestion)
+        || isAmbiguousStandaloneFragment(interpretedQuestion))
         && directEntity === null
         && directEntitySet.length === 0;
     const priorMatches = state !== null && hasPriorSubjectMatch(input.request, state);
+    const stateEntityReferences = state === null
+        ? []
+        : referencedDiscourseEntities(interpretedQuestion, state.entitySet);
+    const ambiguousSingularMultiEntityReference = state !== null
+        && state.entitySet.length > 1
+        && structuralFollowUp
+        && !isPluralReference(interpretedQuestion)
+        && stateEntityReferences.length !== 1;
     const contextualSummary = summarySignal && directEntity === null && state?.entity !== undefined && priorMatches;
     const entity = directEntity ?? (contextualSummary ? state?.entity ?? null : null);
     const contextualMultiEntity = directEntitySet.length === 0
         && state !== null
         && state.entitySet.length > 1
-        && isPluralReference(input.request.question)
+        && isPluralReference(interpretedQuestion)
         && priorMatches;
     const entitySet = directEntitySet.length > 1
         ? directEntitySet
@@ -695,13 +722,14 @@ export function buildChatQueryPlan(input: Readonly<{
     const retrievalTask: NoorRetrievalTask = directEntitySet.length > 1 || contextualMultiEntity
         ? 'multi_entity_comparison'
         : summarySignal && entity !== null ? 'entity_summary' : 'point_question';
-    const unresolvedSurahReference = directEntity === null && /\b(?:surah|surat)\b/iu.test(input.request.question);
+    const unresolvedSurahReference = directEntity === null && /\b(?:surah|surat)\b/iu.test(interpretedQuestion);
     const summaryNeedsEntity = summarySignal
         && entity === null
         && (unresolvedSurahReference
-            || extractSubjectTokens(input.request.question).every(token => SUMMARY_TASK_TOKENS.has(token)));
+            || extractSubjectTokens(interpretedQuestion).every(token => SUMMARY_TASK_TOKENS.has(token)));
     const contextSelected = state !== null
         && (structuralFollowUp || contextualSummary || contextualMultiEntity)
+        && !ambiguousSingularMultiEntityReference
         && priorMatches;
     const taskType: ChatQueryPlan['taskType'] = contextualSummary
         ? 'contextual_followup'
@@ -712,7 +740,7 @@ export function buildChatQueryPlan(input: Readonly<{
     const explicitEntity = directEntity !== null || directEntitySet.length > 1;
     const multiEntityVariants = entitySet.map(item => ({
         kind: 'entity_branch' as const,
-        query: entityBranchQuery(input.request.question, item, entitySet),
+        query: entityBranchQuery(interpretedQuestion, item, entitySet),
         entityId: item.id,
     }));
     if (summaryNeedsEntity) {
@@ -738,7 +766,8 @@ export function buildChatQueryPlan(input: Readonly<{
                 : [{ kind: 'original', query: `${original.query}${verseReference}` }],
             contextSelected: false,
             conversationState: 'none',
-            requiresClarification: structuralFollowUp && !input.request.verseContext,
+            requiresClarification: (structuralFollowUp && !input.request.verseContext)
+                || ambiguousSingularMultiEntityReference,
             taskType,
             retrievalTask,
             entity,
@@ -752,7 +781,7 @@ export function buildChatQueryPlan(input: Readonly<{
             { kind: 'original', query: `${original.query}${verseReference}` },
             {
                 kind: 'context_enriched',
-                query: `${input.request.question} Regarding ${state.semanticSubject.join(' ')}.${verseReference}`,
+                query: `${retrievalQuestion} Regarding ${state.semanticSubject.join(' ')}.${verseReference}`,
             },
         ],
         contextSelected: true,

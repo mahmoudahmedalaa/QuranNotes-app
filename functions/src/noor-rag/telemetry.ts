@@ -1,5 +1,7 @@
 import { createHmac } from 'node:crypto';
 
+import { GENERATION_ABSTENTION_REASONS } from './citations';
+import { isSafeProviderDiagnosticCode } from './generation';
 import type { NoorHandlerTelemetryEvent, NoorSanitizedTrace } from './handler';
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -115,14 +117,31 @@ function sanitizeNoorTrace(trace: NoorSanitizedTrace): NoorSanitizedTrace {
         evidenceCount: boundedCount(trace.evidenceCount, 8),
         generationStatus: trace.generationStatus,
         citationValidation: trace.citationValidation,
-        generationAttemptCount: boundedCount(trace.generationAttemptCount, 2),
+        generationAttemptCount: boundedCount(trace.generationAttemptCount, 4),
         generationFailurePhase: trace.generationFailurePhase,
         structuralValidationResult: trace.structuralValidationResult,
         citationValidationResult: trace.citationValidationResult,
         citationValidationFailureSubtype: trace.citationValidationFailureSubtype,
         qualityJudgeInvoked: trace.qualityJudgeInvoked === true,
         generationRetryInvoked: trace.generationRetryInvoked === true,
+        providerFailureCategory: [
+            'retryable_transport', 'request_deterministic', 'safety_block', 'timeout', 'unknown',
+        ].includes(trace.providerFailureCategory ?? '') ? trace.providerFailureCategory : null,
+        providerFailureStatus: Number.isInteger(trace.providerFailureStatus)
+            && (trace.providerFailureStatus ?? 0) >= 100
+            && (trace.providerFailureStatus ?? 0) <= 599
+            ? trace.providerFailureStatus
+            : null,
+        providerFailureCode: isSafeProviderDiagnosticCode(trace.providerFailureCode)
+            ? trace.providerFailureCode
+            : null,
+        providerRetryCount: boundedCount(trace.providerRetryCount ?? 0, 1),
+        providerRetryRecovered: trace.providerRetryRecovered === true,
         correctionInvoked: trace.correctionInvoked === true,
+        generationAbstentionReason: GENERATION_ABSTENTION_REASONS.includes(
+            trace.generationAbstentionReason as typeof GENERATION_ABSTENTION_REASONS[number],
+        ) ? trace.generationAbstentionReason : null,
+        generationAbstentionDisagreement: trace.generationAbstentionDisagreement === true,
         finalGenerationErrorClass: trace.finalGenerationErrorClass,
         personalizedRulingClassifierInvoked: trace.personalizedRulingClassifierInvoked === true,
         personalizedRulingClassification: trace.personalizedRulingClassification === 'general_information'
@@ -186,7 +205,12 @@ export async function recordNoorTelemetry(input: TelemetryInput): Promise<void> 
         ...input.event,
         retrievalMs: boundedStageDuration(input.event.retrievalMs),
         generationMs: boundedStageDuration(input.event.generationMs),
-        generationAttemptCount: boundedCount(input.event.generationAttemptCount, 2),
+        generationAttemptCount: boundedCount(input.event.generationAttemptCount, 4),
+        providerFailureCode: isSafeProviderDiagnosticCode(input.event.providerFailureCode)
+            ? input.event.providerFailureCode
+            : null,
+        providerRetryCount: boundedCount(input.event.providerRetryCount ?? 0, 1),
+        providerRetryRecovered: input.event.providerRetryRecovered === true,
         personalizedRulingClassifierLatencyMs: boundedStageDuration(input.event.personalizedRulingClassifierLatencyMs),
         semanticTaskClassifierLatencyMs: boundedStageDuration(input.event.semanticTaskClassifierLatencyMs),
         pseudonym,

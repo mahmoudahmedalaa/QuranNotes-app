@@ -40,6 +40,8 @@ function trace(overrides: Partial<NoorSanitizedTrace> = {}): NoorSanitizedTrace 
         qualityJudgeInvoked: true,
         generationRetryInvoked: false,
         correctionInvoked: false,
+        generationAbstentionReason: null,
+        generationAbstentionDisagreement: false,
         finalGenerationErrorClass: null,
         semanticTaskClassifierInvoked: false,
         semanticTaskClassification: 'not_run',

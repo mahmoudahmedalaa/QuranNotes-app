@@ -163,6 +163,8 @@ export async function callableHandler(request: CallableRequest<unknown>): Promis
                 maxEvidenceCharacters: input.config.maxEvidenceCharacters,
                 provider: generationProvider,
                 taskPlan: input.taskPlan,
+                comparisonCitationContract: input.comparisonCitationContract,
+                answerabilityContract: input.answerabilityContract,
             }),
             finalizeAnswered: input => finalizeAnswered({ ...input, repository: usageRepository }),
             finalizeNonAnswer: input => finalizeNonAnswer({ ...input, repository: usageRepository }),

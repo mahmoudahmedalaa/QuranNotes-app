@@ -74,11 +74,103 @@ function validatedState(
 }
 
 describe('Noor generic query rewriting', () => {
-    it('requires clarification for a structural follow-up without validated prior subject and evidence', () => {
-        const plan = buildChatQueryPlan({
-            request: request('What is the alternative?', [{ role: 'user', content: 'Is velunari restricted?' }]),
-        });
+    it('normalizes only unique high-confidence structural query typos', () => {
+        for (const question of [
+            'Can I operate Floran wthout Zenthos?',
+            'Can I operate Floran withuot Zenthos?',
+            'Can I operate Floran wihout Zenthos?',
+        ]) {
+            assert.deepEqual(buildChatQueryPlan({ request: request(question) }).variants, [
+                { kind: 'original', query: 'Can I operate Floran without Zenthos?' },
+            ], question);
+        }
+    });
 
+    it('fails closed for ambiguous or unrelated near-spellings', () => {
+        for (const question of [
+            'What happened ater the council?',
+            'What is the currant value?',
+            'Which path is doing well now?',
+        ]) {
+            assert.deepEqual(buildChatQueryPlan({ request: request(question) }).variants, [
+                { kind: 'original', query: question },
+            ], question);
+        }
+    });
+
+    it('canonicalizes generic elliptical normative predicates without naming a topic', () => {
+        for (const [question, expected] of [
+            ['arrogance haram?', 'Is arrogance haram?'],
+            ['riba prohibited?', 'Is riba prohibited?'],
+            ['trade permitted?', 'Is trade permitted?'],
+            ['prayer obligatory?', 'Is prayer obligatory?'],
+        ] as const) {
+            assert.deepEqual(buildChatQueryPlan({ request: request(question) }).variants, [
+                { kind: 'original', query: expected },
+            ]);
+        }
+        for (const question of ['weather hot?', 'why arrogance bad?', 'what is patience?']) {
+            assert.deepEqual(buildChatQueryPlan({ request: request(question) }).variants, [
+                { kind: 'original', query: question },
+            ]);
+        }
+    });
+
+    it('requires clarification for a structural follow-up without validated prior subject and evidence', () => {
+        for (const question of ['What is the alternative?', 'why tho?', 'and then?']) {
+            const plan = buildChatQueryPlan({
+                request: request(question, [{ role: 'user', content: 'Is velunari restricted?' }]),
+            });
+
+            assert.equal(plan.requiresClarification, true, question);
+            assert.equal(plan.contextSelected, false, question);
+            assert.deepEqual(plan.variants, [], question);
+        }
+    });
+
+    it('does not guess a singular referent from a validated multi-entity frame', () => {
+        const priorQuestion = 'caldorin vs velunari whats different';
+        const priorRequest = request(priorQuestion);
+        const first = citedEvidence('Caldorin remained with the council.');
+        const secondText = 'Velunari returned to the city.';
+        const second: RetrievedEvidence = {
+            ...first,
+            promptSourceId: 'S2',
+            chunk: {
+                ...first.chunk,
+                chunkId: 'chunk-second-entity',
+                canonicalUnitId: 'unit-second-entity',
+                originalEnd: secondText.length,
+                originalText: secondText,
+                retrievalText: secondText,
+            },
+        };
+        const priorPlan = buildChatQueryPlan({ request: priorRequest });
+        const response: NoorAnswer = {
+            ...ANSWERED,
+            answer: 'Grounded comparison. [S1] [S2]',
+            citations: [
+                ANSWERED.citations[0]!,
+                {
+                    ...ANSWERED.citations[0]!,
+                    chunkId: second.chunk.chunkId,
+                    canonicalUnitId: second.chunk.canonicalUnitId,
+                },
+            ],
+        };
+        const state = createValidatedConversationState({
+            request: priorRequest,
+            response,
+            evidence: [first, second],
+            taskPlan: priorPlan,
+        });
+        assert.ok(state);
+        assert.equal(state.entitySet.length, 2);
+
+        const plan = buildChatQueryPlan({
+            request: request('what about him?', [{ role: 'user', content: priorQuestion }]),
+            validatedConversationState: state,
+        });
         assert.equal(plan.requiresClarification, true);
         assert.equal(plan.contextSelected, false);
         assert.deepEqual(plan.variants, []);
@@ -89,6 +181,17 @@ describe('Noor generic query rewriting', () => {
 
         assert.equal(plan.requiresClarification, false);
         assert.deepEqual(plan.variants, [{ kind: 'original', query: 'What is caldorin?' }]);
+    });
+
+    it('builds generic entity branches without carrying comparison surface noise', () => {
+        const plan = buildChatQueryPlan({ request: request('caldorin vs velunari whats different') });
+
+        assert.equal(plan.retrievalTask, 'multi_entity_comparison');
+        assert.deepEqual(plan.entitySet.map(item => item.id), ['subject:caldorin', 'subject:velunari']);
+        assert.deepEqual(plan.variants, [
+            { kind: 'entity_branch', query: 'caldorin', entityId: 'subject:caldorin' },
+            { kind: 'entity_branch', query: 'velunari', entityId: 'subject:velunari' },
+        ]);
     });
 
     it('anchors chat retrieval to the selected verse when verse context is supplied', () => {

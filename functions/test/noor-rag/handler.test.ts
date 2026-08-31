@@ -1,6 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { AnswerabilitySemanticDecision } from '../../src/noor-rag/answerability';
 import { NoorEntitlementUnavailableError } from '../../src/noor-rag/entitlement';
 import { generateGroundedAnswer, type GenerationProvider } from '../../src/noor-rag/generation';
 import {
@@ -166,6 +167,55 @@ describe('handleNoorRequest', () => {
         assert.equal(generationCount, 1);
         assert.equal(finalizeCount, 1);
         assert.equal(stateWriteCount, 1);
+    });
+
+    it('keeps one claim, finalization, and state write when a retryable provider call recovers internally', async () => {
+        let claimCount = 0;
+        let finalizeCount = 0;
+        let stateWriteCount = 0;
+        let providerCalls = 0;
+        const outputs: Array<string | Error> = [
+            Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNRESET' } }),
+            '{"answer":"Grounded answer. [S1]","citationIds":["S1"]}',
+            QUALITY_PASS,
+        ];
+        const provider: GenerationProvider = {
+            generate: async () => {
+                providerCalls += 1;
+                const output = outputs.shift();
+                if (output instanceof Error) throw output;
+                if (output === undefined) throw new Error('fixture exhausted');
+                return output;
+            },
+        };
+        const value = harness({
+            claimUsage: async () => {
+                claimCount += 1;
+                return { kind: 'claimed' as const, leaseOwnerId: INVOCATION_ID, leaseExpiresAt: '2026-08-11T12:02:00.000Z' };
+            },
+            generateGroundedAnswer: input => generateGroundedAnswer({
+                request: input.request,
+                evidence: input.evidence,
+                maxEvidenceCharacters: input.config.maxEvidenceCharacters,
+                provider,
+                taskPlan: input.taskPlan,
+                comparisonCitationContract: input.comparisonCitationContract,
+                answerabilityContract: input.answerabilityContract,
+            }),
+            finalizeAnswered: async () => {
+                finalizeCount += 1;
+                return { kind: 'finalized' as const };
+            },
+            writeValidatedConversationState: async () => { stateWriteCount += 1; },
+        });
+
+        assert.equal((await run(value)).status, 'answered');
+        assert.equal(providerCalls, 3);
+        assert.equal(claimCount, 1);
+        assert.equal(finalizeCount, 1);
+        assert.equal(stateWriteCount, 1);
+        assert.equal(value.telemetry[0]?.providerRetryCount, 1);
+        assert.equal(value.telemetry[0]?.providerRetryRecovered, true);
     });
 
     it('maps inactive entitlement, entitlement outage, quota, rate limit, and contention', async () => {
@@ -397,6 +447,24 @@ describe('handleNoorRequest', () => {
 
         assert.equal((await run(value)).status, 'answered');
         assert.deepEqual(generatedEvidence.map(item => item.chunk.chunkId), ['z-fitting']);
+    });
+
+    it('passes the deterministic point-question semantic contract into grounded generation', async () => {
+        let contract: AnswerabilitySemanticDecision | null | undefined;
+        const value = harness({
+            generateGroundedAnswer: async input => {
+                contract = input.answerabilityContract;
+                return ANSWERED;
+            },
+        });
+
+        assert.equal((await run(value)).status, 'answered');
+        assert.deepEqual(contract, {
+            requiredSemanticSlots: ['subject', 'relation_or_attribute'],
+            satisfiedSemanticSlots: ['subject', 'relation_or_attribute'],
+            unsatisfiedSemanticSlots: [],
+            currentExternalStateRequired: false,
+        });
     });
 
     it('clarifies structural follow-ups without validated prior evidence and skips retrieval and generation', async () => {
@@ -673,6 +741,7 @@ describe('handleNoorRequest', () => {
         } satisfies RetrievedEvidence;
         const queries: string[] = [];
         let selected: readonly RetrievedEvidence[] = [];
+        let comparisonContract: unknown = null;
         const value = harness({
             retrieveSemantic: async input => {
                 queries.push(input.query);
@@ -681,6 +750,7 @@ describe('handleNoorRequest', () => {
             },
             generateGroundedAnswer: async input => {
                 selected = input.evidence;
+                comparisonContract = (input as typeof input & { comparisonCitationContract?: unknown }).comparisonCitationContract;
                 return {
                     requestId: input.request.requestId,
                     status: 'answered',
@@ -709,6 +779,61 @@ describe('handleNoorRequest', () => {
         assert.ok(queries.some(query => /nuh/iu.test(query) && !/musa/iu.test(query)));
         assert.ok(queries.some(query => /musa/iu.test(query) && !/nuh/iu.test(query)));
         assert.deepEqual(new Set(selected.map(item => item.chunk.chunkId)), new Set(['nuh-branch', 'musa-branch']));
+        assert.deepEqual(comparisonContract, {
+            taskType: 'multi_entity_comparison',
+            entities: [
+                { id: 'subject:nuh', label: 'nuh', evidenceIds: ['S2'] },
+                { id: 'subject:musa', label: 'musa', evidenceIds: ['S1'] },
+            ],
+            allowedEvidenceIds: ['S1', 'S2'],
+        });
+    });
+
+    it('does not apply comparison surface wording as a point-question subject requirement', async () => {
+        const caldorin = {
+            ...EVIDENCE[0]!,
+            chunk: { ...chunk('caldorin-branch', 'Caldorin faced exile and later returned.'), canonicalUnitId: 'unit-caldorin' },
+        } satisfies RetrievedEvidence;
+        const velunari = {
+            ...EVIDENCE[0]!,
+            chunk: { ...chunk('velunari-branch', 'Velunari remained in the city and led its council.'), canonicalUnitId: 'unit-velunari' },
+        } satisfies RetrievedEvidence;
+        let generated = false;
+        const value = harness({
+            retrieveSemantic: async input => ({
+                evidence: [/velunari/iu.test(input.query) && !/caldorin/iu.test(input.query) ? velunari : caldorin],
+                vectorHitCount: 1,
+                lexicalHitCount: 1,
+                lexicalSearchStatus: 'available' as const,
+            }),
+            generateGroundedAnswer: async input => {
+                generated = true;
+                return {
+                    requestId: input.request.requestId,
+                    status: 'answered',
+                    answer: 'Each branch has distinct grounded events. [S1, S2]',
+                    citations: input.evidence.map(item => ({
+                        chunkId: item.chunk.chunkId,
+                        canonicalUnitId: item.chunk.canonicalUnitId,
+                        source: item.chunk.source,
+                        sourceTitle: item.chunk.sourceTitle,
+                        surah: item.chunk.surah,
+                        verseStart: item.chunk.verseStart,
+                        verseEnd: item.chunk.verseEnd,
+                        corpusVersion: item.chunk.corpusVersion,
+                    })),
+                };
+            },
+        });
+
+        const response = await run(value, {
+            ...REQUEST,
+            question: 'Caldorin and Velunari whats diff?',
+            history: [],
+        });
+
+        assert.equal(response.status, 'answered');
+        assert.equal(generated, true);
     });
 
     it('rejects distinct incidental name mentions as substantive entity-branch support', async () => {
@@ -1025,6 +1150,56 @@ describe('handleNoorRequest', () => {
         assert.doesNotMatch(JSON.stringify(trace), /Grounded\. \[S9\]/);
     });
 
+    it('emits only the bounded abstention reason and disagreement classification', async () => {
+        const results = [
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                abstentionReason: 'missing_relation_support',
+                answer: '',
+                citationIds: [],
+            }),
+            JSON.stringify({
+                status: 'answered',
+                abstentionReason: 'not_applicable',
+                answer: 'Grounded answer. [S1]',
+                citationIds: ['S1'],
+            }),
+            QUALITY_PASS,
+        ];
+        const generated = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: CONFIG.maxEvidenceCharacters,
+            provider: { generate: async () => results.shift() ?? (() => { throw new Error('fixture exhausted'); })() },
+            answerabilityContract: {
+                requiredSemanticSlots: ['subject', 'relation_or_attribute'],
+                satisfiedSemanticSlots: ['subject', 'relation_or_attribute'],
+                unsatisfiedSemanticSlots: [],
+                currentExternalStateRequired: false,
+            },
+        });
+        const traces: NoorSanitizedTrace[] = [];
+        const value = harness({
+            generateGroundedAnswer: async () => generated,
+            emitSanitizedTrace: trace => { traces.push(trace); },
+        });
+
+        assert.equal((await run(value)).status, 'answered');
+        const trace = traces[0] as unknown as {
+            generationAbstentionReason?: string | null;
+            generationAbstentionDisagreement?: boolean;
+        };
+        const event = value.telemetry[0] as unknown as {
+            generationAbstentionReason?: string | null;
+            generationAbstentionDisagreement?: boolean;
+        };
+        assert.equal(trace.generationAbstentionReason, 'missing_relation_support');
+        assert.equal(trace.generationAbstentionDisagreement, true);
+        assert.equal(event.generationAbstentionReason, 'missing_relation_support');
+        assert.equal(event.generationAbstentionDisagreement, true);
+        assert.doesNotMatch(JSON.stringify(trace), /Grounded answer|fixture exhausted/i);
+    });
+
     it('returns claim replay without policy/retrieval/model and fails closed on replay ID mismatch', async () => {
         const replay = harness({ claimUsage: async () => ({ kind: 'replay', response: ANSWERED }) });
         assert.deepEqual(await run(replay), ANSWERED);
@@ -1042,18 +1217,20 @@ describe('handleNoorRequest', () => {
         assert.deepEqual(Object.keys(value.telemetry[0]!).sort(), [
             'citationCount', 'citationValidationFailureSubtype', 'citationValidationResult', 'corpusVersion',
             'correctionInvoked', 'durationMs', 'entitlementClass', 'errorClass', 'finalGenerationErrorClass',
+            'generationAbstentionDisagreement', 'generationAbstentionReason',
             'generationAttemptCount', 'generationFailurePhase', 'generationModel', 'generationMs',
             'generationRetryInvoked', 'mode', 'outcome',
             'personalizedRulingClassification', 'personalizedRulingClassifierFailureType',
             'personalizedRulingClassifierInvoked', 'personalizedRulingClassifierLatencyMs',
-            'promptVersion', 'qualityJudgeInvoked',
+            'promptVersion', 'providerFailureCategory', 'providerFailureCode', 'providerFailureStatus',
+            'providerRetryCount', 'providerRetryRecovered', 'qualityJudgeInvoked',
             'requestId', 'retrievalMs', 'retrievedChunkIds',
             'semanticTaskClassification', 'semanticTaskClassifierFailureType',
             'semanticTaskClassifierInvoked', 'semanticTaskClassifierLatencyMs',
             'structuralValidationResult',
         ]);
         const serialized = JSON.stringify(value.telemetry[0]);
-        assert.doesNotMatch(serialized, /sensitive|example\.com|Grounded answer|source|provider/i);
+        assert.doesNotMatch(serialized, /sensitive|example\.com|Grounded answer|source text|provider body|provider secret/i);
         assert.deepEqual(value.telemetry[0]?.retrievedChunkIds, ['chunk-1']);
         assert.equal(Number.isInteger(value.telemetry[0]?.durationMs), true);
         assert.equal(Number.isInteger(value.telemetry[0]?.retrievalMs), true);

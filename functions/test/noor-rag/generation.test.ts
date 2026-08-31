@@ -15,6 +15,7 @@ import {
     type VertexGenerationClientFactory,
     type VertexGenerationRequest,
 } from '../../src/noor-rag/generation';
+import type { ComparisonCitationContract } from '../../src/noor-rag/citations';
 import { buildChatQueryPlan } from '../../src/noor-rag/queryRewrite';
 import type { NoorRequest, RetrievedEvidence } from '../../src/noor-rag/types';
 
@@ -52,6 +53,25 @@ const QUALITY_FAIL = JSON.stringify({
     clear: false,
     citationConsistent: true,
 });
+const SUPPORTED_SEMANTIC_CONTRACT = {
+    requiredSemanticSlots: ['subject', 'relation_or_attribute'],
+    satisfiedSemanticSlots: ['subject', 'relation_or_attribute'],
+    unsatisfiedSemanticSlots: [],
+    currentExternalStateRequired: false,
+} as const;
+
+const COMPARISON_REQUEST: NoorRequest = {
+    mode: 'chat', requestId: REQUEST_ID, question: 'How are Nuh and Musa different?', history: [],
+};
+const COMPARISON_PLAN = buildChatQueryPlan({ request: COMPARISON_REQUEST });
+const COMPARISON_CONTRACT: ComparisonCitationContract = {
+    taskType: 'multi_entity_comparison',
+    entities: [
+        { id: 'subject:nuh', label: 'Nuh', evidenceIds: ['S1'] },
+        { id: 'subject:musa', label: 'Musa', evidenceIds: ['S2'] },
+    ],
+    allowedEvidenceIds: ['S1', 'S2'],
+};
 
 class SequenceProvider implements GenerationProvider {
     readonly requests: VertexGenerationRequest[] = [];
@@ -186,6 +206,61 @@ describe('Noor grounded generation', () => {
         assert.doesNotMatch(provider.requests[2]?.contents ?? '', /correct wudu|wudu is|night prayer is/i);
     });
 
+    it('uses one request-scoped comparison provenance contract in schema, generation, correction, and re-validation', async () => {
+        const provider = new SequenceProvider([
+            '{"status":"answered","answer":"Nuh faced rejection. [S1]\\n\\nMusa confronted Pharaoh. [S2]","citationIds":["S1","S2"]}',
+            QUALITY_FAIL,
+            '{"status":"answered","answer":"## Key differences\\n\\nNuh faced rejection. [S1]\\n\\nMusa confronted Pharaoh. [S2]\\n\\nNuh and Musa faced different opponents. [S1, S2]","citationIds":["S1","S2"]}',
+            QUALITY_PASS,
+        ]);
+        const comparisonInput = {
+            request: COMPARISON_REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+            taskPlan: COMPARISON_PLAN,
+            comparisonCitationContract: COMPARISON_CONTRACT,
+        };
+        const answer = await generateGroundedAnswer(comparisonInput);
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 4);
+        for (const index of [0, 1, 2, 3]) {
+            assert.match(provider.requests[index]?.contents ?? '', /comparisonCitationContract/i);
+            assert.match(provider.requests[index]?.contents ?? '', /entityId="subject:nuh"[^>]*evidenceIds="S1"/i);
+            assert.match(provider.requests[index]?.contents ?? '', /entityId="subject:musa"[^>]*evidenceIds="S2"/i);
+            assert.match(provider.requests[index]?.contents ?? '', /exactly 3 substantive paragraphs/i);
+            assert.match(provider.requests[index]?.contents ?? '', /entity-local paragraph.*name only/i);
+            assert.match(provider.requests[index]?.contents ?? '', /do not emit any standalone heading/i);
+        }
+        const answerDescription = (provider.requests[0]?.config.responseJsonSchema.properties as
+            | Record<string, { description?: string }>
+            | undefined)?.answer?.description;
+        assert.match(typeof answerDescription === 'string' ? answerDescription : '', /claim-local.*entity.*branch/i);
+    });
+
+    it('retries a wrong-entity comparison citation and accepts only corrected claim-local provenance', async () => {
+        const provider = new SequenceProvider([
+            '{"status":"answered","answer":"Nuh faced rejection. [S2]\\n\\nMusa confronted Pharaoh. [S1]","citationIds":["S1","S2"]}',
+            '{"status":"answered","answer":"Nuh faced rejection. [S1]\\n\\nMusa confronted Pharaoh. [S2]","citationIds":["S1","S2"]}',
+            QUALITY_PASS,
+        ]);
+        const comparisonInput = {
+            request: COMPARISON_REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+            taskPlan: COMPARISON_PLAN,
+            comparisonCitationContract: COMPARISON_CONTRACT,
+        };
+        const answer = await generateGroundedAnswer(comparisonInput);
+
+        assert.equal(answer.status, 'answered');
+        assert.equal(provider.requests.length, 3);
+        assert.equal(getGenerationDiagnostics(answer)?.generationRetryInvoked, true);
+        assert.equal(getGenerationDiagnostics(answer)?.citationValidationFailureSubtype, 'entity_provenance_violation');
+    });
+
     it('routes the Wudu regression through the generic judge without a topic-specific correction', async () => {
         const provider = new SequenceProvider([
             '{"answer":"Wudu is obligatory in a state of impurity but merely recommended when already pure. [S1]","citationIds":["S1"]}',
@@ -267,6 +342,27 @@ describe('Noor grounded generation', () => {
         assert.ok(!('topP' in (sent?.config ?? {})));
     });
 
+    it('preserves bounded provider safety and missing-output categories without response bodies', async () => {
+        const request: VertexGenerationRequest = { model: GENERATION_MODEL, contents: 'prompt', config: {
+            responseMimeType: 'application/json', responseJsonSchema: { type: 'object' }, maxOutputTokens: 800,
+        } };
+        const safetyProvider = createVertexGenerationProvider('project-id', () => ({ models: {
+            generateContent: async () => ({ candidates: [{ finishReason: 'SAFETY' }] }),
+        } }));
+        await assert.rejects(safetyProvider.generate(request), (error: unknown) => (
+            typeof error === 'object' && error !== null
+            && (error as Record<string, unknown>).providerCategory === 'safety_block'
+            && (error as Record<string, unknown>).code === 'SAFETY'
+        ));
+        const missingProvider = createVertexGenerationProvider('project-id', () => ({ models: {
+            generateContent: async () => ({ candidates: [{ finishReason: 'OTHER' }] }),
+        } }));
+        await assert.rejects(missingProvider.generate(request), (error: unknown) => (
+            typeof error === 'object' && error !== null
+            && (error as Record<string, unknown>).code === 'OTHER'
+        ));
+    });
+
     it('returns fixed no-model responses for policy refusal and missing evidence', async () => {
         const provider = new SequenceProvider([]);
         const refused = await generateGroundedAnswer({
@@ -289,6 +385,7 @@ describe('Noor grounded generation', () => {
         const provider = new SequenceProvider([
             JSON.stringify({
                 status: 'insufficient_evidence',
+                abstentionReason: 'other_evidence_gap',
                 answer: '',
                 citationIds: [],
             }),
@@ -308,10 +405,128 @@ describe('Noor grounded generation', () => {
         assert.equal(getGenerationDiagnostics(response)?.qualityJudgeInvoked, false);
     });
 
+    it('corrects exactly once when a generated abstention contradicts satisfied semantic slots', async () => {
+        const provider = new SequenceProvider([
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                abstentionReason: 'missing_relation_support',
+                answer: '',
+                citationIds: [],
+            }),
+            JSON.stringify({
+                status: 'answered',
+                abstentionReason: 'not_applicable',
+                answer: 'A grounded answer using the selected evidence. [S1]',
+                citationIds: ['S1'],
+            }),
+            QUALITY_PASS,
+        ]);
+
+        const response = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: [EVIDENCE[0]!],
+            maxEvidenceCharacters: 1000,
+            provider,
+            answerabilityContract: SUPPORTED_SEMANTIC_CONTRACT,
+        } as Parameters<typeof generateGroundedAnswer>[0]);
+
+        assert.equal(response.status, 'answered');
+        assert.equal(provider.requests.length, 3);
+        assert.equal(getGenerationDiagnostics(response)?.generationRetryInvoked, false);
+        assert.equal(getGenerationDiagnostics(response)?.correctionInvoked, true);
+        assert.equal((getGenerationDiagnostics(response) as unknown as { abstentionDisagreement?: boolean })?.abstentionDisagreement, true);
+        assert.match(provider.requests[0]?.contents ?? '', /answerabilityEvidenceContract/i);
+        assert.match(provider.requests[1]?.contents ?? '', /generation abstention.*contradicts.*evidence contract/i);
+        assert.match(provider.requests[1]?.contents ?? '', /do not abstain unless.*specific remaining evidence gap/i);
+        assert.doesNotMatch(provider.requests[1]?.contents ?? '', /you must answer/i);
+        assert.equal((provider.requests[0]?.contents.match(/<promptSourceId>S1<\/promptSourceId>/g) ?? []).length, 1);
+        assert.equal((provider.requests[1]?.contents.match(/<promptSourceId>S1<\/promptSourceId>/g) ?? []).length, 1);
+    });
+
+    it('accepts a contract-consistent generation-time abstention without correction', async () => {
+        const provider = new SequenceProvider([JSON.stringify({
+            status: 'insufficient_evidence',
+            abstentionReason: 'evidence_conflict',
+            answer: '',
+            citationIds: [],
+        })]);
+
+        const response = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+            answerabilityContract: SUPPORTED_SEMANTIC_CONTRACT,
+        } as Parameters<typeof generateGroundedAnswer>[0]);
+
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.equal(provider.requests.length, 1);
+        assert.equal(getGenerationDiagnostics(response)?.correctionInvoked, false);
+    });
+
+    it('accepts a valid remaining evidence gap identified by the bounded abstention correction', async () => {
+        const provider = new SequenceProvider([
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                abstentionReason: 'missing_subject_support',
+                answer: '',
+                citationIds: [],
+            }),
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                abstentionReason: 'other_evidence_gap',
+                answer: '',
+                citationIds: [],
+            }),
+        ]);
+
+        const response = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+            answerabilityContract: SUPPORTED_SEMANTIC_CONTRACT,
+        } as Parameters<typeof generateGroundedAnswer>[0]);
+
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.equal(provider.requests.length, 2);
+        assert.equal(getGenerationDiagnostics(response)?.correctionInvoked, true);
+    });
+
+    it('fails closed when the bounded correction repeats a contradictory abstention', async () => {
+        const provider = new SequenceProvider([
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                abstentionReason: 'missing_relation_support',
+                answer: '',
+                citationIds: [],
+            }),
+            JSON.stringify({
+                status: 'insufficient_evidence',
+                abstentionReason: 'missing_subject_support',
+                answer: '',
+                citationIds: [],
+            }),
+        ]);
+
+        const response = await generateGroundedAnswer({
+            request: REQUEST,
+            evidence: EVIDENCE,
+            maxEvidenceCharacters: 1000,
+            provider,
+            answerabilityContract: SUPPORTED_SEMANTIC_CONTRACT,
+        } as Parameters<typeof generateGroundedAnswer>[0]);
+
+        assert.equal(response.status, 'temporarily_unavailable');
+        assert.equal(provider.requests.length, 2);
+        assert.equal(getGenerationDiagnostics(response)?.finalGenerationErrorClass, 'generation_abstention_disagreement');
+    });
+
     it('canonicalizes model-written abstention wording but rejects contradictory substantive claims', async () => {
         const abstainingProvider = new SequenceProvider([
             JSON.stringify({
                 status: 'insufficient_evidence',
+                abstentionReason: 'other_evidence_gap',
                 answer: 'I could not find enough reliable tafsir evidence to answer safely.',
                 citationIds: [],
             }),
@@ -327,8 +542,8 @@ describe('Noor grounded generation', () => {
         assert.equal(abstainingProvider.requests.length, 1);
 
         const contradictoryProvider = new SequenceProvider([
-            JSON.stringify({ status: 'insufficient_evidence', answer: 'Bitcoin is performing best.', citationIds: [] }),
-            JSON.stringify({ status: 'insufficient_evidence', answer: 'Bitcoin is performing best.', citationIds: [] }),
+            JSON.stringify({ status: 'insufficient_evidence', abstentionReason: 'other_evidence_gap', answer: 'Bitcoin is performing best.', citationIds: [] }),
+            JSON.stringify({ status: 'insufficient_evidence', abstentionReason: 'other_evidence_gap', answer: 'Bitcoin is performing best.', citationIds: [] }),
         ]);
         const rejected = await generateGroundedAnswer({
             request: REQUEST,
@@ -389,10 +604,20 @@ describe('Noor grounded generation', () => {
         assert.deepEqual((provider.requests[0]?.config.responseJsonSchema as {
             required?: string[];
             properties?: { status?: { enum?: string[] } };
-        }).required, ['status', 'answer', 'citationIds']);
+        }).required, ['status', 'abstentionReason', 'answer', 'citationIds']);
         assert.deepEqual((provider.requests[0]?.config.responseJsonSchema as {
             properties?: { status?: { enum?: string[] } };
         }).properties?.status?.enum, ['answered', 'insufficient_evidence']);
+        assert.deepEqual((provider.requests[0]?.config.responseJsonSchema as {
+            properties?: { abstentionReason?: { enum?: string[] } };
+        }).properties?.abstentionReason?.enum, [
+            'not_applicable',
+            'missing_subject_support',
+            'missing_relation_support',
+            'missing_required_context',
+            'evidence_conflict',
+            'other_evidence_gap',
+        ]);
         assert.equal(schema.properties?.citationIds?.maxItems, 2);
         assert.equal(provider.requests.length, 2);
     });
