@@ -70,6 +70,8 @@ describe('Noor point-question semantic answerability', () => {
         assert.deepEqual(broadLearning.decision.unsatisfiedSemanticSlots, []);
 
         for (const question of [
+            'What color can we learn from the whole entity?',
+            'What medical procedure can we learn from the whole entity?',
             'Summarize what is forbidden in the whole entity.',
             'Summarize the narrative of the whole entity.',
             'What are the current themes of the whole entity?',

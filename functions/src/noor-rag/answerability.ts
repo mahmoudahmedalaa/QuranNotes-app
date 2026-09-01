@@ -100,6 +100,9 @@ const RELATION_CONCEPTS = new Set([
     'alternative', 'condemnation', 'definition', 'importance', 'narrative', 'obligation',
     'opposition', 'performance', 'permission', 'prohibition', 'result', 'teaching', 'value',
 ]);
+const BROAD_SUMMARY_SYNTHESIS_RELATIONS = new Set([
+    'description', 'teaching', 'lexical:learn', 'lexical:understand',
+]);
 const CURRENT_TIME_TOKENS = new Set(['current', 'currently', 'latest', 'now', 'recent', 'rn', 'today', 'yesterday']);
 const CAUSAL_TOKENS = new Set([
     'because', 'cause', 'caused', 'causes', 'consequence', 'consequently', 'due',
@@ -602,9 +605,7 @@ export function qualifyEntitySummaryAnswerableEvidence(
         && !ordinary.currentExternalStateRequired
         && !ordinary.requiredSemanticSlots.includes('normative_strength')
         && (ordinary.relationConcept === null
-            || ordinary.relationConcept === 'description'
-            || ordinary.relationConcept === 'teaching'
-            || ordinary.relationConcept.startsWith('lexical:'));
+            || BROAD_SUMMARY_SYNTHESIS_RELATIONS.has(ordinary.relationConcept));
     const relationConcept = broadSynthesisOperation
         && ordinary.relationConcept !== null
         && ordinary.relationConcept !== 'description'
