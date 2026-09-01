@@ -452,6 +452,12 @@ describe('handleNoorRequest', () => {
     it('passes the deterministic point-question semantic contract into grounded generation', async () => {
         let contract: EvidenceQualificationContract | null | undefined;
         const value = harness({
+            retrieveSemantic: async () => ({
+                evidence: EVIDENCE,
+                vectorHitCount: 1,
+                lexicalHitCount: 1,
+                lexicalSearchStatus: 'available' as const,
+            }),
             generateGroundedAnswer: async input => {
                 contract = input.answerabilityContract;
                 return ANSWERED;
@@ -516,6 +522,127 @@ describe('handleNoorRequest', () => {
             evidenceIds: ['S1'],
         }]);
         assert.match(contract?.entityProvenance[0]?.entityId ?? '', /^subject:[a-f0-9]{12}$/);
+    });
+
+    it('stops a contextual current-state requirement before generation when only static evidence is available', async () => {
+        const priorRequest: NoorRequest = {
+            mode: 'chat', requestId: REQUEST_ID, question: 'Tell me about the observatory.', history: [],
+        };
+        const priorState = createValidatedConversationState({
+            request: priorRequest as Extract<NoorRequest, { mode: 'chat' }>,
+            response: ANSWERED,
+            evidence: EVIDENCE,
+        });
+        assert.ok(priorState);
+        let generationCalls = 0;
+        const value = harness({
+            readValidatedConversationState: async () => priorState,
+            retrieveSemantic: async () => ({
+                evidence: [{
+                    ...EVIDENCE[0]!,
+                    chunk: chunk('chunk-current-context', 'The observatory performed best in the recorded account.'),
+                }],
+                vectorHitCount: 1,
+                lexicalHitCount: 1,
+                lexicalSearchStatus: 'available' as const,
+            }),
+            generateGroundedAnswer: async () => {
+                generationCalls += 1;
+                return ANSWERED;
+            },
+        });
+        const currentRequest: NoorRequest = {
+            mode: 'chat',
+            requestId: REQUEST_ID,
+            question: 'How is it doing now?',
+            history: [{ role: 'user', content: priorRequest.question }],
+        };
+
+        const response = await run(value, currentRequest);
+
+        assert.equal(response.status, 'insufficient_evidence');
+        assert.equal(generationCalls, 0);
+    });
+
+    it('carries the exact task-specific progression relation proven by contextual qualification', async () => {
+        const priorRequest: NoorRequest = {
+            mode: 'chat', requestId: REQUEST_ID, question: 'Tell me about the voyager.', history: [],
+        };
+        const priorState = createValidatedConversationState({
+            request: priorRequest as Extract<NoorRequest, { mode: 'chat' }>,
+            response: ANSWERED,
+            evidence: EVIDENCE,
+        });
+        assert.ok(priorState);
+        let contract: EvidenceQualificationContract | null | undefined;
+        const value = harness({
+            readValidatedConversationState: async () => priorState,
+            retrieveSemantic: async () => ({
+                evidence: [{
+                    ...EVIDENCE[0]!,
+                    chunk: chunk('chunk-progression', 'The voyager continued after the delay.'),
+                }],
+                vectorHitCount: 1,
+                lexicalHitCount: 1,
+                lexicalSearchStatus: 'available' as const,
+            }),
+            generateGroundedAnswer: async input => {
+                contract = input.answerabilityContract;
+                return ANSWERED;
+            },
+        });
+        for (const question of ['What happened next?', 'Go on']) {
+            contract = undefined;
+            const followUp: NoorRequest = {
+                mode: 'chat',
+                requestId: REQUEST_ID,
+                question,
+                history: [{ role: 'user', content: priorRequest.question }],
+            };
+
+            assert.equal((await run(value, followUp)).status, 'answered', question);
+            const observed = contract as EvidenceQualificationContract | null | undefined;
+            assert.equal(observed?.task, 'contextual_followup', question);
+            assert.equal(observed?.relation, 'progression', question);
+            assert.ok(observed?.requiredSemanticSlots.includes('relation_or_attribute'), question);
+            assert.ok(observed?.satisfiedSemanticSlots.includes('relation_or_attribute'), question);
+        }
+    });
+
+    it('stops explicit current-state and unsupported normative summary requirements before generation', async () => {
+        const summaryEvidence = [{
+            ...EVIDENCE[0]!,
+            chunk: {
+                ...chunk('summary-static', 'The selected passages provide a broad recorded account.'),
+                canonicalUnitId: 'summary-static-unit',
+                surah: 114,
+                verseStart: 1,
+                verseEnd: 1,
+            },
+        }] satisfies RetrievedEvidence[];
+        for (const question of [
+            'What are the current themes of Surah Al-Nas?',
+            'Summarize what is forbidden in Surah Al-Nas.',
+        ]) {
+            let generationCalls = 0;
+            const value = harness({
+                retrieveEntitySummary: async () => ({
+                    evidence: summaryEvidence,
+                    candidateCount: 1,
+                    anchorVerses: [1],
+                    coverageCapacity: { canonicalUnits: 1, sections: 1, span: 0 },
+                }),
+                generateGroundedAnswer: async () => {
+                    generationCalls += 1;
+                    return ANSWERED;
+                },
+            });
+
+            const response = await run(value, { ...REQUEST, question, history: [] });
+
+            assert.equal(response.status, 'insufficient_evidence', question);
+            assert.equal(generationCalls, 0, question);
+        }
     });
 
     it('clarifies structural follow-ups without validated prior evidence and skips retrieval and generation', async () => {
@@ -850,6 +977,7 @@ describe('handleNoorRequest', () => {
             chunk: { ...chunk('velunari-branch', 'Velunari remained in the city and led its council.'), canonicalUnitId: 'unit-velunari' },
         } satisfies RetrievedEvidence;
         let generated = false;
+        let answerabilityContract: EvidenceQualificationContract | null | undefined;
         const value = harness({
             retrieveSemantic: async input => ({
                 evidence: [/velunari/iu.test(input.query) && !/caldorin/iu.test(input.query) ? velunari : caldorin],
@@ -859,6 +987,7 @@ describe('handleNoorRequest', () => {
             }),
             generateGroundedAnswer: async input => {
                 generated = true;
+                answerabilityContract = input.answerabilityContract;
                 return {
                     requestId: input.request.requestId,
                     status: 'answered',
@@ -885,6 +1014,9 @@ describe('handleNoorRequest', () => {
 
         assert.equal(response.status, 'answered');
         assert.equal(generated, true);
+        assert.equal(answerabilityContract?.relation, 'description');
+        assert.ok(answerabilityContract?.requiredSemanticSlots.includes('comparison'));
+        assert.ok(answerabilityContract?.satisfiedSemanticSlots.includes('comparison'));
     });
 
     it('rejects distinct incidental name mentions as substantive entity-branch support', async () => {

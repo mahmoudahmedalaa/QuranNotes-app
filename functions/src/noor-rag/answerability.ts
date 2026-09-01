@@ -127,6 +127,7 @@ export type AnswerabilitySemanticSlot =
     | 'normative_strength';
 
 export interface AnswerabilitySemanticDecision {
+    relation: string | null;
     requiredSemanticSlots: readonly AnswerabilitySemanticSlot[];
     satisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[];
     unsatisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[];
@@ -147,17 +148,20 @@ export interface EvidenceEntityProvenance {
 
 export interface EvidenceQualificationContract extends AnswerabilitySemanticDecision {
     task: EvidenceQualificationTask;
-    relation: string | null;
     selectedEvidenceIds: readonly string[];
     entityProvenance: readonly EvidenceEntityProvenance[];
 }
 
 export interface BuildEvidenceQualificationContractInput {
-    query: string;
     evidence: readonly RetrievedEvidence[];
     task: EvidenceQualificationTask;
+    qualification: AnswerabilitySemanticDecision;
     entityProvenance?: readonly EvidenceEntityProvenance[];
-    establishedSlots?: readonly AnswerabilitySemanticSlot[];
+}
+
+export interface AnswerabilityQualificationResult {
+    evidence: readonly RetrievedEvidence[];
+    decision: AnswerabilitySemanticDecision;
 }
 
 interface AnswerabilitySemanticRequirements {
@@ -420,12 +424,38 @@ export function selectContextualAnswerableEvidence(
     evidence: readonly RetrievedEvidence[],
     config: NoorRuntimeConfig,
 ): RetrievedEvidence[] {
+    return [...qualifyContextualAnswerableEvidence(resolvedSubject, question, evidence, config).evidence];
+}
+
+export function qualifyContextualAnswerableEvidence(
+    resolvedSubject: readonly string[],
+    question: string,
+    evidence: readonly RetrievedEvidence[],
+    config: NoorRuntimeConfig,
+): AnswerabilityQualificationResult {
     const stateSubjectTokens = meaningfulQueryTokens(resolvedSubject.join(' '));
-    if (stateSubjectTokens.length === 0) return [];
     const interpretedQuestion = normalizeQueryInterpretation(question);
     const ordinary = semanticRequirements(interpretedQuestion);
-    const progression = /^\s*(?:and\s+then|then\s+what|what\s+happened\s+next|what\s+next|go\s+on)\b/iu.test(interpretedQuestion);
+    const progressionCue = /^\s*(?:and\s+then|then\s+what|what\s+happened\s+next|what\s+next|go\s+on)\b/iu;
+    const progression = progressionCue.test(interpretedQuestion);
     const relationConcept = progression ? 'progression' : ordinary.relationConcept ?? 'description';
+    const materialSubjectTokens = progression
+        ? meaningfulQueryTokens(interpretedQuestion.replace(progressionCue, ''))
+            .filter(token => !PROGRESSION_TOKENS.has(token))
+        : ordinary.subjectTokens;
+    const requiredSemanticSlots: AnswerabilitySemanticSlot[] = ['subject', 'entity', 'relation_or_attribute'];
+    if (ordinary.requiredSemanticSlots.includes('normative_strength')) requiredSemanticSlots.push('normative_strength');
+    if (ordinary.currentExternalStateRequired) requiredSemanticSlots.push('temporal_or_current_requirement');
+    const emptyDecision = (satisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[]): AnswerabilitySemanticDecision => ({
+        relation: relationConcept,
+        requiredSemanticSlots,
+        satisfiedSemanticSlots,
+        unsatisfiedSemanticSlots: requiredSemanticSlots.filter(slot => !satisfiedSemanticSlots.includes(slot)),
+        currentExternalStateRequired: ordinary.currentExternalStateRequired,
+    });
+    if (stateSubjectTokens.length === 0 || ordinary.currentExternalStateRequired) {
+        return { evidence: [], decision: emptyDecision([]) };
+    }
     const stateRequirements: AnswerabilitySemanticRequirements = {
         subjectTokens: stateSubjectTokens,
         relationConcept: 'description',
@@ -437,8 +467,8 @@ export function selectContextualAnswerableEvidence(
         return semanticSegments(item.chunk.retrievalText).some(segment => {
             const tokens = evidenceTokens(segment);
             const resolvedSubjectSupported = subjectSupported(stateRequirements, tokens);
-            const materialSubjectSupported = ordinary.subjectTokens.length === 0
-                || subjectSupported({ ...ordinary, subjectTokens: ordinary.subjectTokens }, tokens);
+            const materialSubjectSupported = materialSubjectTokens.length === 0
+                || subjectSupported({ ...ordinary, subjectTokens: materialSubjectTokens }, tokens);
             if (!resolvedSubjectSupported
                 || !materialSubjectSupported
                 || !contextualRelationSupported(relationConcept, segment, tokens)) return false;
@@ -446,34 +476,24 @@ export function selectContextualAnswerableEvidence(
                 || contextualCausalSupportPresent(relationConcept, segment, tokens);
         });
     });
-    return directlySupported.filter(item => item.kind !== 'semantic'
+    const selected = directlySupported.filter(item => item.kind !== 'semantic'
         || item.similarity >= (config.sourceThresholds[item.chunk.source] ?? 1));
+    return {
+        evidence: selected,
+        decision: emptyDecision(selected.length > 0 ? requiredSemanticSlots : []),
+    };
 }
 
 export function describeAnswerabilitySemantics(
     query: string,
     evidence: readonly RetrievedEvidence[],
 ): AnswerabilitySemanticDecision {
-    const requirements = semanticRequirements(query);
-    let satisfied = new Set<AnswerabilitySemanticSlot>();
-    for (const item of evidence) {
-        const candidate = satisfiedSemanticSlots(requirements, item);
-        if (candidate.size > satisfied.size) satisfied = candidate;
-    }
-    const satisfiedSemanticSlotList = requirements.requiredSemanticSlots.filter(slot => satisfied.has(slot));
-    return {
-        requiredSemanticSlots: requirements.requiredSemanticSlots,
-        satisfiedSemanticSlots: satisfiedSemanticSlotList,
-        unsatisfiedSemanticSlots: requirements.requiredSemanticSlots.filter(slot => !satisfied.has(slot)),
-        currentExternalStateRequired: requirements.currentExternalStateRequired,
-    };
+    return decisionForRequirements(semanticRequirements(query), evidence);
 }
 
 export function buildEvidenceQualificationContract(
     input: BuildEvidenceQualificationContractInput,
 ): EvidenceQualificationContract {
-    const requirements = semanticRequirements(input.query);
-    const described = describeAnswerabilitySemantics(input.query, input.evidence);
     const selectedEvidenceIds = input.evidence.map(item => item.promptSourceId);
     const selected = new Set(selectedEvidenceIds);
     const entityProvenance = (input.entityProvenance ?? []).map(entity => ({
@@ -481,19 +501,13 @@ export function buildEvidenceQualificationContract(
         ...(entity.label === undefined ? {} : { label: entity.label }),
         evidenceIds: [...new Set(entity.evidenceIds.filter(id => selected.has(id)))],
     })).filter(entity => entity.evidenceIds.length > 0);
-    const requiredSemanticSlots = input.establishedSlots === undefined
-        ? described.requiredSemanticSlots
-        : [...input.establishedSlots];
-    const satisfiedSemanticSlots = input.establishedSlots === undefined
-        ? described.satisfiedSemanticSlots
-        : [...input.establishedSlots];
     return {
         task: input.task,
-        relation: requirements.relationConcept,
-        requiredSemanticSlots,
-        satisfiedSemanticSlots,
-        unsatisfiedSemanticSlots: requiredSemanticSlots.filter(slot => !satisfiedSemanticSlots.includes(slot)),
-        currentExternalStateRequired: described.currentExternalStateRequired,
+        relation: input.qualification.relation,
+        requiredSemanticSlots: [...input.qualification.requiredSemanticSlots],
+        satisfiedSemanticSlots: [...input.qualification.satisfiedSemanticSlots],
+        unsatisfiedSemanticSlots: [...input.qualification.unsatisfiedSemanticSlots],
+        currentExternalStateRequired: input.qualification.currentExternalStateRequired,
         selectedEvidenceIds,
         entityProvenance,
     };
@@ -531,12 +545,18 @@ function comparisonSemanticRequirements(entityLabel: string, question: string): 
         .find(concept => RELATION_CONCEPTS.has(concept) && concept !== 'narrative');
     const relationConcept = explicitRelation ?? 'description';
     const subjectTokens = meaningfulQueryTokens(entityLabel);
+    const requiresCurrentExternalState = currentExternalStateRequired(interpretedQuestion, queryTokens, relationConcept);
+    const requiredSemanticSlots: AnswerabilitySemanticSlot[] = ['subject', 'relation_or_attribute'];
+    if (['obligation', 'permission', 'prohibition'].includes(relationConcept)) {
+        requiredSemanticSlots.push('normative_strength');
+    }
+    if (requiresCurrentExternalState) requiredSemanticSlots.push('temporal_or_current_requirement');
     return {
         subjectTokens,
         relationConcept,
         causalSupportRequired: /(?:^|\s)why\b|\b(?:cause|caused|causes|reason|reasons)\b/iu.test(interpretedQuestion.toLocaleLowerCase()),
-        currentExternalStateRequired: false,
-        requiredSemanticSlots: ['subject', 'relation_or_attribute'],
+        currentExternalStateRequired: requiresCurrentExternalState,
+        requiredSemanticSlots,
     };
 }
 
@@ -546,17 +566,87 @@ export function selectComparisonAnswerableEvidence(
     evidence: readonly RetrievedEvidence[],
     config: NoorRuntimeConfig,
 ): RetrievedEvidence[] {
+    return [...qualifyComparisonAnswerableEvidence(entityLabel, question, evidence, config).evidence];
+}
+
+export function qualifyComparisonAnswerableEvidence(
+    entityLabel: string,
+    question: string,
+    evidence: readonly RetrievedEvidence[],
+    config: NoorRuntimeConfig,
+): AnswerabilityQualificationResult {
     const requirements = comparisonSemanticRequirements(entityLabel, question);
     const directlySupported = evidence.filter(item => hasDirectQuestionSupport(requirements, item));
-    if (directlySupported.length === 0) return [];
+    if (directlySupported.length === 0) {
+        return { evidence: [], decision: decisionForRequirements(requirements, evidence) };
+    }
     const directIds = new Set(directlySupported.map(item => item.chunk.chunkId));
-    return evidence.filter(item => {
+    const selected = evidence.filter(item => {
         if (directIds.has(item.chunk.chunkId)) return true;
         if (item.kind !== 'semantic') return false;
         const threshold = config.sourceThresholds[item.chunk.source] ?? 1;
         return item.similarity >= threshold
             && directlySupported.some(direct => verseRangesOverlap(direct, item));
     });
+    return { evidence: selected, decision: decisionForRequirements(requirements, selected) };
+}
+
+export function qualifyEntitySummaryAnswerableEvidence(
+    question: string,
+    entity: QuranSurahEntity,
+    evidence: readonly RetrievedEvidence[],
+    capacity?: Readonly<{ canonicalUnits: number; sections: number; span: number }>,
+): AnswerabilityQualificationResult {
+    const ordinary = semanticRequirements(question);
+    const relationConcept = ordinary.relationConcept ?? 'description';
+    const requiredSemanticSlots: AnswerabilitySemanticSlot[] = ['entity', 'relation_or_attribute'];
+    if (ordinary.requiredSemanticSlots.includes('normative_strength')) requiredSemanticSlots.push('normative_strength');
+    if (ordinary.currentExternalStateRequired) requiredSemanticSlots.push('temporal_or_current_requirement');
+
+    const coverageSatisfied = isEntitySummaryEvidenceSufficient(entity, evidence, capacity);
+    const relationSatisfied = coverageSatisfied && (relationConcept === 'description'
+        || evidence.some(item => semanticSegments(item.chunk.retrievalText).some(segment => {
+            const tokens = evidenceTokens(segment);
+            return contextualRelationSupported(relationConcept, segment, tokens)
+                && (!ordinary.causalSupportRequired
+                    || contextualCausalSupportPresent(relationConcept, segment, tokens));
+        })));
+    const satisfiedSemanticSlots: AnswerabilitySemanticSlot[] = [];
+    if (coverageSatisfied) satisfiedSemanticSlots.push('entity');
+    if (relationSatisfied) {
+        satisfiedSemanticSlots.push('relation_or_attribute');
+        if (requiredSemanticSlots.includes('normative_strength')) satisfiedSemanticSlots.push('normative_strength');
+    }
+    const decision: AnswerabilitySemanticDecision = {
+        relation: relationConcept,
+        requiredSemanticSlots,
+        satisfiedSemanticSlots,
+        unsatisfiedSemanticSlots: requiredSemanticSlots.filter(slot => !satisfiedSemanticSlots.includes(slot)),
+        currentExternalStateRequired: ordinary.currentExternalStateRequired,
+    };
+    return {
+        evidence: decision.unsatisfiedSemanticSlots.length === 0 ? evidence : [],
+        decision,
+    };
+}
+
+function decisionForRequirements(
+    requirements: AnswerabilitySemanticRequirements,
+    evidence: readonly RetrievedEvidence[],
+): AnswerabilitySemanticDecision {
+    let satisfied = new Set<AnswerabilitySemanticSlot>();
+    for (const item of evidence) {
+        const candidate = satisfiedSemanticSlots(requirements, item);
+        if (candidate.size > satisfied.size) satisfied = candidate;
+    }
+    const satisfiedSemanticSlotList = requirements.requiredSemanticSlots.filter(slot => satisfied.has(slot));
+    return {
+        relation: requirements.relationConcept,
+        requiredSemanticSlots: requirements.requiredSemanticSlots,
+        satisfiedSemanticSlots: satisfiedSemanticSlotList,
+        unsatisfiedSemanticSlots: requirements.requiredSemanticSlots.filter(slot => !satisfied.has(slot)),
+        currentExternalStateRequired: requirements.currentExternalStateRequired,
+    };
 }
 
 export function isEntitySummaryEvidenceSufficient(

@@ -11,10 +11,11 @@ import {
 import {
     buildEvidenceQualificationContract,
     describeAnswerabilitySemantics,
-    isEntitySummaryEvidenceSufficient,
+    qualifyComparisonAnswerableEvidence,
+    qualifyContextualAnswerableEvidence,
+    qualifyEntitySummaryAnswerableEvidence,
     selectAnswerableEvidence,
-    selectComparisonAnswerableEvidence,
-    selectContextualAnswerableEvidence,
+    type AnswerabilitySemanticDecision,
     type AnswerabilitySemanticSlot,
     type EvidenceEntityProvenance,
     type EvidenceQualificationContract,
@@ -451,13 +452,9 @@ function buildRequestEvidenceQualificationContract(
     evidence: readonly RetrievedEvidence[],
     comparisonCitationContract: ComparisonCitationContract | null,
     validatedConversationState: ValidatedConversationState | null,
+    qualification: AnswerabilitySemanticDecision | null,
 ): EvidenceQualificationContract | null {
-    if (request.mode !== 'chat') return null;
-    const qualificationQuery = plan.taskType === 'contextual_followup'
-        ? [...plan.variants].reverse().find(variant => variant.kind === 'context_enriched')?.query
-            ?? plan.variants[0]?.query
-            ?? request.question
-        : request.question;
+    if (request.mode !== 'chat' || qualification === null) return null;
     const selectedEvidenceIds = evidence.map(item => item.promptSourceId);
     const parsedState = validatedConversationState === null
         ? null
@@ -484,27 +481,43 @@ function buildRequestEvidenceQualificationContract(
             label: entity.label,
             evidenceIds: entity.evidenceIds,
         }));
-    let establishedSlots: AnswerabilitySemanticSlot[] | undefined;
-    if (plan.retrievalTask === 'multi_entity_comparison') {
-        const described = describeAnswerabilitySemantics(qualificationQuery, evidence);
-        establishedSlots = ['subject', 'entity', 'relation_or_attribute', 'comparison'];
-        if (described.requiredSemanticSlots.includes('normative_strength')) {
-            establishedSlots.push('normative_strength');
-        }
-    } else if (plan.retrievalTask === 'entity_summary') {
-        establishedSlots = ['entity', 'relation_or_attribute'];
-    } else if (plan.taskType === 'contextual_followup') {
-        const described = describeAnswerabilitySemantics(qualificationQuery, evidence);
-        establishedSlots = [...described.requiredSemanticSlots];
-        if (entityProvenance.length > 0 && !establishedSlots.includes('entity')) establishedSlots.push('entity');
-    }
     return buildEvidenceQualificationContract({
-        query: qualificationQuery,
         evidence,
         task: plan.taskType,
+        qualification,
         entityProvenance,
-        establishedSlots,
     });
+}
+
+function combineComparisonQualification(
+    decisions: readonly AnswerabilitySemanticDecision[],
+    balanced: boolean,
+): AnswerabilitySemanticDecision | null {
+    if (decisions.length === 0) return null;
+    const relation = decisions.every(decision => decision.relation === decisions[0]!.relation)
+        ? decisions[0]!.relation
+        : null;
+    const requiredSemanticSlots = [...new Set<AnswerabilitySemanticSlot>([
+        'subject',
+        'entity',
+        'relation_or_attribute',
+        'comparison',
+        ...decisions.flatMap(decision => decision.requiredSemanticSlots),
+    ])];
+    const satisfiedSemanticSlots = balanced
+        ? requiredSemanticSlots.filter(slot => (
+            slot === 'entity'
+            || slot === 'comparison'
+            || decisions.every(decision => decision.satisfiedSemanticSlots.includes(slot))
+        ))
+        : [];
+    return {
+        relation,
+        requiredSemanticSlots,
+        satisfiedSemanticSlots,
+        unsatisfiedSemanticSlots: requiredSemanticSlots.filter(slot => !satisfiedSemanticSlots.includes(slot)),
+        currentExternalStateRequired: decisions.some(decision => decision.currentExternalStateRequired),
+    };
 }
 
 function hasDistinctEntityBranchSupport(
@@ -615,6 +628,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
     let lexicalHitCount = 0;
     let lexicalSearchStatus: NoorSanitizedTrace['lexicalSearchStatus'] = 'not_configured';
     let evidence: readonly RetrievedEvidence[] = [];
+    let answerabilityQualification: AnswerabilitySemanticDecision | null = null;
     let multiEntitySupportGroups: readonly (readonly RetrievedEvidence[])[] = [];
     let preAnswerabilityEvidence: readonly RetrievedEvidence[] = [];
     let answerabilityReason: NoorSanitizedTrace['answerabilityReason'] = 'not_run';
@@ -920,13 +934,14 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                         request, config, entity: queryPlan.entity,
                     });
                     preAnswerabilityEvidence = [...summary.evidence];
-                    evidence = isEntitySummaryEvidenceSufficient(
+                    const qualifiedSummary = qualifyEntitySummaryAnswerableEvidence(
+                        request.question,
                         queryPlan.entity,
                         summary.evidence,
                         summary.coverageCapacity,
-                    )
-                        ? [...summary.evidence]
-                        : [];
+                    );
+                    evidence = [...qualifiedSummary.evidence];
+                    answerabilityQualification = qualifiedSummary.decision;
                     answerabilityReason = evidence.length > 0 ? 'sufficient' : 'adaptive_coverage_insufficient';
                 } else {
                     const results = await Promise.all(queryPlan.variants.map(variant => dependencies.retrieveSemantic({
@@ -950,25 +965,31 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                         && validatedConversationState !== null
                         ? parseValidatedConversationState(validatedConversationState)
                         : null;
+                    let comparisonBranchDecisions: AnswerabilitySemanticDecision[] = [];
                     const answerableGroups = queryPlan.retrievalTask === 'multi_entity_comparison'
                         ? normalized.map((value, index) => {
                             const branchEntity = queryPlan.entitySet[index];
-                            return branchEntity
-                                ? selectComparisonAnswerableEvidence(
-                                    branchEntity.label,
-                                    request.question,
-                                    value.evidence,
-                                    config,
-                                )
-                                : [];
-                        })
-                        : answerabilityGateActive && contextualState !== null
-                            ? normalized.map(value => selectContextualAnswerableEvidence(
-                                contextualState.semanticSubject,
+                            if (!branchEntity) return [];
+                            const qualified = qualifyComparisonAnswerableEvidence(
+                                branchEntity.label,
                                 request.question,
                                 value.evidence,
                                 config,
-                            ))
+                            );
+                            comparisonBranchDecisions.push(qualified.decision);
+                            return qualified.evidence;
+                        })
+                        : answerabilityGateActive && contextualState !== null
+                            ? normalized.map(value => {
+                                const qualified = qualifyContextualAnswerableEvidence(
+                                    contextualState.semanticSubject,
+                                    request.question,
+                                    value.evidence,
+                                    config,
+                                );
+                                answerabilityQualification = qualified.decision;
+                                return qualified.evidence;
+                            })
                             : answerabilityGateActive
                             ? filterAnswerableEvidence(queryPlan.variants, normalized, config)
                             : normalized.map(value => value.evidence);
@@ -976,12 +997,36 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                     if (queryPlan.retrievalTask === 'multi_entity_comparison') {
                         multiEntitySupportGroups = answerableGroups;
                         const supportedEntityCount = answerableGroups.filter(group => group.length > 0).length;
-                        if (supportedEntityCount !== queryPlan.entitySet.length
-                            || !hasDistinctEntityBranchSupport(queryPlan.entitySet, evidence, answerableGroups)) {
+                        const balanced = supportedEntityCount === queryPlan.entitySet.length
+                            && hasDistinctEntityBranchSupport(queryPlan.entitySet, evidence, answerableGroups);
+                        if (!balanced) {
                             evidence = [];
+                        } else {
+                            const finalKeys = new Set(evidence.map(evidenceKey));
+                            comparisonBranchDecisions = answerableGroups.map((group, index) => {
+                                const entity = queryPlan.entitySet[index]!;
+                                return qualifyComparisonAnswerableEvidence(
+                                    entity.label,
+                                    request.question,
+                                    group.filter(item => finalKeys.has(evidenceKey(item))),
+                                    config,
+                                ).decision;
+                            });
                         }
+                        answerabilityQualification = combineComparisonQualification(comparisonBranchDecisions, balanced);
                         answerabilityReason = evidence.length > 0 ? 'balanced_multi_entity' : 'insufficient';
                     } else {
+                        if (answerabilityGateActive && contextualState !== null && evidence.length > 0) {
+                            answerabilityQualification = qualifyContextualAnswerableEvidence(
+                                contextualState.semanticSubject,
+                                request.question,
+                                evidence,
+                                config,
+                            ).decision;
+                        } else if (answerabilityGateActive && evidence.length > 0) {
+                            const qualificationQuery = queryPlan.variants[0]?.query ?? request.question;
+                            answerabilityQualification = describeAnswerabilitySemantics(qualificationQuery, evidence);
+                        }
                         answerabilityReason = entityScopeFiltered
                             ? 'entity_scope_filtered'
                             : evidence.length > 0 ? 'sufficient' : 'insufficient';
@@ -1010,16 +1055,29 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
                                     .find(variant => variant.kind === 'context_enriched')?.query
                                     ?? queryPlan.variants[0]?.query
                                     ?? request.question;
-                                const recoveryEvidence = contextualState === null
-                                    ? selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config)
-                                    : selectContextualAnswerableEvidence(
+                                const recoveryQualification = contextualState === null
+                                    ? null
+                                    : qualifyContextualAnswerableEvidence(
                                         contextualState.semanticSubject,
                                         request.question,
                                         recovery.evidence,
                                         config,
                                     );
+                                const recoveryEvidence = recoveryQualification === null
+                                    ? selectAnswerableEvidence(recoveryAnswerabilityQuery, recovery.evidence, config)
+                                    : recoveryQualification.evidence;
                                 evidence = mergeEvidence([...answerableGroups, recoveryEvidence], config);
-                                if (evidence.length > 0) answerabilityReason = 'sufficient';
+                                if (evidence.length > 0) {
+                                    answerabilityQualification = contextualState === null
+                                        ? describeAnswerabilitySemantics(recoveryAnswerabilityQuery, evidence)
+                                        : qualifyContextualAnswerableEvidence(
+                                            contextualState.semanticSubject,
+                                            request.question,
+                                            evidence,
+                                            config,
+                                        ).decision;
+                                    answerabilityReason = 'sufficient';
+                                }
                             } catch {
                                 // Initial retrieval succeeded. Optional recovery failure preserves the safe abstention.
                             }
@@ -1037,7 +1095,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             retrievalMs = duration(retrievalStartedAt, safeNow(dependencies));
         }
         retrievedChunkIds = evidence.map(item => item.chunk.chunkId);
-        if (evidence.length === 0) {
+        if (evidence.length === 0 || (answerabilityQualification?.unsatisfiedSemanticSlots.length ?? 0) > 0) {
             const response = nonQuotaAnswer(request.requestId, 'insufficient_evidence', INSUFFICIENT_EVIDENCE);
             await dependencies.finalizeNonAnswer(finalizationInput(response));
             return finish(response, 'insufficient_evidence');
@@ -1057,6 +1115,7 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
             evidence,
             comparisonCitationContract,
             validatedConversationState,
+            answerabilityQualification,
         );
         let generated: unknown;
         const generationStartedAt = safeNow(dependencies);

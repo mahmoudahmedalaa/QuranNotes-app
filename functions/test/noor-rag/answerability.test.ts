@@ -471,6 +471,36 @@ describe('Noor point-question semantic answerability', () => {
         );
     });
 
+    it('rejects contextual and comparison current-state requests against static recorded evidence', () => {
+        const contextual = evidence(
+            'contextual-current-state',
+            'The observatory performed best in the recorded account.',
+        );
+        assert.deepEqual(
+            selectContextualAnswerableEvidence(
+                ['observatory'],
+                'How is it doing now?',
+                [contextual],
+                CONFIG,
+            ),
+            [],
+        );
+
+        const comparison = evidence(
+            'comparison-current-state',
+            'Caldorin performed best today in the recorded account.',
+        );
+        assert.deepEqual(
+            selectComparisonAnswerableEvidence(
+                'Caldorin',
+                'Which is performing best today, Caldorin or Velunari?',
+                [comparison],
+                CONFIG,
+            ),
+            [],
+        );
+    });
+
     it('does not mistake ordinary historical sequencing for current external state', () => {
         const historical = evidence('historical', 'After Yusuf was imprisoned, he interpreted the dreams of two men.');
         const query = 'What happened after Yusuf was imprisoned?';
