@@ -54,10 +54,14 @@ const QUALITY_FAIL = JSON.stringify({
     citationConsistent: true,
 });
 const SUPPORTED_SEMANTIC_CONTRACT = {
+    task: 'point_question',
+    relation: 'description',
     requiredSemanticSlots: ['subject', 'relation_or_attribute'],
     satisfiedSemanticSlots: ['subject', 'relation_or_attribute'],
     unsatisfiedSemanticSlots: [],
     currentExternalStateRequired: false,
+    selectedEvidenceIds: ['S1', 'S2'],
+    entityProvenance: [],
 } as const;
 
 const COMPARISON_REQUEST: NoorRequest = {
@@ -435,7 +439,7 @@ describe('Noor grounded generation', () => {
         assert.equal(getGenerationDiagnostics(response)?.generationRetryInvoked, false);
         assert.equal(getGenerationDiagnostics(response)?.correctionInvoked, true);
         assert.equal((getGenerationDiagnostics(response) as unknown as { abstentionDisagreement?: boolean })?.abstentionDisagreement, true);
-        assert.match(provider.requests[0]?.contents ?? '', /answerabilityEvidenceContract/i);
+        assert.match(provider.requests[0]?.contents ?? '', /evidenceQualificationContract/i);
         assert.match(provider.requests[1]?.contents ?? '', /generation abstention.*contradicts.*evidence contract/i);
         assert.match(provider.requests[1]?.contents ?? '', /do not abstain unless.*specific remaining evidence gap/i);
         assert.doesNotMatch(provider.requests[1]?.contents ?? '', /you must answer/i);
@@ -519,7 +523,7 @@ describe('Noor grounded generation', () => {
 
         assert.equal(response.status, 'temporarily_unavailable');
         assert.equal(provider.requests.length, 2);
-        assert.equal(getGenerationDiagnostics(response)?.finalGenerationErrorClass, 'generation_abstention_disagreement');
+        assert.equal(getGenerationDiagnostics(response)?.finalGenerationErrorClass, 'generation_contract_disagreement');
     });
 
     it('canonicalizes model-written abstention wording but rejects contradictory substantive claims', async () => {

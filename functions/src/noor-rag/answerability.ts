@@ -120,14 +120,44 @@ const LATIN_TOKEN = /^[a-z'-]+$/;
 
 export type AnswerabilitySemanticSlot =
     | 'subject'
+    | 'entity'
     | 'relation_or_attribute'
-    | 'temporal_or_current_requirement';
+    | 'temporal_or_current_requirement'
+    | 'comparison'
+    | 'normative_strength';
 
 export interface AnswerabilitySemanticDecision {
     requiredSemanticSlots: readonly AnswerabilitySemanticSlot[];
     satisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[];
     unsatisfiedSemanticSlots: readonly AnswerabilitySemanticSlot[];
     currentExternalStateRequired: boolean;
+}
+
+export type EvidenceQualificationTask =
+    | 'point_question'
+    | 'contextual_followup'
+    | 'multi_entity_comparison'
+    | 'entity_summary';
+
+export interface EvidenceEntityProvenance {
+    entityId: string;
+    label?: string;
+    evidenceIds: readonly string[];
+}
+
+export interface EvidenceQualificationContract extends AnswerabilitySemanticDecision {
+    task: EvidenceQualificationTask;
+    relation: string | null;
+    selectedEvidenceIds: readonly string[];
+    entityProvenance: readonly EvidenceEntityProvenance[];
+}
+
+export interface BuildEvidenceQualificationContractInput {
+    query: string;
+    evidence: readonly RetrievedEvidence[];
+    task: EvidenceQualificationTask;
+    entityProvenance?: readonly EvidenceEntityProvenance[];
+    establishedSlots?: readonly AnswerabilitySemanticSlot[];
 }
 
 interface AnswerabilitySemanticRequirements {
@@ -265,6 +295,9 @@ function semanticRequirements(query: string): AnswerabilitySemanticRequirements 
         && relationConcept !== `lexical:${token}`
     ));
     const requiredSemanticSlots: AnswerabilitySemanticSlot[] = ['subject', 'relation_or_attribute'];
+    if (relationConcept !== null && ['obligation', 'permission', 'prohibition'].includes(relationConcept)) {
+        requiredSemanticSlots.push('normative_strength');
+    }
     if (requiresCurrentExternalState) requiredSemanticSlots.push('temporal_or_current_requirement');
     return {
         subjectTokens,
@@ -322,6 +355,9 @@ function satisfiedSemanticSlots(
         }
         if (relationSupported && (!requirements.causalSupportRequired || causalSupportPresent(segment, segmentTokens))) {
             satisfied.add('relation_or_attribute');
+            if (requirements.requiredSemanticSlots.includes('normative_strength')) {
+                satisfied.add('normative_strength');
+            }
         }
         if (satisfied.size > best.size) best = satisfied;
     }
@@ -430,6 +466,36 @@ export function describeAnswerabilitySemantics(
         satisfiedSemanticSlots: satisfiedSemanticSlotList,
         unsatisfiedSemanticSlots: requirements.requiredSemanticSlots.filter(slot => !satisfied.has(slot)),
         currentExternalStateRequired: requirements.currentExternalStateRequired,
+    };
+}
+
+export function buildEvidenceQualificationContract(
+    input: BuildEvidenceQualificationContractInput,
+): EvidenceQualificationContract {
+    const requirements = semanticRequirements(input.query);
+    const described = describeAnswerabilitySemantics(input.query, input.evidence);
+    const selectedEvidenceIds = input.evidence.map(item => item.promptSourceId);
+    const selected = new Set(selectedEvidenceIds);
+    const entityProvenance = (input.entityProvenance ?? []).map(entity => ({
+        entityId: entity.entityId,
+        ...(entity.label === undefined ? {} : { label: entity.label }),
+        evidenceIds: [...new Set(entity.evidenceIds.filter(id => selected.has(id)))],
+    })).filter(entity => entity.evidenceIds.length > 0);
+    const requiredSemanticSlots = input.establishedSlots === undefined
+        ? described.requiredSemanticSlots
+        : [...input.establishedSlots];
+    const satisfiedSemanticSlots = input.establishedSlots === undefined
+        ? described.satisfiedSemanticSlots
+        : [...input.establishedSlots];
+    return {
+        task: input.task,
+        relation: requirements.relationConcept,
+        requiredSemanticSlots,
+        satisfiedSemanticSlots,
+        unsatisfiedSemanticSlots: requiredSemanticSlots.filter(slot => !satisfiedSemanticSlots.includes(slot)),
+        currentExternalStateRequired: described.currentExternalStateRequired,
+        selectedEvidenceIds,
+        entityProvenance,
     };
 }
 

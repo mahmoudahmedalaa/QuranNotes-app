@@ -9,12 +9,15 @@ import {
     type NoorGenerationErrorClass,
 } from './generation';
 import {
+    buildEvidenceQualificationContract,
     describeAnswerabilitySemantics,
     isEntitySummaryEvidenceSufficient,
     selectAnswerableEvidence,
     selectComparisonAnswerableEvidence,
     selectContextualAnswerableEvidence,
-    type AnswerabilitySemanticDecision,
+    type AnswerabilitySemanticSlot,
+    type EvidenceEntityProvenance,
+    type EvidenceQualificationContract,
 } from './answerability';
 import type { NoorPolicyCategory } from './policy';
 import type {
@@ -234,7 +237,7 @@ export interface NoorHandlerDependencies {
         config: NoorRuntimeConfig;
         taskPlan: ChatQueryPlan;
         comparisonCitationContract: ComparisonCitationContract | null;
-        answerabilityContract: AnswerabilitySemanticDecision | null;
+        answerabilityContract: EvidenceQualificationContract | null;
     }>): Promise<unknown>;
     finalizeAnswered(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
     finalizeNonAnswer(input: NoorHandlerFinalizeInput): Promise<FinalizeResult>;
@@ -440,6 +443,68 @@ function buildComparisonCitationContract(
         entities,
         allowedEvidenceIds: evidence.map(item => item.promptSourceId).filter(id => supportedIds.has(id)),
     };
+}
+
+function buildRequestEvidenceQualificationContract(
+    request: NoorRequest,
+    plan: ChatQueryPlan,
+    evidence: readonly RetrievedEvidence[],
+    comparisonCitationContract: ComparisonCitationContract | null,
+    validatedConversationState: ValidatedConversationState | null,
+): EvidenceQualificationContract | null {
+    if (request.mode !== 'chat') return null;
+    const qualificationQuery = plan.taskType === 'contextual_followup'
+        ? [...plan.variants].reverse().find(variant => variant.kind === 'context_enriched')?.query
+            ?? plan.variants[0]?.query
+            ?? request.question
+        : request.question;
+    const selectedEvidenceIds = evidence.map(item => item.promptSourceId);
+    const parsedState = validatedConversationState === null
+        ? null
+        : parseValidatedConversationState(validatedConversationState);
+    const contextualSubject = plan.taskType === 'contextual_followup'
+        ? parsedState?.semanticSubject.join(' ').trim() ?? ''
+        : '';
+    const entityProvenance: EvidenceEntityProvenance[] = comparisonCitationContract === null
+        ? plan.entitySet.length === 1
+            ? [{
+                entityId: plan.entitySet[0]!.id,
+                label: plan.entitySet[0]!.label,
+                evidenceIds: selectedEvidenceIds,
+            }]
+            : contextualSubject.length > 0
+                ? [{
+                    entityId: `subject:${createHash('sha256').update(contextualSubject).digest('hex').slice(0, 12)}`,
+                    label: contextualSubject,
+                    evidenceIds: selectedEvidenceIds,
+                }]
+                : []
+        : comparisonCitationContract.entities.map(entity => ({
+            entityId: entity.id,
+            label: entity.label,
+            evidenceIds: entity.evidenceIds,
+        }));
+    let establishedSlots: AnswerabilitySemanticSlot[] | undefined;
+    if (plan.retrievalTask === 'multi_entity_comparison') {
+        const described = describeAnswerabilitySemantics(qualificationQuery, evidence);
+        establishedSlots = ['subject', 'entity', 'relation_or_attribute', 'comparison'];
+        if (described.requiredSemanticSlots.includes('normative_strength')) {
+            establishedSlots.push('normative_strength');
+        }
+    } else if (plan.retrievalTask === 'entity_summary') {
+        establishedSlots = ['entity', 'relation_or_attribute'];
+    } else if (plan.taskType === 'contextual_followup') {
+        const described = describeAnswerabilitySemantics(qualificationQuery, evidence);
+        establishedSlots = [...described.requiredSemanticSlots];
+        if (entityProvenance.length > 0 && !establishedSlots.includes('entity')) establishedSlots.push('entity');
+    }
+    return buildEvidenceQualificationContract({
+        query: qualificationQuery,
+        evidence,
+        task: plan.taskType,
+        entityProvenance,
+        establishedSlots,
+    });
 }
 
 function hasDistinctEntityBranchSupport(
@@ -986,11 +1051,13 @@ export async function handleNoorRequest(input: HandleNoorRequestInput): Promise<
         if (queryPlan.retrievalTask === 'multi_entity_comparison' && comparisonCitationContract === null) {
             throw new HandlerFailure('citation_validation_failure');
         }
-        const answerabilityContract = request.mode === 'chat'
-            && queryPlan.taskType === 'point_question'
-            && queryPlan.retrievalTask === 'point_question'
-            ? describeAnswerabilitySemantics(request.question, evidence)
-            : null;
+        const answerabilityContract = buildRequestEvidenceQualificationContract(
+            request,
+            queryPlan,
+            evidence,
+            comparisonCitationContract,
+            validatedConversationState,
+        );
         let generated: unknown;
         const generationStartedAt = safeNow(dependencies);
         try {

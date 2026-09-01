@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { AnswerabilitySemanticDecision } from '../../src/noor-rag/answerability';
+import type { EvidenceQualificationContract } from '../../src/noor-rag/answerability';
 import { NoorEntitlementUnavailableError } from '../../src/noor-rag/entitlement';
 import { generateGroundedAnswer, type GenerationProvider } from '../../src/noor-rag/generation';
 import {
@@ -450,7 +450,7 @@ describe('handleNoorRequest', () => {
     });
 
     it('passes the deterministic point-question semantic contract into grounded generation', async () => {
-        let contract: AnswerabilitySemanticDecision | null | undefined;
+        let contract: EvidenceQualificationContract | null | undefined;
         const value = harness({
             generateGroundedAnswer: async input => {
                 contract = input.answerabilityContract;
@@ -460,11 +460,62 @@ describe('handleNoorRequest', () => {
 
         assert.equal((await run(value)).status, 'answered');
         assert.deepEqual(contract, {
+            task: 'point_question',
+            relation: 'description',
             requiredSemanticSlots: ['subject', 'relation_or_attribute'],
             satisfiedSemanticSlots: ['subject', 'relation_or_attribute'],
             unsatisfiedSemanticSlots: [],
             currentExternalStateRequired: false,
+            selectedEvidenceIds: ['S1'],
+            entityProvenance: [],
         });
+    });
+
+    it('passes contextual qualification and validated subject provenance into grounded generation', async () => {
+        const priorRequest: NoorRequest = {
+            mode: 'chat', requestId: REQUEST_ID, question: 'What is Caldorin?', history: [],
+        };
+        const priorState = createValidatedConversationState({
+            request: priorRequest as Extract<NoorRequest, { mode: 'chat' }>,
+            response: ANSWERED,
+            evidence: EVIDENCE,
+        });
+        assert.ok(priorState);
+        const contextualEvidence: RetrievedEvidence[] = [{
+            ...EVIDENCE[0]!,
+            chunk: chunk('chunk-contextual', 'Caldorin has a documented alternative in the supplied account.'),
+        }];
+        let contract: EvidenceQualificationContract | null | undefined;
+        const value = harness({
+            readValidatedConversationState: async () => priorState,
+            retrieveSemantic: async () => ({
+                evidence: contextualEvidence,
+                vectorHitCount: 1,
+                lexicalHitCount: 1,
+                lexicalSearchStatus: 'available' as const,
+            }),
+            generateGroundedAnswer: async input => {
+                contract = input.answerabilityContract;
+                return ANSWERED;
+            },
+        });
+        const contextualRequest: NoorRequest = {
+            mode: 'chat',
+            requestId: REQUEST_ID,
+            question: 'What alternative?',
+            history: [{ role: 'user', content: priorRequest.question }],
+        };
+
+        assert.equal((await run(value, contextualRequest)).status, 'answered');
+        assert.equal(contract?.task, 'contextual_followup');
+        assert.equal(contract?.relation, 'alternative');
+        assert.deepEqual(contract?.selectedEvidenceIds, ['S1']);
+        assert.deepEqual(contract?.entityProvenance, [{
+            entityId: contract?.entityProvenance[0]?.entityId,
+            label: 'caldorin',
+            evidenceIds: ['S1'],
+        }]);
+        assert.match(contract?.entityProvenance[0]?.entityId ?? '', /^subject:[a-f0-9]{12}$/);
     });
 
     it('clarifies structural follow-ups without validated prior evidence and skips retrieval and generation', async () => {
@@ -1172,10 +1223,14 @@ describe('handleNoorRequest', () => {
             maxEvidenceCharacters: CONFIG.maxEvidenceCharacters,
             provider: { generate: async () => results.shift() ?? (() => { throw new Error('fixture exhausted'); })() },
             answerabilityContract: {
+                task: 'point_question',
+                relation: 'description',
                 requiredSemanticSlots: ['subject', 'relation_or_attribute'],
                 satisfiedSemanticSlots: ['subject', 'relation_or_attribute'],
                 unsatisfiedSemanticSlots: [],
                 currentExternalStateRequired: false,
+                selectedEvidenceIds: ['S1', 'S2'],
+                entityProvenance: [],
             },
         });
         const traces: NoorSanitizedTrace[] = [];

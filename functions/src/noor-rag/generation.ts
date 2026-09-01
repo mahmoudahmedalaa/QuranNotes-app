@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 
-import type { AnswerabilitySemanticDecision } from './answerability';
+import type { EvidenceQualificationContract } from './answerability';
 import type { NoorAnswer, NoorRequest } from './generatedContract';
 import {
     GENERATION_ABSTENTION_REASONS,
@@ -76,7 +76,7 @@ export interface GenerateGroundedAnswerInput {
     provider: GenerationProvider;
     taskPlan?: ChatQueryPlan;
     comparisonCitationContract?: ComparisonCitationContract | null;
-    answerabilityContract?: AnswerabilitySemanticDecision | null;
+    answerabilityContract?: EvidenceQualificationContract | null;
 }
 
 export type NoorGenerationErrorClass =
@@ -90,7 +90,7 @@ export type NoorGenerationErrorClass =
     | 'answer_validation_failure'
     | 'answer_quality_judgement_failure'
     | 'answer_quality_failure'
-    | 'generation_abstention_disagreement'
+    | 'generation_contract_disagreement'
     | null;
 
 export interface GenerationDiagnostics {
@@ -302,19 +302,28 @@ function evidenceBlocks(evidence: readonly RetrievedEvidence[]): string {
 }
 
 function answerabilityContractXml(
-    contract: AnswerabilitySemanticDecision | null | undefined,
+    contract: EvidenceQualificationContract | null | undefined,
     evidence: readonly RetrievedEvidence[],
 ): string {
     if (contract === null || contract === undefined) return '';
+    const selectedEvidenceIds = new Set(evidence.map(item => item.promptSourceId));
     const slots = (name: string, values: readonly string[]): string => (
         `<${name}>${values.map(value => `<slot>${escapeXml(value)}</slot>`).join('')}</${name}>`
     );
+    const provenance = contract.entityProvenance.map(entity => {
+        const evidenceIds = entity.evidenceIds.filter(id => selectedEvidenceIds.has(id));
+        return evidenceIds.length === 0
+            ? ''
+            : `<entityBranch entityId="${escapeXml(entity.entityId)}"${entity.label === undefined ? '' : ` label="${escapeXml(entity.label)}"`} evidenceIds="${evidenceIds.map(escapeXml).join(',')}"/>`;
+    }).join('');
     return [
-        `<answerabilityEvidenceContract allowedEvidenceIds="${evidence.map(item => escapeXml(item.promptSourceId)).join(',')}">`,
+        `<evidenceQualificationContract task="${escapeXml(contract.task)}" relation="${escapeXml(contract.relation ?? 'none')}" allowedEvidenceIds="${evidence.map(item => escapeXml(item.promptSourceId)).join(',')}">`,
+        `<selectedEvidenceIds>${contract.selectedEvidenceIds.filter(id => selectedEvidenceIds.has(id)).map(id => `<evidenceId>${escapeXml(id)}</evidenceId>`).join('')}</selectedEvidenceIds>`,
         slots('requiredSemanticSlots', contract.requiredSemanticSlots),
         slots('satisfiedSemanticSlots', contract.satisfiedSemanticSlots),
         slots('unsatisfiedSemanticSlots', contract.unsatisfiedSemanticSlots),
-        '</answerabilityEvidenceContract>',
+        `<entityProvenance>${provenance}</entityProvenance>`,
+        '</evidenceQualificationContract>',
     ].join('');
 }
 
@@ -340,7 +349,7 @@ export function buildGroundedPrompt(
     maxEvidenceCharacters: number,
     taskPlan?: ChatQueryPlan,
     comparisonCitationContract?: ComparisonCitationContract | null,
-    answerabilityContract?: AnswerabilitySemanticDecision | null,
+    answerabilityContract?: EvidenceQualificationContract | null,
 ): GroundedPrompt {
     const selected = boundedEvidence(evidence, maxEvidenceCharacters);
     const coverageRequirement = taskPlan?.retrievalTask === 'entity_summary' && taskPlan.entity !== null
@@ -359,7 +368,7 @@ function correctivePrompt(
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
     comparisonCitationContract?: ComparisonCitationContract | null,
-    answerabilityContract?: AnswerabilitySemanticDecision | null,
+    answerabilityContract?: EvidenceQualificationContract | null,
 ): string {
     return [
         systemInstructions(taskPlan, coverageRequirement, comparisonCitationContract),
@@ -373,11 +382,11 @@ function correctivePrompt(
 
 function abstentionContradictsContract(
     reason: GenerationAbstentionReason,
-    contract: AnswerabilitySemanticDecision | null | undefined,
+    contract: EvidenceQualificationContract | null | undefined,
 ): boolean {
     if (contract === null || contract === undefined) return false;
     const satisfied = new Set(contract.satisfiedSemanticSlots);
-    if (reason === 'missing_subject_support') return satisfied.has('subject');
+    if (reason === 'missing_subject_support') return satisfied.has('subject') || satisfied.has('entity');
     if (reason === 'missing_relation_support') return satisfied.has('relation_or_attribute');
     if (reason === 'missing_required_context') {
         return contract.requiredSemanticSlots.every(slot => satisfied.has(slot));
@@ -392,13 +401,13 @@ function abstentionCorrectionPrompt(
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
     comparisonCitationContract?: ComparisonCitationContract | null,
-    answerabilityContract?: AnswerabilitySemanticDecision | null,
+    answerabilityContract?: EvidenceQualificationContract | null,
 ): string {
     return [
         systemInstructions(taskPlan, coverageRequirement, comparisonCitationContract),
         'The previous generation abstention contradicts the request-scoped evidence contract because it reported a semantic slot as missing after that slot was established by evidence qualification.',
         'Regenerate exactly once using the same selected evidence and allowed citation IDs.',
-        'Produce a grounded answer using only the supplied evidence. Do not abstain unless you identify a specific remaining evidence gap consistent with the contract.',
+        'Produce a grounded answer using only the supplied evidence. Do not claim that an established semantic slot is missing. Do not abstain unless you identify a specific remaining evidence gap consistent with the contract.',
         'This correction does not force an answer: evidence_conflict or another material evidence gap may still justify insufficient_evidence.',
         `<previousAbstentionReason>${escapeXml(reason)}</previousAbstentionReason>`,
         answerabilityContractXml(answerabilityContract, evidence),
@@ -444,7 +453,7 @@ function answerQualityPrompt(
     taskPlan?: ChatQueryPlan,
     coverageRequirement?: SynthesisCoverageRequirement | null,
     comparisonCitationContract?: ComparisonCitationContract | null,
-    answerabilityContract?: AnswerabilitySemanticDecision | null,
+    answerabilityContract?: EvidenceQualificationContract | null,
 ): string {
     const citationIds = answer.citationIds.map(id => `<citationId>${escapeXml(id)}</citationId>`).join('');
     return [
@@ -946,7 +955,7 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
                 );
             }
             return fixedAnswer(input.request.requestId, 'temporarily_unavailable', TEMPORARILY_UNAVAILABLE,
-                finalDiagnostics(diagnostics, 'generation_abstention_disagreement'));
+                finalDiagnostics(diagnostics, 'generation_contract_disagreement'));
         }
         initialAnswer = corrected;
         abstentionCorrectionUsed = true;
@@ -1018,6 +1027,17 @@ export async function generateGroundedAnswer(input: GenerateGroundedAnswerInput)
             finalDiagnostics(diagnostics, classification.errorClass));
     }
     if (correctedAnswer.status === 'insufficient_evidence') {
+        diagnostics.abstentionReason = correctedAnswer.abstentionReason;
+        if (correctedAnswer.abstentionReason !== null
+            && abstentionContradictsContract(correctedAnswer.abstentionReason, input.answerabilityContract)) {
+            diagnostics.abstentionDisagreement = true;
+            return fixedAnswer(
+                input.request.requestId,
+                'temporarily_unavailable',
+                TEMPORARILY_UNAVAILABLE,
+                finalDiagnostics(diagnostics, 'generation_contract_disagreement'),
+            );
+        }
         return fixedAnswer(
             input.request.requestId,
             'insufficient_evidence',
