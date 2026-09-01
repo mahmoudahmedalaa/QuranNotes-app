@@ -3,11 +3,13 @@ import { describe, it } from 'node:test';
 
 import {
     describeAnswerabilitySemantics,
+    qualifyEntitySummaryAnswerableEvidence,
     selectAnswerableEvidence,
     selectComparisonAnswerableEvidence,
     selectContextualAnswerableEvidence,
 } from '../../src/noor-rag/answerability';
 import type { NoorRuntimeConfig } from '../../src/noor-rag/config';
+import type { QuranSurahEntity } from '../../src/noor-rag/quranEntities';
 import type { RetrievedEvidence, TafsirChunk } from '../../src/noor-rag/types';
 
 const CONFIG: NoorRuntimeConfig = {
@@ -50,6 +52,36 @@ function evidence(id: string, text: string): RetrievedEvidence {
 }
 
 describe('Noor point-question semantic answerability', () => {
+    it('treats broad summary learning as synthesis while retaining explicit constrained requirements', () => {
+        const entity: QuranSurahEntity = {
+            entityType: 'surah', surahNumber: 2, canonicalName: 'Synthetic', verseCount: 1,
+        };
+        const selected = [evidence('summary-learning', 'The selected passages provide broad material across the entity.')];
+        const capacity = { canonicalUnits: 1, sections: 1, span: 0 };
+
+        const broadLearning = qualifyEntitySummaryAnswerableEvidence(
+            'What can we learn from the whole entity?',
+            entity,
+            selected,
+            capacity,
+        );
+        assert.deepEqual(broadLearning.evidence, selected);
+        assert.equal(broadLearning.decision.relation, 'teaching');
+        assert.deepEqual(broadLearning.decision.unsatisfiedSemanticSlots, []);
+
+        for (const question of [
+            'Summarize what is forbidden in the whole entity.',
+            'Summarize the narrative of the whole entity.',
+            'What are the current themes of the whole entity?',
+        ]) {
+            assert.deepEqual(
+                qualifyEntitySummaryAnswerableEvidence(question, entity, selected, capacity).evidence,
+                [],
+                question,
+            );
+        }
+    });
+
     it('requires subject, requested relation, and current-state semantics instead of two token matches', () => {
         const query = 'Which cryptocurrency is doing well now?';
         const adjacent = evidence('adjacent', 'Which path will bring worldly wealth and trade?');

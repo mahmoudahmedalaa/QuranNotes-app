@@ -1,7 +1,7 @@
 import type { NoorRuntimeConfig } from './config';
 import { normalizeQueryInterpretation } from './queryInterpretation';
 import type { RetrievedEvidence } from './types';
-import type { QuranSurahEntity } from './quranEntities';
+import { hasEntitySummarySignal, type QuranSurahEntity } from './quranEntities';
 import { describeSynthesisEvidenceCapacity } from './synthesisCoverage';
 
 const ENTITY_SUMMARY_COVERAGE_SECTIONS = 6;
@@ -598,13 +598,25 @@ export function qualifyEntitySummaryAnswerableEvidence(
     capacity?: Readonly<{ canonicalUnits: number; sections: number; span: number }>,
 ): AnswerabilityQualificationResult {
     const ordinary = semanticRequirements(question);
-    const relationConcept = ordinary.relationConcept ?? 'description';
+    const broadSynthesisOperation = hasEntitySummarySignal(question)
+        && !ordinary.currentExternalStateRequired
+        && !ordinary.requiredSemanticSlots.includes('normative_strength')
+        && (ordinary.relationConcept === null
+            || ordinary.relationConcept === 'description'
+            || ordinary.relationConcept === 'teaching'
+            || ordinary.relationConcept.startsWith('lexical:'));
+    const relationConcept = broadSynthesisOperation
+        && ordinary.relationConcept !== null
+        && ordinary.relationConcept !== 'description'
+        ? 'teaching'
+        : ordinary.relationConcept ?? 'description';
     const requiredSemanticSlots: AnswerabilitySemanticSlot[] = ['entity', 'relation_or_attribute'];
     if (ordinary.requiredSemanticSlots.includes('normative_strength')) requiredSemanticSlots.push('normative_strength');
     if (ordinary.currentExternalStateRequired) requiredSemanticSlots.push('temporal_or_current_requirement');
 
     const coverageSatisfied = isEntitySummaryEvidenceSufficient(entity, evidence, capacity);
-    const relationSatisfied = coverageSatisfied && (relationConcept === 'description'
+    const relationSatisfied = coverageSatisfied && (broadSynthesisOperation
+        || relationConcept === 'description'
         || evidence.some(item => semanticSegments(item.chunk.retrievalText).some(segment => {
             const tokens = evidenceTokens(segment);
             return contextualRelationSupported(relationConcept, segment, tokens)
